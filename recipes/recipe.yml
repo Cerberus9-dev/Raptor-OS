@@ -3,7 +3,7 @@
 name: raptor-os
 description: Victory Build.
 base-image: ghcr.io/ublue-os/bazzite
-image-version: 41
+image-version: latest
 
 modules:
   - type: script
