@@ -1,13 +1,14 @@
+---
+# yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: raptor-os
 description: Victory Build.
 base-image: ghcr.io/ublue-os/bazzite
-image-flavor: main
-fedora-version: 41
+image-version: 41
 
 modules:
-  - type: yum-repo
-    repos:
-      - https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
+  - type: script
+    scripts:
+      - brave-repo.sh
 
   - type: rpm-ostree
     install:
