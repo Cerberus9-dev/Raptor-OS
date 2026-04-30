@@ -1,16 +1,58 @@
 name: raptor-os
-description: Private Tactical Gaming OS.
+description: Private Tactical OS - Home Edition.
 base-image: ghcr.io/ublue-os/bazzite
 image-flavor: main
 fedora-version: 40
 
 modules:
+  - type: yum-repo
+    repos:
+      - https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
+      - https://rpm.opera.com/rpm/opera.repo
+
   - type: rpm-ostree
     install:
+      # --- BROWSERS ---
       - brave-browser
-      - fastfetch
-      - plasma-systemmonitor
-      - firewalld
+      - opera-stable
+      
+      # --- TELEMETRY ---
+      - btop                  # High-tech terminal monitor
+      - fastfetch             # System info for the HUD
+      - plasma-systemmonitor  # GUI Telemetry
+      - nvtop                 # GPU monitor (NVIDIA/AMD/Intel)
+      
+      # --- Productivity ---
+      - libreoffice-fresh
+      - p7zip
+      - unrar
+      
+      # --- GAMING ENHANCEMENTS ---
+      - MangoHud              # FPS/Performance overlay
+      - goverlay              # GUI to configure MangoHud
+      - gamescope             # Micro-compositor for better gaming
+      
+      # --- MEDIA & CREATIVE ---
+      - vlc
+      - gimp
+      - kdenlive
+      - audacity              # Audio editing
+      - obs-studio            # Streaming
+      
+      # --- SYSTEM HARDENING & TOOLS ---
+      - firewalld             # Tactical Firewall
+      - uchi-grep             # High-speed search
+      - jetbrains-mono-fonts  # The "Pilot's Font"
+
+  - type: flatpak
+    install:
+      # --- INTELLIGENCE --- 
+      - com.github.FreeTubeApp.FreeTube      # YouTube without tracking
+      - dev.vencord.Vesktop                  # Optimized Discord
+      - com.usebottles.bottles               # Run Windows .exes with one click
+      - org.qbittorrent.qBittorrent          # High-speed file transfers
+      - com.protonvpn.www                    # Secure Link (VPN)
+      - org.kde.itinerary                    # Travel/Mission planning
 
   - type: script
     scripts:
