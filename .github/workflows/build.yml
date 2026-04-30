@@ -1,13 +1,18 @@
 name: build-raptor
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
       id-token: write
+
     steps:
       - name: Maximize Build Space
         run: |
@@ -20,19 +25,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build Image
-        uses: redhat-actions/buildah-build@v2
+      - name: Build and Push Image
+        uses: blue-build/github-action@v1
         with:
-          image: raptor-os
-          tags: latest
-          containerfiles: |
-            ./Containerfile
-
-      - name: Push to GHCR
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: raptor-os
-          tags: latest
-          registry: ghcr.io/${{ github.repository_owner }}
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
+          recipe: recipe.yml
+          cosign_private_key: ${{ secrets.SIGNING_SECRET }}
+          registry_token: ${{ github.token }}
+          pr_event_number: ${{ github.event.number }}
