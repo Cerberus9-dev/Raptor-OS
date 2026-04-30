@@ -15,8 +15,6 @@ jobs:
       contents: read
       packages: write
       id-token: write
-    strategy:
-      fail-fast: false
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -25,8 +23,5 @@ jobs:
         uses: blue-build/github-action@v1
         with:
           recipe: recipes/recipe.yml
-          cosign_private_key: ${{ secrets.SIGNING_SECRET }}
           registry_token: ${{ github.token }}
-          prune: true
-          # THE FIX: This clears 20GB of junk from the server before starting
           maximize_build_space: true
