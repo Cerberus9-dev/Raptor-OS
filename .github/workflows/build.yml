@@ -1,11 +1,8 @@
 name: build-raptor-os
 on:
-  schedule:
-    - cron: "0 0 * * *"
-  push:
-    paths-ignore:
-      - "**.md"
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   bluebuild:
@@ -25,3 +22,5 @@ jobs:
           recipe: recipes/recipe.yml
           registry_token: ${{ github.token }}
           maximize_build_space: true
+          # We disable signing for the private test to ensure success
+          is_extra_image: false
