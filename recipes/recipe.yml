@@ -2,9 +2,13 @@ name: raptor-os
 description: Victory Build.
 base-image: ghcr.io/ublue-os/bazzite
 image-flavor: main
-fedora-version: 40
+fedora-version: 41
 
 modules:
+  - type: yum-repo
+    repos:
+      - https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
+
   - type: rpm-ostree
     install:
       - brave-browser
