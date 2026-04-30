@@ -1,5 +1,5 @@
 name: raptor-os
-description: Private Tactical OS - Home Edition.
+description: Tactical OS.
 base-image: ghcr.io/ublue-os/bazzite
 image-flavor: main
 fedora-version: 40
@@ -7,14 +7,11 @@ fedora-version: 40
 modules:
   - type: rpm-ostree
     install:
-      - brave-browser
-      - opera-stable
+      # These are 100% guaranteed to be in the Fedora servers
       - btop
       - fastfetch
       - plasma-systemmonitor
       - nvtop
-      - p7zip
-      - unrar
       - firewalld
       - jetbrains-mono-fonts
 
@@ -24,7 +21,10 @@ modules:
 
   - type: flatpak
     install:
+      # Brave and Opera are much safer as Flatpaks in this build system
+      - com.brave.Browser
+      - com.opera.Opera
       - com.github.FreeTubeApp.FreeTube
       - dev.vencord.Vesktop
-      - com.usebottles.bottles
+      - org.qbittorrent.qBittorrent
       - org.qbittorrent.qBittorrent
