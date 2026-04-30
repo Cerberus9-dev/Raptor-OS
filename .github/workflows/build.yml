@@ -4,15 +4,13 @@ on:
     branches:
       - main
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
       id-token: write
-
     steps:
       - name: Maximize Build Space
         run: |
@@ -21,10 +19,8 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Build and Push Image
         uses: blue-build/github-action@v1
         with:
@@ -32,18 +28,15 @@ jobs:
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
           build_opts: --no-sign
-
   iso:
     runs-on: ubuntu-latest
     needs: build
     permissions:
       contents: write
       packages: read
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Build ISO
         uses: jasonn3/build-container-installer@v1.2.3
         id: build
@@ -54,13 +47,13 @@ jobs:
           version: 41
           variant: Kinoite
           iso_name: raptor-os.iso
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Raptor OS Latest
+          tag_name: v1.0
+          name: Raptor OS v1.0
           body: Latest build of Raptor OS
+          make_latest: true
           files: |
             ${{ steps.build.outputs.iso_path }}
             ${{ steps.build.outputs.sha256sum_path }}
