@@ -6,23 +6,21 @@ fedora-version: 40
 
 modules:
   - type: rpm-ostree
-    repos:
-      - https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
-      - https://rpm.opera.com/rpm/opera.repo
     install:
-      # Browsers
       - brave-browser
       - opera-stable
-      # Tactical Telemetry
       - btop
       - fastfetch
       - plasma-systemmonitor
       - nvtop
-      # Productivity & Tools
       - p7zip
       - unrar
       - firewalld
       - jetbrains-mono-fonts
+
+  - type: script
+    scripts:
+      - raptor-hud.sh
 
   - type: flatpak
     install:
@@ -30,7 +28,3 @@ modules:
       - dev.vencord.Vesktop
       - com.usebottles.bottles
       - org.qbittorrent.qBittorrent
-
-  - type: script
-    scripts:
-      - raptor-hud.sh
