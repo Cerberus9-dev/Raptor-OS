@@ -9,10 +9,11 @@ ColorScheme=BreezeDark
 AccentColor=51,255,51
 EOF
 
-# Set Taskbar to Top
+# Set Taskbar to Top (Aviation Style)
 cat << 'EOF' > /etc/skel/.config/plasmarc
 [Panels]
 PanelPosition=Top
 EOF
 
+# Enable Gaming Firewall
 systemctl enable firewalld
