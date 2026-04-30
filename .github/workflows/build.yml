@@ -31,4 +31,4 @@ jobs:
           recipe: recipe.yml
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
-          no_sign: true
+          build_opts: --no-sign
