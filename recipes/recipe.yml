@@ -20,6 +20,14 @@ modules:
       - gamemode
       - goverlay
       - zenity
+      - vscodium
+      - git
+      - gh
+      - nodejs
+      - python3
+      - python3-pip
+      - gcc
+      - make
   - type: script
     scripts:
       - raptor-hud.sh
