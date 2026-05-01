@@ -10,7 +10,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-      id-token: write # Required for keyless signing via OIDC
+      id-token: write
     steps:
       - name: Maximize Build Space
         run: |
@@ -19,24 +19,15 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Build and Push Image
-        uses: blue-build/github-action@v1.6.1
+        uses: blue-build/github-action@v1
         with:
           recipe: recipe.yml
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
-          cli_version: latest
-          # The specific flag to stop the "Unable to find key pair" error
-          build_opts: "--no-sign"
-        env:
-          # Forcing these to empty so the CLI doesn't try to parse ghost data
-          COSIGN_PRIVATE_KEY: ""
-          COSIGN_PUBLIC_KEY: ""
-
+          build_opts: --no-sign
   iso:
     runs-on: ubuntu-latest
     needs: build
@@ -46,9 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Build ISO
-        uses: jasonn3/build-container-installer@v1.4.0
+        uses: jasonn3/build-container-installer@v1.2.3
         id: build
         with:
           image_name: raptor-os
@@ -57,27 +47,24 @@ jobs:
           version: 41
           variant: Kinoite
           iso_name: raptor-os.iso
-
       - name: Upload ISO as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: raptor-os-iso
           retention-days: 5
           path: /home/runner/work/Raptor-OS/Raptor-OS/raptor-os.iso
-
       - name: Create Tag
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git tag v1.0 --force
           git push origin v1.0 --force
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0
           name: Raptor OS v1.0
-          body: Latest keyless-signed build of Raptor OS.
+          body: Latest build of Raptor OS.
           make_latest: true
           files: /home/runner/work/Raptor-OS/Raptor-OS/raptor-os.iso
         env:
