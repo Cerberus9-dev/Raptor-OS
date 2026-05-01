@@ -55,7 +55,7 @@ jobs:
           body: Latest build of Raptor OS
           make_latest: true
           files: |
-            ${{ steps.build.outputs.iso_path }}
-            ${{ steps.build.outputs.sha256sum_path }}
+            /tmp/raptor-os.iso
+            /tmp/raptor-os.iso-CHECKSUM
         env:
           GITHUB_TOKEN: ${{ github.token }}
