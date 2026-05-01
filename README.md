@@ -5,7 +5,8 @@ A custom Bazzite-based Linux distribution with Brave Browser, Fastfetch, and a n
 
 ## Installation
 
-Download the latest ISO from https://archive.org/details/raptor-os, flash it to a USB drive using [Rufus]https://rufus.ie/en/) or [Ventoy](https://www.ventoy.net), and boot from it to install.
+Download the latest ISO from https://archive.org/details/raptor-os, flash it to a USB drive using [Rufus]https://rufus.ie/en/), [Ventoy](https://www.ventoy.net), and or [Fedora Media Writer] if the others fail this is guaranteed to work (https://github.com/FedoraQt/MediaWriter)
+(if you use rufus, when it asks to use ISO or DD, use DD img mode and use GPT
 
 ## Rebasing from an existing Bazzite install
 
