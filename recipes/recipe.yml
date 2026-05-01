@@ -37,7 +37,7 @@ modules:
         - com.discordapp.Discord
         - com.heroicgameslauncher.hgl
         - com.vscodium.codium
-        - org.gnome.Bottles
+        - com.usebottles.bottles
 
   - type: systemd
     system:
