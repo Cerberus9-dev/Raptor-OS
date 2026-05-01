@@ -5,6 +5,11 @@ description: Victory Build.
 base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
 modules:
+  - type: files
+    files:
+      - source: system_files/raptor-firstboot.service
+        destination: /usr/lib/systemd/system/raptor-firstboot.service
+
   - type: rpm-ostree
     install:
       - firefox
@@ -28,6 +33,12 @@ modules:
       - python3-pip
       - gcc
       - make
+
+  - type: systemd
+    system:
+      enabled:
+        - raptor-firstboot.service
+
   - type: script
     scripts:
       - raptor-hud.sh
