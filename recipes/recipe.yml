@@ -19,6 +19,7 @@ modules:
       - heroic-games-launcher
       - gamemode
       - goverlay
+      - zenity
   - type: script
     scripts:
       - raptor-hud.sh
