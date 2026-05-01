@@ -1,0 +1,5 @@
+cd ~/Raptor-OS
+cp ~/cosign.pub .
+git add cosign.pub
+git commit -m "Add cosign public key"
+git push
