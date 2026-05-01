@@ -19,8 +19,10 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
+
       - name: Build and Push Image
         uses: blue-build/github-action@v1.6.1
         with:
@@ -28,7 +30,11 @@ jobs:
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
           cli_version: latest
-          build_opts: --no-sign
+          # Re-enabling signing:
+          cosign_private_key: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          # build_opts must be empty or contain other flags; NOT --no-sign
+          build_opts: ""
+
   iso:
     runs-on: ubuntu-latest
     needs: build
@@ -37,7 +43,8 @@ jobs:
       packages: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
+
       - name: Build ISO
         uses: jasonn3/build-container-installer@v1.4.0
         id: build
@@ -48,22 +55,27 @@ jobs:
           version: 41
           variant: Kinoite
           iso_name: raptor-os.iso
+
       - name: Upload ISO as Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: raptor-os-iso
           retention-days: 5
           path: /home/runner/work/Raptor-OS/Raptor-OS/raptor-os.iso
+
       - name: Create Tag
         run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git tag v1.0 --force
           git push origin v1.0 --force
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0
           name: Raptor OS v1.0
-          body: Latest build of Raptor OS
+          body: Latest signed build of Raptor OS.
           make_latest: true
           files: /home/runner/work/Raptor-OS/Raptor-OS/raptor-os.iso
         env:
