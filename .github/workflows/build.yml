@@ -27,7 +27,8 @@ jobs:
           recipe: recipe.yml
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
-          signing: false
+         cli_version: latest
+          build_opts: --no-sign
   iso:
     runs-on: ubuntu-latest
     needs: build
