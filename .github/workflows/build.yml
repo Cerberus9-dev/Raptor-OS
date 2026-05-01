@@ -38,7 +38,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Build ISO
-        uses: jasonn3/build-container-installer@v1.2.3
+        uses: jasonn3/build-container-installer@v1.4.0
         id: build
         with:
           image_name: raptor-os
