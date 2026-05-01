@@ -1,5 +1,3 @@
-- type: signing
-    sign: false
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: raptor-os
@@ -7,6 +5,9 @@ description: Victory Build.
 base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
 modules:
+  - type: signing
+    sign: false
+
   - type: files
     files:
       - source: system_files/raptor-firstboot.service
