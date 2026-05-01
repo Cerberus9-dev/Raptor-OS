@@ -4,18 +4,19 @@ name: raptor-os
 description: Victory Build.
 base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
-
 modules:
   - type: script
     scripts:
       - brave-repo.sh
-
   - type: rpm-ostree
     install:
       - brave-browser
       - fastfetch
       - plasma-systemmonitor
-
   - type: script
     scripts:
       - raptor-hud.sh
+  - type: systemd
+    system:
+      enabled:
+        - raptor-firstboot.service
