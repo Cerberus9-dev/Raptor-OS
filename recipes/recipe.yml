@@ -19,13 +19,9 @@ modules:
       - thunderbird
       - kdenlive
       - gimp
-      - bottles
-      - discord
-      - heroic-games-launcher
       - gamemode
       - goverlay
       - zenity
-      - vscodium
       - git
       - gh
       - nodejs
@@ -33,6 +29,15 @@ modules:
       - python3-pip
       - gcc
       - make
+
+  - type: default-flatpaks
+    notify: true
+    system:
+      install:
+        - com.discordapp.Discord
+        - com.heroicgameslauncher.hgl
+        - com.vscodium.codium
+        - org.gnome.Bottles
 
   - type: systemd
     system:
