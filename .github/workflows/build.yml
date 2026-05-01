@@ -10,7 +10,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-      id-token: write
+      id-token: write # Required for Keyless Signing
     steps:
       - name: Maximize Build Space
         run: |
@@ -30,9 +30,8 @@ jobs:
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
           cli_version: latest
-          # Re-enabling signing:
-          cosign_private_key: ${{ secrets.COSIGN_PRIVATE_KEY }}
-          # build_opts must be empty or contain other flags; NOT --no-sign
+          # Manual keys removed to stop the PEM type error. 
+          # Signing will now happen via GitHub OIDC identity.
           build_opts: ""
 
   iso:
@@ -75,7 +74,7 @@ jobs:
         with:
           tag_name: v1.0
           name: Raptor OS v1.0
-          body: Latest signed build of Raptor OS.
+          body: Latest keyless-signed build of Raptor OS.
           make_latest: true
           files: /home/runner/work/Raptor-OS/Raptor-OS/raptor-os.iso
         env:
