@@ -1,3 +1,4 @@
+```yaml
 name: build-raptor
 on:
   push:
@@ -22,7 +23,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Build and Push Image
-        uses: blue-build/github-action@v1
+        uses: blue-build/github-action@v1.6.1
         with:
           recipe: recipe.yml
           registry_token: ${{ github.token }}
