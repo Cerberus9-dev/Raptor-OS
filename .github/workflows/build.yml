@@ -10,7 +10,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-      id-token: write # Required for Keyless Signing
+      id-token: write # Required for keyless signing via OIDC
     steps:
       - name: Maximize Build Space
         run: |
@@ -30,9 +30,12 @@ jobs:
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
           cli_version: latest
-          # Added --no-sign to stop the CLI from looking for local cosign.pub files.
-          # Keyless signing will still occur via OIDC.
+          # The specific flag to stop the "Unable to find key pair" error
           build_opts: "--no-sign"
+        env:
+          # Forcing these to empty so the CLI doesn't try to parse ghost data
+          COSIGN_PRIVATE_KEY: ""
+          COSIGN_PUBLIC_KEY: ""
 
   iso:
     runs-on: ubuntu-latest
@@ -55,7 +58,7 @@ jobs:
           variant: Kinoite
           iso_name: raptor-os.iso
 
-      - name: Upload ISO as Artifact[cite: 1]
+      - name: Upload ISO as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: raptor-os-iso
@@ -69,7 +72,7 @@ jobs:
           git tag v1.0 --force
           git push origin v1.0 --force
 
-      - name: Create GitHub Release[cite: 1]
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0
