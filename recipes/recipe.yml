@@ -29,6 +29,7 @@ modules:
       - python3-pip
       - gcc
       - make
+      - variety
 
   - type: default-flatpaks@v1
     notify: true
@@ -38,8 +39,7 @@ modules:
         - com.heroicgameslauncher.hgl
         - com.vscodium.codium
         - com.usebottles.bottles
-        - peterhil.variety
-
+        
   - type: systemd
     system:
       enabled:
