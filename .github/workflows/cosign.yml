@@ -1,0 +1,20 @@
+name: Generate Cosign Keys
+on: workflow_dispatch
+
+jobs:
+  generate-keys:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Generate cosign key pair
+        run: cosign generate-key-pair
+
+      - name: Upload key files
+        uses: actions/upload-artifact@v4
+        with:
+          name: cosign-keys
+          path: |
+            cosign.key
+            cosign.pub
