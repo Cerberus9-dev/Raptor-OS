@@ -47,6 +47,12 @@ jobs:
           version: 41
           variant: Kinoite
           iso_name: raptor-os.iso
+      - name: Upload ISO as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: raptor-os-iso
+          retention-days: 5
+          path: /home/runner/work/Raptor-OS/Raptor-OS/raptor-os.iso
       - name: Create Tag
         run: |
           git tag v1.0 --force
