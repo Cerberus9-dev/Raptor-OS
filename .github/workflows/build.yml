@@ -47,8 +47,6 @@ jobs:
           version: 41
           variant: Kinoite
           iso_name: raptor-os.iso
-      - name: Find ISO
-        run: find / -name "*.iso" 2>/dev/null
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -57,7 +55,6 @@ jobs:
           body: Latest build of Raptor OS
           make_latest: true
           files: |
-            /tmp/raptor-os.iso
-            /tmp/raptor-os.iso-CHECKSUM
+            /home/runner/work/Raptor-OS/Raptor-OS/raptor-os.iso
         env:
           GITHUB_TOKEN: ${{ github.token }}
