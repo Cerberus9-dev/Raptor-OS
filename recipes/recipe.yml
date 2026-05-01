@@ -1,3 +1,5 @@
+- type: signing
+    sign: false
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: raptor-os
