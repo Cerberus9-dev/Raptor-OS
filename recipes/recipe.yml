@@ -5,14 +5,20 @@ description: Victory Build.
 base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
 modules:
-  - type: script
-    scripts:
-      - brave-repo.sh
   - type: rpm-ostree
     install:
-      - brave-browser
+      - firefox
       - fastfetch
       - plasma-systemmonitor
+      - libreoffice
+      - thunderbird
+      - kdenlive
+      - gimp
+      - bottles
+      - discord
+      - heroic-games-launcher
+      - gamemode
+      - goverlay
   - type: script
     scripts:
       - raptor-hud.sh
