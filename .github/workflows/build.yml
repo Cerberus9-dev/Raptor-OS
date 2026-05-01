@@ -30,9 +30,9 @@ jobs:
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
           cli_version: latest
-          # Manual keys removed to stop the PEM type error. 
-          # Signing will now happen via GitHub OIDC identity.
-          build_opts: ""
+          # Added --no-sign to stop the CLI from looking for local cosign.pub files.
+          # Keyless signing will still occur via OIDC.
+          build_opts: "--no-sign"
 
   iso:
     runs-on: ubuntu-latest
@@ -55,7 +55,7 @@ jobs:
           variant: Kinoite
           iso_name: raptor-os.iso
 
-      - name: Upload ISO as Artifact
+      - name: Upload ISO as Artifact[cite: 1]
         uses: actions/upload-artifact@v4
         with:
           name: raptor-os-iso
@@ -69,7 +69,7 @@ jobs:
           git tag v1.0 --force
           git push origin v1.0 --force
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release[cite: 1]
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0
