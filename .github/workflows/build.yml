@@ -22,7 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Build and Push Image
-        uses: blue-build/github-action@v1
+        uses: uses: blue-build/github-action@v1.5.1
         with:
           recipe: recipe.yml
           registry_token: ${{ github.token }}
