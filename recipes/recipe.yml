@@ -38,6 +38,7 @@ modules:
         - com.heroicgameslauncher.hgl
         - com.vscodium.codium
         - com.usebottles.bottles
+        - peterhil.variety
 
   - type: systemd
     system:
