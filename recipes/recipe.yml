@@ -9,6 +9,8 @@ modules:
     files:
       - source: system_files/raptor-firstboot.service
         destination: /usr/lib/systemd/system/raptor-firstboot.service
+      - source: system_files/raptor-browser-choice.sh
+        destination: /usr/local/bin/raptor-browser-choice.sh
 
   - type: rpm-ostree
     install:
