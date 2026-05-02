@@ -39,7 +39,7 @@ modules:
         - com.heroicgameslauncher.hgl
         - com.vscodium.codium
         - com.usebottles.bottles
-        
+
   - type: systemd
     system:
       enabled:
