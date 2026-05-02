@@ -30,6 +30,8 @@ modules:
       - gcc
       - make
       - variety
+      - wine
+      - winetricks
 
   - type: default-flatpaks@v1
     notify: true
