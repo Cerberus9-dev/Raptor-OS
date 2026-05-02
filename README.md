@@ -3,7 +3,7 @@
 A custom Bazzite-based Linux distribution with Brave Browser, Fastfetch, and a neon green KDE theme.
 (HEAVY W.I.P, FEEDBACK IS APPRECIATED)
 
-## THIS IS NOT A LIVE OS. It requires a seperate drive or replacing the current OS/Dual booting, if you would like to dual boot make sure you have 40-50gb available.
+## THIS IS NOT A LIVE OS. It requires a seperate drive or replacing the current OS/Dual booting, if you would like to dual boot make sure you have 40-50gb available and if you do not ave space or time to do so, it can be ran in a VM for testing.
 
 ## Installation
 
