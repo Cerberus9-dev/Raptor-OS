@@ -38,6 +38,19 @@ modules:
       - python3-pip
       - gcc
       - make
+      - cmake
+      - ninja-build
+      - meson
+      - neovim
+      - htop
+      - podman
+      - podman-compose
+      - curl
+      - wget
+      - jq
+      - ripgrep
+      - fzf
+      - tmux
       - variety
       - wine
       - winetricks
@@ -58,3 +71,5 @@ modules:
   - type: script
     scripts:
       - raptor-hud.sh
+      - raptor-performance.sh
+      - raptor-gaming.sh
