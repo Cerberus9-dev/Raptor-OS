@@ -21,63 +21,27 @@ EOF
     fi
 done
 
-# Force KDE to reload theme
+# KDE theme autostart fix
+mkdir -p /etc/skel/.config/autostart
+cat << 'EOF' > /etc/skel/.config/autostart/raptor-theme.desktop
+[Desktop Entry]
+Type=Application
+Name=Raptor Theme
+Exec=/usr/local/bin/raptor-theme.sh
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+EOF
+
+# Create theme apply script
+mkdir -p /usr/local/bin
+cat << 'EOF' > /usr/local/bin/raptor-theme.sh
+#!/bin/bash
 qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
-kquitapp5 plasmashell 2>/dev/null || true
-kstart5 plasmashell 2>/dev/null || true
-
-# Fix DNS
-mkdir -p /etc/systemd/resolved.conf.d
-cat << 'EOF' > /etc/systemd/resolved.conf.d/dns.conf
-[Resolve]
-DNS=1.1.1.1 1.0.0.1
-FallbackDNS=8.8.8.8 8.8.4.4
-EOF
-
-# Firefox performance tweaks
-mkdir -p /usr/lib/firefox/defaults/pref
-cat << 'EOF' > /usr/lib/firefox/defaults/pref/raptor.js
-pref("browser.cache.memory.capacity", 65536);
-pref("browser.sessionhistory.max_total_viewers", 2);
-pref("browser.tabs.unloadOnLowMemory", true);
-pref("browser.low_commit_space_threshold_mb", 500);
-pref("gfx.webrender.all", true);
-EOF
-
-# Steam and Lutris gaming optimizations
-mkdir -p /etc/environment.d
-cat << 'EOF' > /etc/environment.d/raptor-gaming.conf
-RADV_PERFTEST=gpl
-PROTON_ENABLE_NVAPI=1
-DXVK_ASYNC=1
-mesa_glthread=true
-__GL_SHADER_DISK_CACHE=1
-__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
-EOF
-
-# Steam memory tweaks
-mkdir -p /etc/skel/.local/share/Steam
-cat << 'EOF' > /etc/skel/.steam/steam/steam_dev.cfg
-@nClientDownloadEnableHTTP2PlatformLinux 0
-@fDownloadRateImprovementToAddAnotherConnection 1.0
-EOF
-
-# Lutris runtime optimizations
-mkdir -p /etc/skel/.config/lutris
-cat << 'EOF' > /etc/skel/.config/lutris/lutris.conf
-[lutris]
-prefer-system-libraries=true
-reset-desktop-on-quit=false
-game-show-logs=false
+plasma-apply-colorscheme BreezeDark 2>/dev/null || true
+kwriteconfig5 --file kdeglobals --group General --key AccentColor "51,255,51" 2>/dev/null || true
 EOF
 chmod +x /usr/local/bin/raptor-theme.sh
-
-# Enable zram for better memory management
-cat << 'EOF' > /etc/systemd/zram-generator.conf
-[zram0]
-zram-size = ram / 2
-compression-algorithm = zstd
-EOF
 
 # Make browser choice script executable
 chmod +x /usr/local/bin/raptor-browser-choice.sh 2>/dev/null || true
