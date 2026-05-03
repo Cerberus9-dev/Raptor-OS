@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] 
+## [Unreleased]
 - Custom GRUB bootloader theme
 - Custom KDE splash screen
 - Custom Raptor OS logo
@@ -19,6 +19,9 @@
 - Automatic Cloudflare DNS (1.1.1.1) for better internet performance
 - First boot browser choice dialog (Firefox or Brave)
 - Neon green KDE theme now applies system-wide
+- Steam and Lutris gaming optimizations (async shaders, shader caching, DXVK)
+- zram enabled by default for better memory management
+- KDE theme now force reloads on boot
 
 ### Removed
 - Bottles (replaced by Lutris which ships with Bazzite)
@@ -27,6 +30,7 @@
 - DNS sluggishness via systemd-resolved configuration
 - Firefox RAM usage via performance tweaks
 - KDE theme not applying to existing users
+- Steam and Firefox high idle memory usage via zram and config tweaks
 
 ## [v1.0] - 2026-05-01
 ### Added
