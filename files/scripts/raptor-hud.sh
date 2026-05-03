@@ -63,3 +63,4 @@ EOF
 chmod +x /usr/local/bin/raptor-browser-choice.sh 2>/dev/null || true
 
 echo "HUD_READY"
+echo "HUD_READY"
