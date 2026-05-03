@@ -13,6 +13,8 @@
 - Variety wallpaper changer
 - Wine and Winetricks for Windows app compatibility
 - Development tools: Git, GitHub CLI, Node.js, Python 3, GCC, Make
+- Additional dev tools: CMake, Ninja, Meson, Neovim, htop, Podman, jq, ripgrep, fzf, tmux
+- Podman and Podman Compose for containerization
 - Gamemode and GOverlay for gaming performance
 - Filelight disk usage analyzer
 - Gwenview image viewer
@@ -28,7 +30,7 @@
 
 ### Fixed
 - DNS sluggishness via systemd-resolved configuration
-- Firefox RAM usage via performance tweaks
+- Firefox RAM usage via performance tweaks and memory hard limits
 - KDE theme not applying to existing users
 - Steam and Firefox high idle memory usage via zram and config tweaks
 

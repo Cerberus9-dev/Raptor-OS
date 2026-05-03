@@ -70,6 +70,7 @@ prefer-system-libraries=true
 reset-desktop-on-quit=false
 game-show-logs=false
 EOF
+chmod +x /usr/local/bin/raptor-theme.sh
 
 # Enable zram for better memory management
 cat << 'EOF' > /etc/systemd/zram-generator.conf
