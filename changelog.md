@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [Unreleased] 
 - Custom GRUB bootloader theme
 - Custom KDE splash screen
 - Custom Raptor OS logo
