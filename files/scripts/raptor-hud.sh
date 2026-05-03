@@ -39,6 +39,26 @@ pref("browser.low_commit_space_threshold_mb", 500);
 pref("gfx.webrender.all", true);
 EOF
 
+# Steam and Lutris gaming optimizations
+mkdir -p /etc/environment.d
+cat << 'EOF' > /etc/environment.d/raptor-gaming.conf
+RADV_PERFTEST=gpl
+PROTON_ENABLE_NVAPI=1
+DXVK_ASYNC=1
+mesa_glthread=true
+__GL_SHADER_DISK_CACHE=1
+__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
+EOF
+
+# Lutris runtime optimizations
+mkdir -p /etc/skel/.config/lutris
+cat << 'EOF' > /etc/skel/.config/lutris/lutris.conf
+[lutris]
+prefer-system-libraries=true
+reset-desktop-on-quit=false
+game-show-logs=false
+EOF
+
 # Make browser choice script executable
 chmod +x /usr/local/bin/raptor-browser-choice.sh 2>/dev/null || true
 
