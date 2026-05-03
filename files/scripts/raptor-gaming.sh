@@ -13,7 +13,7 @@ __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
 EOF
 
 # Steam memory tweaks
-mkdir -p /etc/skel/.local/share/Steam
+mkdir -p /etc/skel/.steam/steam
 cat << 'EOF' > /etc/skel/.steam/steam/steam_dev.cfg
 @nClientDownloadEnableHTTP2PlatformLinux 0
 @fDownloadRateImprovementToAddAnotherConnection 1.0
