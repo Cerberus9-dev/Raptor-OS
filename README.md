@@ -44,4 +44,4 @@ systemctl reboot
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the full changelog.
+See https://github.com/Cerberus9-dev/Raptor-OS/blob/main/changelog.md for the full changelog.
