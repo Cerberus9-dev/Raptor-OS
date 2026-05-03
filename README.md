@@ -14,14 +14,24 @@ Download the latest ISO from [Internet Archive](https://archive.org/details/rapt
 - [Ventoy](https://www.ventoy.net)
 - [Fedora Media Writer](https://github.com/FedoraQt/MediaWriter) — guaranteed to work if others fail
 
-## Rebasing to Raptor OS
+## Rebasing to Raptor OS ie If you already have Bazzite installed and want to switch to Raptor OS without reinstalling. and If you already have Raptor OS installed, just run `rpm-ostree update` and reboot to get the latest version.
 
-If you already have Bazzite installed and want to switch to Raptor OS without reinstalling, run these commands one at a time:
+**Step 1:**
+```
 rpm-ostree rebase ostree-unverified-registry:ghcr.io/cerberus9-dev/raptor-os:latest
+```
+**Step 2:**
+```
 systemctl reboot
+```
+**Step 3:**
+```
 rpm-ostree rebase ostree-image-signed:docker://ghcr.io/cerberus9-dev/raptor-os:latest
+```
+**Step 4:**
+```
 systemctl reboot
-
+```
 ## What's Included
 
 - **Firefox** — default web browser with performance tweaks
@@ -44,4 +54,4 @@ systemctl reboot
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the full changelog.
+See https://github.com/Cerberus9-dev/Raptor-OS/blob/main/changelog.md for the full changelog.

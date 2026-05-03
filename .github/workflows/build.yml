@@ -57,13 +57,13 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git tag v1.0 --force
-          git push origin v1.0 --force
+          git tag v1.1 --force
+          git push origin v1.1 --force
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0
-          name: Raptor OS v1.0
+          tag_name: v1.1
+          name: Raptor OS v1.1
           body: Latest build of Raptor OS.
           make_latest: true
           files: /home/runner/work/Raptor-OS/Raptor-OS/raptor-os.iso

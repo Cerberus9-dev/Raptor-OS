@@ -23,8 +23,7 @@
 - Neon green KDE theme now applies system-wide
 - Steam and Lutris gaming optimizations (async shaders, shader caching, DXVK)
 - zram enabled by default for better memory management
-- KDE theme now force reloads on login
-- Split build scripts into raptor-hud, raptor-performance and raptor-gaming
+- KDE theme now force reloads on boot
 
 ### Removed
 - Bottles (replaced by Lutris which ships with Bazzite)
