@@ -21,46 +21,30 @@ EOF
     fi
 done
 
-# Fix DNS
-mkdir -p /etc/systemd/resolved.conf.d
-cat << 'EOF' > /etc/systemd/resolved.conf.d/dns.conf
-[Resolve]
-DNS=1.1.1.1 1.0.0.1
-FallbackDNS=8.8.8.8 8.8.4.4
+# KDE theme autostart fix
+mkdir -p /etc/skel/.config/autostart
+cat << 'EOF' > /etc/skel/.config/autostart/raptor-theme.desktop
+[Desktop Entry]
+Type=Application
+Name=Raptor Theme
+Exec=/usr/local/bin/raptor-theme.sh
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
 EOF
 
-# Firefox performance tweaks
-mkdir -p /usr/lib/firefox/defaults/pref
-cat << 'EOF' > /usr/lib/firefox/defaults/pref/raptor.js
-pref("browser.cache.memory.capacity", 65536);
-pref("browser.sessionhistory.max_total_viewers", 2);
-pref("browser.tabs.unloadOnLowMemory", true);
-pref("browser.low_commit_space_threshold_mb", 500);
-pref("gfx.webrender.all", true);
+# Create theme apply script
+mkdir -p /usr/local/bin
+cat << 'EOF' > /usr/local/bin/raptor-theme.sh
+#!/bin/bash
+qdbus org.kde.KWin /KWin reconfigure
+plasma-apply-colorscheme BreezeDark
+kwriteconfig5 --file kdeglobals --group General --key AccentColor "51,255,51"
+qdbus org.kde.KWin /KWin reconfigure
 EOF
-
-# Steam and Lutris gaming optimizations
-mkdir -p /etc/environment.d
-cat << 'EOF' > /etc/environment.d/raptor-gaming.conf
-RADV_PERFTEST=gpl
-PROTON_ENABLE_NVAPI=1
-DXVK_ASYNC=1
-mesa_glthread=true
-__GL_SHADER_DISK_CACHE=1
-__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
-EOF
-
-# Lutris runtime optimizations
-mkdir -p /etc/skel/.config/lutris
-cat << 'EOF' > /etc/skel/.config/lutris/lutris.conf
-[lutris]
-prefer-system-libraries=true
-reset-desktop-on-quit=false
-game-show-logs=false
-EOF
+chmod +x /usr/local/bin/raptor-theme.sh
 
 # Make browser choice script executable
 chmod +x /usr/local/bin/raptor-browser-choice.sh 2>/dev/null || true
 
-echo "HUD_READY"
 echo "HUD_READY"
