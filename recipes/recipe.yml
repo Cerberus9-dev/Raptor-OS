@@ -21,6 +21,13 @@ modules:
       - thunderbird
       - kdenlive
       - gimp
+      - inkscape
+      - krita
+      - vlc
+      - obs-studio
+      - p7zip
+      - gwenview
+      - filelight
       - gamemode
       - goverlay
       - zenity
@@ -42,7 +49,6 @@ modules:
         - com.discordapp.Discord
         - com.heroicgameslauncher.hgl
         - com.vscodium.codium
-        - com.usebottles.bottles
 
   - type: systemd
     system:
