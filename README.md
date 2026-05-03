@@ -1,17 +1,47 @@
 # Raptor OS
 
-A custom Bazzite-based Linux distribution with Brave Browser, Fastfetch, and a neon green KDE theme.
-(HEAVY W.I.P, FEEDBACK IS APPRECIATED)
+A custom Bazzite-based Linux distribution with a neon green KDE theme, gaming tools, and productivity apps.
 
-## THIS IS NOT A LIVE OS. It requires a seperate drive or replacing the current OS/Dual booting, if you would like to dual boot make sure you have 40-50gb available and if you do not have space or time to do so, it can be ran in a VM for testing before you decide to dual boot or replace your current OS.
+> ⚠️ **HEAVY W.I.P — Feedback is appreciated!**
+
+> ℹ️ **This is NOT a live OS.** It requires a separate drive, replacing your current OS, or dual booting. For dual booting, make sure you have 40-50GB available. If you don't have space or time, it can be run in a VM for testing first.
 
 ## Installation
 
-Download the latest ISO's from https://archive.org/details/raptor-os_202605, flash it to a USB drive using [Rufus] https://rufus.ie/en/), [Ventoy](https://www.ventoy.net), and or [Fedora Media Writer] if the others fail this is guaranteed to work (https://github.com/FedoraQt/MediaWriter)
-(if you use rufus, when it asks to use ISO or DD, use DD img mode and use GPT for the partition setting)
+Download the latest ISO from [Internet Archive](https://archive.org/details/raptor-os_202605), then flash it to a USB drive using one of the following:
 
-## Rebasing from an existing Bazzite install
+- [Rufus](https://rufus.ie/en/) — when prompted, select **DD image mode** and **GPT** partition scheme
+- [Ventoy](https://www.ventoy.net)
+- [Fedora Media Writer](https://github.com/FedoraQt/MediaWriter) — guaranteed to work if others fail
 
-If you already have Bazzite installed and want to switch to Raptor OS without reinstalling:
+## Rebasing to Raptor OS
 
-* First rebase to the unsigned image:
+If you already have Bazzite installed and want to switch to Raptor OS without reinstalling, run these commands one at a time:
+rpm-ostree rebase ostree-unverified-registry:ghcr.io/cerberus9-dev/raptor-os:latest
+systemctl reboot
+rpm-ostree rebase ostree-image-signed:docker://ghcr.io/cerberus9-dev/raptor-os:latest
+systemctl reboot
+
+## What's Included
+
+- **Firefox** — default web browser with performance tweaks
+- **Brave Browser** — optional, chosen on first boot
+- **Fastfetch** — system info display
+- **Plasma System Monitor** — KDE system monitoring
+- **Neon Green KDE Theme** — custom Breeze Dark theme with green accents
+- **Discord, VSCodium, Heroic Games Launcher** — communication and gaming
+- **LibreOffice, Thunderbird** — office and email
+- **Kdenlive, GIMP, Inkscape, Krita** — creative tools
+- **VLC, OBS Studio** — media and streaming
+- **Wine, Winetricks** — Windows app compatibility
+- **Variety** — wallpaper changer
+- **Development Tools** — Git, GitHub CLI, Node.js, Python 3, GCC, Make
+
+## Built With
+
+- [BlueBuild](https://blue-build.org) — custom image build system
+- [Bazzite](https://bazzite.gg) — base image
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full changelog.
