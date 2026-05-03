@@ -21,6 +21,11 @@ EOF
     fi
 done
 
+# Force KDE to reload theme
+qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
+kquitapp5 plasmashell 2>/dev/null || true
+kstart5 plasmashell 2>/dev/null || true
+
 # Fix DNS
 mkdir -p /etc/systemd/resolved.conf.d
 cat << 'EOF' > /etc/systemd/resolved.conf.d/dns.conf
@@ -50,6 +55,13 @@ __GL_SHADER_DISK_CACHE=1
 __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
 EOF
 
+# Steam memory tweaks
+mkdir -p /etc/skel/.local/share/Steam
+cat << 'EOF' > /etc/skel/.steam/steam/steam_dev.cfg
+@nClientDownloadEnableHTTP2PlatformLinux 0
+@fDownloadRateImprovementToAddAnotherConnection 1.0
+EOF
+
 # Lutris runtime optimizations
 mkdir -p /etc/skel/.config/lutris
 cat << 'EOF' > /etc/skel/.config/lutris/lutris.conf
@@ -59,8 +71,14 @@ reset-desktop-on-quit=false
 game-show-logs=false
 EOF
 
+# Enable zram for better memory management
+cat << 'EOF' > /etc/systemd/zram-generator.conf
+[zram0]
+zram-size = ram / 2
+compression-algorithm = zstd
+EOF
+
 # Make browser choice script executable
 chmod +x /usr/local/bin/raptor-browser-choice.sh 2>/dev/null || true
 
-echo "HUD_READY"
 echo "HUD_READY"
