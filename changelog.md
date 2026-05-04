@@ -1,5 +1,5 @@
 **CHANGELOG.md:**
-```markdown
+
 # Changelog
 
 ## [Unreleased]
