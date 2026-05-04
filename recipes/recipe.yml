@@ -59,7 +59,7 @@ modules:
       - darktable
       - audacity
 
- - type: default-flatpaks@v1
+  - type: default-flatpaks@v1
     notify: true
     system:
       install:
