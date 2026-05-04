@@ -1,3 +1,5 @@
+**CHANGELOG.md:**
+```markdown
 # Changelog
 
 ## [Unreleased]
@@ -8,11 +10,8 @@
 
 ## [v1.2] - 2026-05-04
 ### Added
-- Betterbird as default email client
 - Calibre ebook manager
 - Joplin note taking app
-- Censor PDF redaction tool
-- OpenDeck stream controller app
 - Pods GUI for Podman containers
 - MarkText Markdown editor
 - Mission Center task manager
@@ -25,9 +24,8 @@
 - BleachBit system cleaner
 - Darktable photo editor
 - Audacity audio editor
-
-### Removed
-- Thunderbird (replaced by Betterbird)
+- Boatswain for Stream Deck support
+- Full dev suite: VSCodium, Git, GitHub CLI, Node.js, Python 3, GCC, CMake, Neovim, Podman
 
 ### Fixed
 - KDE theme accent color now uses kwriteconfig6 for Plasma 6 compatibility
@@ -42,9 +40,6 @@
 - OBS Studio for streaming and recording
 - Variety wallpaper changer
 - Wine and Winetricks for Windows app compatibility
-- Development tools: Git, GitHub CLI, Node.js, Python 3, GCC, Make
-- Additional dev tools: CMake, Ninja, Meson, Neovim, htop, Podman, jq, ripgrep, fzf, tmux
-- Podman and Podman Compose for containerization
 - Gamemode and GOverlay for gaming performance
 - Filelight disk usage analyzer
 - Gwenview image viewer
@@ -71,3 +66,4 @@
 - Discord, VSCodium, Heroic Games Launcher as Flatpaks
 - LibreOffice, Thunderbird, Kdenlive, GIMP
 - First boot service that automatically rebases to Raptor OS from stock Bazzite
+```
