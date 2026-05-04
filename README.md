@@ -14,38 +14,37 @@ Download the latest ISO from [Internet Archive](https://archive.org/details/rapt
 - [Ventoy](https://www.ventoy.net)
 - [Fedora Media Writer](https://github.com/FedoraQt/MediaWriter) — guaranteed to work if others fail
 
-## Rebasing to Raptor OS ie If you already have Bazzite installed and want to switch to Raptor OS without reinstalling. and If you already have Raptor OS installed, just run `rpm-ostree update` and reboot to get the latest version.
+## Rebasing to Raptor OS
 
-**Step 1:**
-```
-rpm-ostree rebase ostree-unverified-registry:ghcr.io/cerberus9-dev/raptor-os:latest
-```
-**Step 2:**
-```
-systemctl reboot
-```
-**Step 3:**
-```
-rpm-ostree rebase ostree-image-signed:docker://ghcr.io/cerberus9-dev/raptor-os:latest
-```
-**Step 4:**
-```
-systemctl reboot
-```
+## Rebasing to Raptor OS ie If you already have Bazzite installed and want to switch to Raptor OS without reinstalling. and If you already have Raptor OS installed, just run `rpm-ostree update` and reboot to get the latest version.  
+
+**Step 1:** ``` rpm-ostree rebase ostree-unverified-registry:ghcr.io/cerberus9-dev/raptor-os:latest ``` 
+
+**Step 2:** ``` systemctl reboot ``` 
+
+**Step 3:** ``` rpm-ostree rebase ostree-image-signed:docker://ghcr.io/cerberus9-dev/raptor-os:latest ``` 
+
+**Step 4:** ``` systemctl reboot ```
+
 ## What's Included
 
-- **Firefox** — default web browser with performance tweaks
-- **Brave Browser** — optional, chosen on first boot
-- **Fastfetch** — system info display
-- **Plasma System Monitor** — KDE system monitoring
-- **Neon Green KDE Theme** — custom Breeze Dark theme with green accents
-- **Discord, VSCodium, Heroic Games Launcher** — communication and gaming
-- **LibreOffice, Thunderbird** — office and email
-- **Kdenlive, GIMP, Inkscape, Krita** — creative tools
-- **VLC, OBS Studio** — media and streaming
-- **Wine, Winetricks** — Windows app compatibility
-- **Variety** — wallpaper changer
-- **Development Tools** — Git, GitHub CLI, Node.js, Python 3, GCC, Make
+**Browsers & Communication**
+- Firefox, Brave Browser (optional), Discord, Betterbird
+
+**Gaming**
+- Steam, Lutris, Heroic Games Launcher, ProtonUp-Qt, Bottles, Wine, Winetricks, Gamemode, GOverlay
+
+**Creative**
+- GIMP, Inkscape, Krita, Kdenlive, OBS Studio, Darktable, Audacity, Blender
+
+**Productivity**
+- LibreOffice, Joplin, MarkText, Calibre, KCalc
+
+**Development**
+- VSCodium, Git, GitHub CLI, Node.js, Python 3, GCC, CMake, Neovim, Podman, Pods
+
+**System Tools**
+- Fastfetch, BleachBit, Filelight, Mission Center, Flatseal, Variety, Censor, OpenDeck
 
 ## Built With
 
@@ -54,4 +53,4 @@ systemctl reboot
 
 ## Changelog
 
-See https://github.com/Cerberus9-dev/Raptor-OS/blob/main/changelog.md for the full changelog.
+See [CHANGELOG.md](CHANGELOG.md) for the full changelog.
