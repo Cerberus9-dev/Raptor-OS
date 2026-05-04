@@ -66,4 +66,3 @@
 - Discord, VSCodium, Heroic Games Launcher as Flatpaks
 - LibreOffice, Thunderbird, Kdenlive, GIMP
 - First boot service that automatically rebases to Raptor OS from stock Bazzite
-```
