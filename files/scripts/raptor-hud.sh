@@ -7,9 +7,10 @@ cat << 'EOF' > /etc/skel/.config/kdeglobals
 [General]
 ColorScheme=BreezeDark
 AccentColor=51,255,51
+accentColorFromWallpaper=false
 EOF
 
-# Also apply to root and any existing users
+# Also apply to existing users
 for dir in /root /home/*; do
     if [ -d "$dir" ]; then
         mkdir -p "$dir/.config"
@@ -17,6 +18,7 @@ for dir in /root /home/*; do
 [General]
 ColorScheme=BreezeDark
 AccentColor=51,255,51
+accentColorFromWallpaper=false
 EOF
     fi
 done

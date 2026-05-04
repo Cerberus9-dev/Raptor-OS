@@ -1,7 +1,7 @@
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: raptor-os
-description: Victory Build.
+description: raptor-os
 base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
 modules:
@@ -62,6 +62,7 @@ modules:
         - com.discordapp.Discord
         - com.heroicgameslauncher.hgl
         - com.vscodium.codium
+        - com.github.marhkb.Pods
 
   - type: systemd
     system:
