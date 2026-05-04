@@ -4,6 +4,36 @@
 - Custom GRUB bootloader theme
 - Custom KDE splash screen
 - Custom Raptor OS logo
+- KDE theme fix (ongoing)
+
+## [v1.2] - 2026-05-04
+### Added
+- Betterbird as default email client
+- Calibre ebook manager
+- Joplin note taking app
+- Censor PDF redaction tool
+- OpenDeck stream controller app
+- Pods GUI for Podman containers
+- MarkText Markdown editor
+- Mission Center task manager
+- ProtonUp-Qt for managing Proton versions
+- Blender 3D modeling
+- Flatseal Flatpak permission manager
+- Bottles Windows app compatibility layer
+- KCalc calculator
+- Kamoso webcam app
+- BleachBit system cleaner
+- Darktable photo editor
+- Audacity audio editor
+
+### Removed
+- Thunderbird (replaced by Betterbird)
+
+### Fixed
+- KDE theme accent color now uses kwriteconfig6 for Plasma 6 compatibility
+- App menu refresh via kbuildsycoca6
+- Steam dev config path not existing during build
+- raptor-theme.sh not being created during build
 
 ## [v1.1] - 2026-05-02
 ### Added
@@ -24,9 +54,6 @@
 - Steam and Lutris gaming optimizations (async shaders, shader caching, DXVK)
 - zram enabled by default for better memory management
 - KDE theme now force reloads on boot
-
-### Removed
-- Bottles (replaced by Lutris which ships with Bazzite)
 
 ### Fixed
 - DNS sluggishness via systemd-resolved configuration
