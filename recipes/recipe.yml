@@ -5,7 +5,6 @@ base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
 
 modules:
-  # --- Copy custom files ---
   - type: files
     files:
       - source: system_files/raptor-firstboot.service
@@ -13,22 +12,12 @@ modules:
       - source: system_files/raptor-browser-choice.sh
         destination: /usr/local/bin/raptor-browser-choice.sh
 
-  # --- Run all customization scripts ---
   - type: script
     scripts:
-      # Make browser choice script executable
-      - chmod +x /usr/local/bin/raptor-browser-choice.sh
-
-      # HUD and theme customizations
       - raptor-hud.sh
-
-      # Gaming optimizations
       - raptor-gaming.sh
-
-      # Performance tweaks
       - raptor-performance.sh
 
-  # --- Install RPM packages ---
   - type: rpm-ostree
     install:
       - firefox
@@ -76,7 +65,6 @@ modules:
       - darktable
       - audacity
 
-  # --- Install default flatpaks ---
   - type: default-flatpaks@v1
     notify: true
     system:
@@ -95,7 +83,6 @@ modules:
         - com.usebottles.bottles
         - com.feaneron.Boatswain
 
-  # --- Enable firstboot service ---
   - type: systemd
     system:
       enabled:
