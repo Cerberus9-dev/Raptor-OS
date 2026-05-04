@@ -53,8 +53,13 @@ modules:
       - variety
       - wine
       - winetricks
+      - kcalc
+      - kamoso
+      - bleachbit
+      - darktable
+      - audacity
 
-  - type: default-flatpaks@v1
+ - type: default-flatpaks@v1
     notify: true
     system:
       install:
@@ -67,6 +72,12 @@ modules:
         - eu.betterbird.Betterbird
         - com.github.ryonakano.censor
         - de.thm.opendecks
+        - com.github.marktext.marktext
+        - io.missioncenter.MissionCenter
+        - net.davidotek.pupgui2
+        - org.blender.Blender
+        - com.github.tchx84.Flatseal
+        - com.usebottles.bottles
 
   - type: systemd
     system:
