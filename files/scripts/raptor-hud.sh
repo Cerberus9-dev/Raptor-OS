@@ -39,22 +39,11 @@ EOF
 mkdir -p /usr/local/bin
 cat << 'EOF' > /usr/local/bin/raptor-theme.sh
 #!/bin/bash
-kwriteconfig6 --file kdeglobals --group General --key AccentColor "51,255,51"
-kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper "false"
-kwriteconfig6 --file kdeglobals --group General --key ColorScheme "BreezeDark"
+qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
 plasma-apply-colorscheme BreezeDark 2>/dev/null || true
-qdbus6 org.kde.KWin /KWin reconfigure 2>/dev/null || true
-kbuildsycoca6 --noincremental 2>/dev/null || true
+kwriteconfig5 --file kdeglobals --group General --key AccentColor "51,255,51" 2>/dev/null || true
 EOF
 chmod +x /usr/local/bin/raptor-theme.sh
-
-# Copy autostart to existing users
-for dir in /root /home/*; do
-    if [ -d "$dir" ]; then
-        mkdir -p "$dir/.config/autostart"
-        cp /etc/skel/.config/autostart/raptor-theme.desktop "$dir/.config/autostart/" 2>/dev/null || true
-    fi
-done
 
 # Make browser choice script executable
 chmod +x /usr/local/bin/raptor-browser-choice.sh 2>/dev/null || true
