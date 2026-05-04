@@ -3,7 +3,6 @@ name: raptor-os
 description: Victory Build with browser choice, gaming optimizations, HUD theme, and performance tweaks.
 base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
-
 modules:
   - type: files
     files:
@@ -11,13 +10,11 @@ modules:
         destination: /usr/lib/systemd/system/raptor-firstboot.service
       - source: system_files/raptor-browser-choice.sh
         destination: /usr/local/bin/raptor-browser-choice.sh
-
   - type: script
     scripts:
       - raptor-hud.sh
       - raptor-gaming.sh
       - raptor-performance.sh
-
   - type: rpm-ostree
     install:
       - firefox
@@ -64,7 +61,6 @@ modules:
       - bleachbit
       - darktable
       - audacity
-
   - type: default-flatpaks@v1
     notify: true
     system:
@@ -82,7 +78,6 @@ modules:
         - com.github.tchx84.Flatseal
         - com.usebottles.bottles
         - com.feaneron.Boatswain
-
   - type: systemd
     system:
       enabled:
