@@ -55,7 +55,7 @@ modules:
       - wine
       - winetricks
 
-  - type: default-flatpaks@v1
+ - type: default-flatpaks@v1
     notify: true
     system:
       install:
@@ -63,6 +63,8 @@ modules:
         - com.heroicgameslauncher.hgl
         - com.vscodium.codium
         - com.github.marhkb.Pods
+        - com.calibre_ebook.calibre
+        - net.cozic.joplin_desktop
 
   - type: systemd
     system:
