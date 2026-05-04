@@ -53,4 +53,3 @@ If you already have Bazzite installed and want to switch to Raptor OS without re
 
 ## Changelog
 See [CHANGELOG.md](CHANGELOG.md) for the full changelog.
-```
