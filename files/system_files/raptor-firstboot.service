@@ -6,7 +6,7 @@ ConditionPathExists=!/var/lib/raptor-firstboot-done
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/bash -c '/usr/local/bin/raptor-browser-choice.sh && rpm-ostree rebase ostree-unverified-registry:ghcr.io/cerberus9-dev/raptor-os:latest && touch /var/lib/raptor-firstboot-done && systemctl reboot'
+ExecStart=/usr/bin/bash -c 'systemctl enable raptor-gpu-profile.service && rpm-ostree rebase ostree-image-signed:docker://ghcr.io/cerberus9-dev/raptor-os:latest && touch /var/lib/raptor-firstboot-done && systemctl reboot'
 RemainAfterExit=yes
 
 [Install]
