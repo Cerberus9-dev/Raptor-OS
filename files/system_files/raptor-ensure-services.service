@@ -1,0 +1,12 @@
+[Unit]
+Description=Raptor OS Ensure Services Are Enabled
+After=local-fs.target
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash -c 'systemctl is-enabled raptor-gpu-profile.service &>/dev/null || systemctl enable raptor-gpu-profile.service'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
