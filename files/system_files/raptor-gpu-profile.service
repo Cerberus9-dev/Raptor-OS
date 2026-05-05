@@ -1,0 +1,11 @@
+[Unit]
+Description=Raptor GPU Profile Detection
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/raptor-gpu-profile.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
