@@ -9,6 +9,16 @@ DNS=1.1.1.1 1.0.0.1
 FallbackDNS=8.8.8.8 8.8.4.4
 EOF
 
+# Fix WiFi disconnection issue
+mkdir -p /etc/NetworkManager/conf.d
+cat << 'EOF' > /etc/NetworkManager/conf.d/raptor-wifi.conf
+[connection]
+wifi.powersave=2
+
+[device]
+wifi.scan-rand-mac-address=no
+EOF
+
 # Firefox performance tweaks system-wide
 mkdir -p /usr/lib/firefox/defaults/pref
 cat << 'EOF' > /usr/lib/firefox/defaults/pref/raptor.js
