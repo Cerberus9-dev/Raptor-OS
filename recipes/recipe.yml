@@ -15,6 +15,12 @@ modules:
         destination: /usr/lib/systemd/system/raptor-gpu-profile.service
       - source: system_files/raptor-ensure-services.service
         destination: /usr/lib/systemd/system/raptor-ensure-services.service
+  - type: script
+    scripts:
+      - raptor-gpu-profile.sh
+      - raptor-hud.sh
+      - raptor-gaming.sh
+      - raptor-performance.sh
   - type: rpm-ostree
     install:
       - firefox
@@ -85,9 +91,3 @@ modules:
         - raptor-firstboot.service
         - raptor-gpu-profile.service
         - raptor-ensure-services.service
-  - type: script
-    scripts:
-      - raptor-hud.sh
-      - raptor-performance.sh
-      - raptor-gaming.sh
-      - raptor-gpu-profile.sh
