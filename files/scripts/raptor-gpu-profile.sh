@@ -14,7 +14,7 @@ fi
 
 echo "Detected GPU vendor: $GPU_VENDOR"
 
-# Detect if iGPU or low end (no dedicated VRAM shown)
+# Detect if iGPU
 IS_IGPU=false
 if lspci | grep -i "VGA\|3D\|Display" | grep -qi "intel"; then
     IS_IGPU=true
@@ -31,7 +31,7 @@ vm.dirty_background_ratio=5
 kernel.sched_autogroup_enabled=1
 EOF
 
-# Extra sysctl for low end / iGPU
+# Extra sysctl for iGPU
 if [ "$IS_IGPU" = true ]; then
     cat << 'EOF' >> /etc/sysctl.d/raptor-gaming.conf
 vm.vfs_cache_pressure=50
@@ -42,7 +42,27 @@ fi
 # Apply vendor specific profile
 mkdir -p /etc/environment.d
 
-if [ "$GPU_VENDOR" = "nvidia" ]; then
+# Check for user performance override
+if [ -f /etc/raptor-force-performance ]; then
+    echo "Performance override active"
+    cat << 'EOF' > /etc/environment.d/raptor-gpu.conf
+RADV_PERFTEST=gpl
+AMD_VULKAN_ICD=RADV
+mesa_glthread=true
+MESA_SHADER_CACHE_DISABLE=false
+__GL_SHADER_DISK_CACHE=1
+__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
+PROTON_ENABLE_NVAPI=1
+EOF
+
+elif [ -f /etc/raptor-force-powersave ]; then
+    echo "Power saving override active"
+    cat << 'EOF' > /etc/environment.d/raptor-gpu.conf
+mesa_glthread=false
+MESA_SHADER_CACHE_DISABLE=true
+EOF
+
+elif [ "$GPU_VENDOR" = "nvidia" ]; then
     cat << 'EOF' > /etc/environment.d/raptor-gpu.conf
 __GL_SHADER_DISK_CACHE=1
 __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
@@ -52,14 +72,12 @@ EOF
 
 elif [ "$GPU_VENDOR" = "amd" ]; then
     if [ "$IS_IGPU" = true ]; then
-        # Conservative settings for AMD iGPU
         cat << 'EOF' > /etc/environment.d/raptor-gpu.conf
 AMD_VULKAN_ICD=RADV
 mesa_glthread=true
 MESA_SHADER_CACHE_DISABLE=false
 EOF
     else
-        # Full settings for AMD dGPU
         cat << 'EOF' > /etc/environment.d/raptor-gpu.conf
 RADV_PERFTEST=gpl
 AMD_VULKAN_ICD=RADV
