@@ -56,6 +56,57 @@ for dir in /root /home/*; do
     fi
 done
 
+# Create performance mode toggle script
+cat << 'EOF' > /usr/local/bin/raptor-toggle-performance.sh
+#!/bin/bash
+CHOICE=$(zenity --list \
+  --title="Raptor OS Performance Mode" \
+  --text="Choose your performance profile:" \
+  --radiolist \
+  --column="" --column="Profile" \
+  TRUE "Auto (Recommended)" \
+  FALSE "Max Performance" \
+  FALSE "Power Saving" \
+  --width=350 --height=250)
+
+if [ "$CHOICE" = "Max Performance" ]; then
+    sudo touch /etc/raptor-force-performance
+    sudo rm -f /etc/raptor-force-powersave
+    zenity --info --text="Max Performance mode enabled. Please reboot."
+elif [ "$CHOICE" = "Power Saving" ]; then
+    sudo touch /etc/raptor-force-powersave
+    sudo rm -f /etc/raptor-force-performance
+    zenity --info --text="Power Saving mode enabled. Please reboot."
+else
+    sudo rm -f /etc/raptor-force-performance
+    sudo rm -f /etc/raptor-force-powersave
+    zenity --info --text="Auto mode enabled. Please reboot."
+fi
+EOF
+chmod +x /usr/local/bin/raptor-toggle-performance.sh
+
+# Add desktop shortcut
+mkdir -p /etc/skel/Desktop
+cat << 'EOF' > /etc/skel/Desktop/raptor-performance.desktop
+[Desktop Entry]
+Type=Application
+Name=Raptor Performance Mode
+Comment=Switch between performance profiles
+Exec=/usr/local/bin/raptor-toggle-performance.sh
+Icon=preferences-system
+Terminal=false
+Categories=System;
+EOF
+chmod +x /etc/skel/Desktop/raptor-performance.desktop
+
+# Copy desktop shortcut to existing users
+for dir in /root /home/*; do
+    if [ -d "$dir" ]; then
+        mkdir -p "$dir/Desktop"
+        cp /etc/skel/Desktop/raptor-performance.desktop "$dir/Desktop/" 2>/dev/null || true
+    fi
+done
+
 # Make browser choice script executable
 chmod +x /usr/local/bin/raptor-browser-choice.sh 2>/dev/null || true
 
