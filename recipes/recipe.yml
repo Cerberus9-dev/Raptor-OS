@@ -13,6 +13,8 @@ modules:
         destination: /usr/local/bin/raptor-browser-choice.sh
       - source: system_files/raptor-gpu-profile.service
         destination: /usr/lib/systemd/system/raptor-gpu-profile.service
+      - source: system_files/raptor-ensure-services.service
+        destination: /usr/lib/systemd/system/raptor-ensure-services.service
   - type: rpm-ostree
     install:
       - firefox
@@ -82,6 +84,7 @@ modules:
       enabled:
         - raptor-firstboot.service
         - raptor-gpu-profile.service
+        - raptor-ensure-services.service
   - type: script
     scripts:
       - raptor-hud.sh
