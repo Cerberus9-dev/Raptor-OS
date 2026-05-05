@@ -1,13 +1,14 @@
 [Unit]
-Description=Raptor OS First Boot Setup
-After=network-online.target
-Wants=network-online.target
-ConditionPathExists=!/var/lib/raptor-firstboot-done
+Description=Raptor OS First Boot - Browser Choice
+After=graphical.target
+Wants=graphical.target
+ConditionPathExists=!/var/lib/raptor-browser-choice-done
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/bash -c 'systemctl enable raptor-gpu-profile.service && rpm-ostree rebase ostree-image-signed:docker://ghcr.io/cerberus9-dev/raptor-os:latest && touch /var/lib/raptor-firstboot-done && systemctl reboot'
+ExecStart=/usr/local/bin/raptor-browser-choice.sh
+ExecStartPost=/usr/bin/touch /var/lib/raptor-browser-choice-done
 RemainAfterExit=yes
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
