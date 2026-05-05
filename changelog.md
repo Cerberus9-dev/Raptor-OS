@@ -1,5 +1,3 @@
-**CHANGELOG.md:**
-
 # Changelog
 
 ## [Unreleased]
@@ -8,24 +6,39 @@
 - Custom Raptor OS logo
 - KDE theme fix (ongoing)
 
-## [v1.2] - 2026-05-04
+## [v2.0] - 2026-05-04 (Major Update)
 ### Added
+- Automatic GPU vendor detection (AMD/NVIDIA/Intel/iGPU)
+- Per-vendor GPU optimization profiles
+- Performance Mode toggle with GUI — choose Auto, Max Performance or Power Saving from your desktop
+- RAM spike protection for large game maps and memory intensive apps
+- WiFi stability fix — disables power saving to prevent random disconnections
+- Split build scripts into raptor-hud, raptor-performance, raptor-gaming and raptor-gpu-profile
+
+### Fixed
+- WiFi randomly disconnecting and not reconnecting
+- RAM ceiling hits during large map loading in games like Unturned
+- GPU settings now correctly differentiate between iGPU and dGPU
+
+## [v1.2] - 2026-04-04
+### Added
+- Betterbird as default email client
 - Calibre ebook manager
 - Joplin note taking app
+- Censor PDF redaction tool
+- OpenDeck stream controller app
 - Pods GUI for Podman containers
 - MarkText Markdown editor
 - Mission Center task manager
 - ProtonUp-Qt for managing Proton versions
 - Blender 3D modeling
 - Flatseal Flatpak permission manager
-- Bottles Windows app compatibility layer
+- Bottles Windows app compatibility layer (returned by popular demand)
 - KCalc calculator
 - Kamoso webcam app
 - BleachBit system cleaner
 - Darktable photo editor
 - Audacity audio editor
-- Boatswain for Stream Deck support
-- Full dev suite: VSCodium, Git, GitHub CLI, Node.js, Python 3, GCC, CMake, Neovim, Podman
 
 ### Fixed
 - KDE theme accent color now uses kwriteconfig6 for Plasma 6 compatibility
@@ -40,6 +53,9 @@
 - OBS Studio for streaming and recording
 - Variety wallpaper changer
 - Wine and Winetricks for Windows app compatibility
+- Development tools: Git, GitHub CLI, Node.js, Python 3, GCC, Make
+- Additional dev tools: CMake, Ninja, Meson, Neovim, htop, Podman, jq, ripgrep, fzf, tmux
+- Podman and Podman Compose for containerization
 - Gamemode and GOverlay for gaming performance
 - Filelight disk usage analyzer
 - Gwenview image viewer
