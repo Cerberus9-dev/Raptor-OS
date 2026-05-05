@@ -4,7 +4,7 @@ set -oue pipefail
 # Detect GPU vendor
 if lspci | grep -i "VGA\|3D\|Display" | grep -qi "nvidia"; then
     GPU_VENDOR="nvidia"
-elif lspci | grep -i "VGA\|3D\|Display" | grep -qi "amd\|radeon"; then
+elif lspci | grep -i "VGA\|3D\|Display" | grep -qi "amd\|radeon\|ati"; then
     GPU_VENDOR="amd"
 elif lspci | grep -i "VGA\|3D\|Display" | grep -qi "intel"; then
     GPU_VENDOR="intel"
@@ -19,7 +19,7 @@ IS_IGPU=false
 if lspci | grep -i "VGA\|3D\|Display" | grep -qi "intel"; then
     IS_IGPU=true
 fi
-if lspci -v | grep -i "VGA\|3D\|Display" -A5 | grep -qi "subsystem.*apu\|integrated"; then
+if lspci -v | grep -i "VGA\|3D\|Display" -A5 | grep -qi "subsystem.*apu\|integrated\|cezanne\|renoir\|lucienne\|rembrandt\|mendocino"; then
     IS_IGPU=true
 fi
 
