@@ -40,6 +40,18 @@ zram-size = ram / 2
 compression-algorithm = zstd
 EOF
 
+# RAM spike protection
+cat << 'EOF' > /etc/sysctl.d/raptor-memory.conf
+vm.overcommit_memory=1
+vm.overcommit_ratio=50
+vm.min_free_kbytes=65536
+vm.watermark_boost_factor=0
+vm.watermark_scale_factor=125
+vm.compaction_proactiveness=0
+vm.dirty_expire_centisecs=3000
+vm.dirty_writeback_centisecs=500
+EOF
+
 # Rebuild app menu database on boot
 cat << 'EOF' > /etc/profile.d/raptor-appmenu.sh
 #!/bin/bash
