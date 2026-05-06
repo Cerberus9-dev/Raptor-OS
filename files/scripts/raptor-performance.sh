@@ -19,9 +19,14 @@ wifi.powersave=2
 wifi.scan-rand-mac-address=no
 EOF
 
-# Firefox memory optimization via mozilla.cfg (cannot be ignored)
+# Firefox memory optimization via mozilla.cfg
 mkdir -p /usr/lib/firefox
-cat << 'EOF' > /usr/lib/firefox/mozilla.cfg
+mkdir -p /usr/lib64/firefox
+mkdir -p /usr/lib/firefox/defaults/pref
+mkdir -p /usr/lib64/firefox/defaults/pref
+
+for FIREFOX_DIR in /usr/lib/firefox /usr/lib64/firefox; do
+    cat << 'EOF' > $FIREFOX_DIR/mozilla.cfg
 // Firefox memory optimization
 lockPref("browser.cache.memory.capacity", 16384);
 lockPref("browser.cache.memory.max_entry_size", 256);
@@ -46,12 +51,11 @@ lockPref("network.dns.disablePrefetch", true);
 lockPref("network.predictor.enabled", false);
 EOF
 
-# Required config file to point Firefox to mozilla.cfg
-mkdir -p /usr/lib/firefox/defaults/pref
-cat << 'EOF' > /usr/lib/firefox/defaults/pref/autoconfig.js
+    cat << 'EOF' > $FIREFOX_DIR/defaults/pref/autoconfig.js
 pref("general.config.filename", "mozilla.cfg");
 pref("general.config.obscure_value", 0);
 EOF
+done
 
 # Dynamic zram based on system RAM
 TOTAL_RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
