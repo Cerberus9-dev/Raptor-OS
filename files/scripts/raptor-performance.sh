@@ -19,50 +19,57 @@ wifi.powersave=2
 wifi.scan-rand-mac-address=no
 EOF
 
-# Firefox aggressive memory optimization
-mkdir -p /usr/lib/firefox/defaults/pref
-cat << 'EOF' > /usr/lib/firefox/defaults/pref/raptor.js
-// Memory limits
-pref("browser.cache.memory.capacity", 16384);
-pref("browser.cache.memory.max_entry_size", 256);
-pref("browser.sessionhistory.max_entries", 3);
-pref("browser.sessionhistory.max_total_viewers", 0);
-pref("browser.tabs.unloadOnLowMemory", true);
-pref("browser.low_commit_space_threshold_mb", 256);
-
-// JavaScript memory
-pref("javascript.options.mem.max", 256);
-pref("javascript.options.mem.gc_incremental_slice_ms", 5);
-pref("javascript.options.mem.high_water_mark", 128);
-pref("javascript.options.mem.gc_high_frequency_time_limit_ms", 500);
-
-// Disable memory hungry features
-pref("browser.tabs.firefox-view", false);
-pref("browser.newtabpage.activity-stream.feeds.telemetry", false);
-pref("browser.newtabpage.activity-stream.telemetry", false);
-pref("browser.ping-centre.telemetry", false);
-pref("toolkit.telemetry.enabled", false);
-pref("toolkit.telemetry.unified", false);
-pref("toolkit.telemetry.archive.enabled", false);
-
-// GPU acceleration
-pref("gfx.webrender.all", true);
-pref("media.hardware-video-decoding.enabled", true);
-pref("media.ffmpeg.vaapi.enabled", true);
-
-// Reduce background activity
-pref("browser.backgroundtasks.enabled", false);
-pref("dom.serviceWorkers.enabled", false);
-pref("browser.send_pings", false);
-pref("network.prefetch-next", false);
-pref("network.dns.disablePrefetch", true);
-pref("network.predictor.enabled", false);
+# Firefox memory optimization via mozilla.cfg (cannot be ignored)
+mkdir -p /usr/lib/firefox
+cat << 'EOF' > /usr/lib/firefox/mozilla.cfg
+// Firefox memory optimization
+lockPref("browser.cache.memory.capacity", 16384);
+lockPref("browser.cache.memory.max_entry_size", 256);
+lockPref("browser.sessionhistory.max_entries", 3);
+lockPref("browser.sessionhistory.max_total_viewers", 0);
+lockPref("browser.tabs.unloadOnLowMemory", true);
+lockPref("browser.low_commit_space_threshold_mb", 256);
+lockPref("javascript.options.mem.max", 256);
+lockPref("javascript.options.mem.gc_incremental_slice_ms", 5);
+lockPref("javascript.options.mem.high_water_mark", 128);
+lockPref("javascript.options.mem.gc_high_frequency_time_limit_ms", 500);
+lockPref("browser.tabs.firefox-view", false);
+lockPref("toolkit.telemetry.enabled", false);
+lockPref("toolkit.telemetry.unified", false);
+lockPref("gfx.webrender.all", true);
+lockPref("media.hardware-video-decoding.enabled", true);
+lockPref("media.ffmpeg.vaapi.enabled", true);
+lockPref("browser.backgroundtasks.enabled", false);
+lockPref("dom.serviceWorkers.enabled", false);
+lockPref("network.prefetch-next", false);
+lockPref("network.dns.disablePrefetch", true);
+lockPref("network.predictor.enabled", false);
 EOF
 
-# Enable zram for better memory management
-cat << 'EOF' > /etc/systemd/zram-generator.conf
+# Required config file to point Firefox to mozilla.cfg
+mkdir -p /usr/lib/firefox/defaults/pref
+cat << 'EOF' > /usr/lib/firefox/defaults/pref/autoconfig.js
+pref("general.config.filename", "mozilla.cfg");
+pref("general.config.obscure_value", 0);
+EOF
+
+# Dynamic zram based on system RAM
+TOTAL_RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+TOTAL_RAM_GB=$((TOTAL_RAM_KB / 1024 / 1024))
+
+if [ "$TOTAL_RAM_GB" -le 4 ]; then
+    ZRAM_SIZE="ram"
+elif [ "$TOTAL_RAM_GB" -le 8 ]; then
+    ZRAM_SIZE="ram * 3 / 4"
+elif [ "$TOTAL_RAM_GB" -le 16 ]; then
+    ZRAM_SIZE="ram * 5 / 8"
+else
+    ZRAM_SIZE="8192"
+fi
+
+cat << EOF > /etc/systemd/zram-generator.conf
 [zram0]
-zram-size = ram / 2
+zram-size = $ZRAM_SIZE
 compression-algorithm = zstd
 EOF
 
@@ -76,6 +83,7 @@ vm.watermark_scale_factor=125
 vm.compaction_proactiveness=0
 vm.dirty_expire_centisecs=3000
 vm.dirty_writeback_centisecs=500
+vm.swappiness=60
 EOF
 
 # Rebuild app menu database on boot
