@@ -108,6 +108,55 @@ Categories=System;Settings;
 Keywords=gpu;performance;power;profile;
 EOF
 
+# Create RAM optimizer script
+cat << 'EOF' > /usr/bin/raptor-ram-optimizer.sh
+#!/bin/bash
+
+BEFORE=$(free -h | grep Mem | awk '{print $3}')
+
+zenity --question \
+  --title="Raptor RAM Optimizer" \
+  --text="Current RAM usage: $BEFORE\n\nThis will:\n• Clear page cache\n• Compact memory\n• Free up inactive RAM\n\nContinue?" \
+  --width=350
+
+if [ $? != 0 ]; then exit 0; fi
+
+sync
+echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+echo 1 | sudo tee /proc/sys/vm/compact_memory > /dev/null 2>/dev/null || true
+
+zenity --question \
+  --title="Raptor RAM Optimizer" \
+  --text="Would you like to free up RAM by suspending background apps?" \
+  --width=350
+
+if [ $? = 0 ]; then
+    pkill -STOP -f "baloo" 2>/dev/null || true
+    pkill -STOP -f "tracker" 2>/dev/null || true
+fi
+
+AFTER=$(free -h | grep Mem | awk '{print $3}')
+
+zenity --info \
+  --title="Raptor RAM Optimizer" \
+  --text="Done!\n\nBefore: $BEFORE\nAfter:  $AFTER" \
+  --width=300
+EOF
+chmod +x /usr/bin/raptor-ram-optimizer.sh
+
+# Create app menu entry for RAM optimizer
+cat << 'EOF' > /usr/share/applications/raptor-ram-optimizer.desktop
+[Desktop Entry]
+Type=Application
+Name=Raptor RAM Optimizer
+Comment=Free up RAM and optimize memory usage
+Exec=/usr/bin/raptor-ram-optimizer.sh
+Icon=preferences-system-performance
+Terminal=false
+Categories=System;Settings;
+Keywords=ram;memory;optimize;performance;
+EOF
+
 # Create GPU profile script
 cat << 'EOF' > /usr/bin/raptor-gpu-profile.sh
 #!/bin/bash
