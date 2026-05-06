@@ -6,11 +6,24 @@
 - Custom Raptor OS logo
 - KDE theme fix (ongoing)
 
-## [v2.0] - 2026-05-04 (Major Update)
+## [v2.1] - 2026-05-05
+### Added
+- Raptor Profile Switcher app — switch between Auto, Max Performance and Power Saving GPU profiles from the app menu
+- Profile switching now logs out instead of requiring a full reboot
+- Shotcut video editor
+
+### Fixed
+- GPU detection now correctly identifies AMD/ATI cards including iGPUs like Cezanne
+- Firefox RAM usage significantly reduced via aggressive memory limits in defaults/pref
+- Firefox telemetry and background tasks disabled to reduce memory overhead
+- Hardware video decoding enabled in Firefox for lower CPU usage
+- Profile switcher now applies changes immediately without reboot
+
+## [v2.0] - 2026-05-04
 ### Added
 - Automatic GPU vendor detection (AMD/NVIDIA/Intel/iGPU)
 - Per-vendor GPU optimization profiles
-- Performance Mode toggle with GUI — choose Auto, Max Performance or Power Saving from your desktop
+- Performance Mode toggle with GUI — choose Auto, Max Performance or Power Saving
 - RAM spike protection for large game maps and memory intensive apps
 - WiFi stability fix — disables power saving to prevent random disconnections
 - Split build scripts into raptor-hud, raptor-performance, raptor-gaming and raptor-gpu-profile
@@ -20,13 +33,11 @@
 - RAM ceiling hits during large map loading in games like Unturned
 - GPU settings now correctly differentiate between iGPU and dGPU
 
-## [v1.2] - 2026-04-04
+## [v1.2] - 2026-05-04
 ### Added
 - Betterbird as default email client
 - Calibre ebook manager
 - Joplin note taking app
-- Censor PDF redaction tool
-- OpenDeck stream controller app
 - Pods GUI for Podman containers
 - MarkText Markdown editor
 - Mission Center task manager
@@ -39,6 +50,10 @@
 - BleachBit system cleaner
 - Darktable photo editor
 - Audacity audio editor
+- Boatswain stream deck controller
+
+### Removed
+- Thunderbird (replaced by Betterbird)
 
 ### Fixed
 - KDE theme accent color now uses kwriteconfig6 for Plasma 6 compatibility
