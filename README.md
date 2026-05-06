@@ -21,8 +21,6 @@ Download the latest ISO from [Internet Archive](https://archive.org/details/rapt
 If you already have Bazzite installed and want to switch without reinstalling:
 
 **Step 1:**
-
-**Step 1:**
 ```
 rpm-ostree rebase ostree-unverified-registry:ghcr.io/cerberus9-dev/raptor-os:latest
 ```
