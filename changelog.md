@@ -18,7 +18,7 @@
 ### Added
 - Automatic GPU vendor detection (AMD/NVIDIA/Intel/iGPU)
 - Per-vendor GPU optimization profiles
-- Performance Mode toggle with GUI — choose Auto, Max Performance or Power Saving
+- Performance Mode toggle with GUI — choose Auto or Max Performance
 - RAM spike protection for large game maps and memory intensive apps
 - WiFi stability fix — disables power saving to prevent random disconnections
 - Split build scripts into raptor-hud, raptor-performance, raptor-gaming and raptor-gpu-profile
