@@ -21,7 +21,7 @@
 - RAM spike protection for large game maps and memory intensive apps
 - WiFi stability fix — disables power saving to prevent random disconnections
 - Split build scripts into raptor-hud, raptor-performance, raptor-gaming and raptor-gpu-profile
--  Raptor Profile Switcher app — switch between Auto, Max Performance and Power Saving GPU profiles from the app menu
+-  Raptor Profile Switcher app — switch between Auto and Max Performance GPU profiles from the app menu
 - Shotcut video editor
 - Made ZRAM dynamic based on available RAM for better performance
 
