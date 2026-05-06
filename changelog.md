@@ -6,12 +6,7 @@
 - Custom Raptor OS logo
 - KDE theme fix (ongoing)
 
-## [v2.1] - 2026-05-05
-### Added
-- Raptor Profile Switcher app — switch between Auto, Max Performance and Power Saving GPU profiles from the app menu
-- Profile switching now logs out instead of requiring a full reboot
-- Shotcut video editor
-
+## [v2.1] - 2026-05-04 (Mini Hotfix)
 ### Fixed
 - GPU detection now correctly identifies AMD/ATI cards including iGPUs like Cezanne
 - Firefox RAM usage significantly reduced via aggressive memory limits in defaults/pref
@@ -19,7 +14,7 @@
 - Hardware video decoding enabled in Firefox for lower CPU usage
 - Profile switcher now applies changes immediately without reboot
 
-## [v2.0] - 2026-05-04
+## [v2.0] - 2026-05-04 (Major Update)
 ### Added
 - Automatic GPU vendor detection (AMD/NVIDIA/Intel/iGPU)
 - Per-vendor GPU optimization profiles
@@ -27,11 +22,15 @@
 - RAM spike protection for large game maps and memory intensive apps
 - WiFi stability fix — disables power saving to prevent random disconnections
 - Split build scripts into raptor-hud, raptor-performance, raptor-gaming and raptor-gpu-profile
+-  Raptor Profile Switcher app — switch between Auto, Max Performance and Power Saving GPU profiles from the app menu
+- Profile switching now logs out instead of requiring a full reboot
+- Shotcut video editor
 
 ### Fixed
 - WiFi randomly disconnecting and not reconnecting
 - RAM ceiling hits during large map loading in games like Unturned
 - GPU settings now correctly differentiate between iGPU and dGPU
+  
 
 ## [v1.2] - 2026-05-04
 ### Added
