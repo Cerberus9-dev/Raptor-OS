@@ -19,18 +19,44 @@ wifi.powersave=2
 wifi.scan-rand-mac-address=no
 EOF
 
-# Firefox performance tweaks system-wide
+# Firefox aggressive memory optimization
 mkdir -p /usr/lib/firefox/defaults/pref
 cat << 'EOF' > /usr/lib/firefox/defaults/pref/raptor.js
-pref("browser.cache.memory.capacity", 32768);
-pref("browser.cache.memory.max_entry_size", 512);
-pref("browser.sessionhistory.max_entries", 5);
-pref("browser.sessionhistory.max_total_viewers", 1);
+// Memory limits
+pref("browser.cache.memory.capacity", 16384);
+pref("browser.cache.memory.max_entry_size", 256);
+pref("browser.sessionhistory.max_entries", 3);
+pref("browser.sessionhistory.max_total_viewers", 0);
 pref("browser.tabs.unloadOnLowMemory", true);
-pref("javascript.options.mem.max", 512);
+pref("browser.low_commit_space_threshold_mb", 256);
+
+// JavaScript memory
+pref("javascript.options.mem.max", 256);
 pref("javascript.options.mem.gc_incremental_slice_ms", 5);
+pref("javascript.options.mem.high_water_mark", 128);
+pref("javascript.options.mem.gc_high_frequency_time_limit_ms", 500);
+
+// Disable memory hungry features
+pref("browser.tabs.firefox-view", false);
+pref("browser.newtabpage.activity-stream.feeds.telemetry", false);
+pref("browser.newtabpage.activity-stream.telemetry", false);
+pref("browser.ping-centre.telemetry", false);
+pref("toolkit.telemetry.enabled", false);
+pref("toolkit.telemetry.unified", false);
+pref("toolkit.telemetry.archive.enabled", false);
+
+// GPU acceleration
 pref("gfx.webrender.all", true);
-pref("browser.low_commit_space_threshold_mb", 500);
+pref("media.hardware-video-decoding.enabled", true);
+pref("media.ffmpeg.vaapi.enabled", true);
+
+// Reduce background activity
+pref("browser.backgroundtasks.enabled", false);
+pref("dom.serviceWorkers.enabled", false);
+pref("browser.send_pings", false);
+pref("network.prefetch-next", false);
+pref("network.dns.disablePrefetch", true);
+pref("network.predictor.enabled", false);
 EOF
 
 # Enable zram for better memory management
