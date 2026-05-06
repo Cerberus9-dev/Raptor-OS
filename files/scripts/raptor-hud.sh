@@ -71,25 +71,25 @@ CHOICE=$(zenity --list \
   TRUE "Auto" "Automatically detect and optimize for your GPU" \
   FALSE "Max Performance" "Maximum GPU performance, higher power usage" \
   FALSE "Power Saving" "Reduced GPU usage, better battery life" \
-  --width=500 --height=300)
+  --width=600 --height=350)
 
 if [ "$CHOICE" = "Max Performance" ]; then
     sudo touch /etc/raptor-force-performance
     sudo rm -f /etc/raptor-force-powersave
     /usr/bin/raptor-gpu-profile.sh
-    zenity --question --title="Raptor OS" --text="Max Performance profile applied.\nLog out now to apply changes?" && loginctl terminate-user $USER
+    zenity --question --title="Raptor OS" --text="Max Performance profile applied.\nLog out now to apply changes?" && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
 
 elif [ "$CHOICE" = "Power Saving" ]; then
     sudo touch /etc/raptor-force-powersave
     sudo rm -f /etc/raptor-force-performance
     /usr/bin/raptor-gpu-profile.sh
-    zenity --question --title="Raptor OS" --text="Power Saving profile applied.\nLog out now to apply changes?" && loginctl terminate-user $USER
+    zenity --question --title="Raptor OS" --text="Power Saving profile applied.\nLog out now to apply changes?" && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
 
 elif [ "$CHOICE" = "Auto" ]; then
     sudo rm -f /etc/raptor-force-performance
     sudo rm -f /etc/raptor-force-powersave
     /usr/bin/raptor-gpu-profile.sh
-    zenity --question --title="Raptor OS" --text="Auto profile applied.\nLog out now to apply changes?" && loginctl terminate-user $USER
+    zenity --question --title="Raptor OS" --text="Auto profile applied.\nLog out now to apply changes?" && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
 fi
 EOF
 chmod +x /usr/bin/raptor-profile-switcher.sh
@@ -121,9 +121,18 @@ zenity --question \
 
 if [ $? != 0 ]; then exit 0; fi
 
+# Clear page cache
 sync
 echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+
+# Compact memory
 echo 1 | sudo tee /proc/sys/vm/compact_memory > /dev/null 2>/dev/null || true
+
+# Trim memory from all processes
+for pid in $(ls /proc | grep -E '^[0-9]+$'); do
+    cat /proc/$pid/status 2>/dev/null | grep -q VmRSS && \
+    echo 4 | sudo tee /proc/$pid/oom_score_adj > /dev/null 2>/dev/null || true
+done
 
 zenity --question \
   --title="Raptor RAM Optimizer" \
@@ -182,7 +191,6 @@ mkdir -p /etc/environment.d
 
 if [ -f /etc/raptor-force-performance ]; then
     cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
-RADV_PERFTEST=gpl
 AMD_VULKAN_ICD=RADV
 mesa_glthread=true
 MESA_SHADER_CACHE_DISABLE=false
