@@ -12,7 +12,6 @@
 - Firefox RAM usage significantly reduced via aggressive memory limits in defaults/pref
 - Firefox telemetry and background tasks disabled to reduce memory overhead
 - Hardware video decoding enabled in Firefox for lower CPU usage
-- Profile switcher now applies changes immediately without reboot
 
 ## [v2.0] - 2026-05-04 (Major Update)
 ### Added
@@ -23,8 +22,8 @@
 - WiFi stability fix — disables power saving to prevent random disconnections
 - Split build scripts into raptor-hud, raptor-performance, raptor-gaming and raptor-gpu-profile
 -  Raptor Profile Switcher app — switch between Auto, Max Performance and Power Saving GPU profiles from the app menu
-- Profile switching now logs out instead of requiring a full reboot
 - Shotcut video editor
+- Made ZRAM dynamic based on available RAM for better performance
 
 ### Fixed
 - WiFi randomly disconnecting and not reconnecting
