@@ -78,14 +78,14 @@ modules:
         - com.feaneron.Boatswain
         - org.shotcut.Shotcut
 
-  - type: systemd
-    system:
-      enabled:
-        - raptor-firstboot.service
-        - raptor-gpu-profile.service
-
   - type: script
     scripts:
       - raptor-hud.sh
       - raptor-performance.sh
       - raptor-gaming.sh
+
+  - type: systemd
+    system:
+      enabled:
+        - raptor-firstboot.service
+        - raptor-gpu-profile.service
