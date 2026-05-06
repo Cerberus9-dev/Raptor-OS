@@ -77,17 +77,19 @@ if [ "$CHOICE" = "Max Performance" ]; then
     sudo touch /etc/raptor-force-performance
     sudo rm -f /etc/raptor-force-powersave
     /usr/bin/raptor-gpu-profile.sh
-    zenity --info --title="Raptor OS" --text="Max Performance profile applied.\nSome changes require a reboot."
+    zenity --question --title="Raptor OS" --text="Max Performance profile applied.\nLog out now to apply changes?" && loginctl terminate-user $USER
+
 elif [ "$CHOICE" = "Power Saving" ]; then
     sudo touch /etc/raptor-force-powersave
     sudo rm -f /etc/raptor-force-performance
     /usr/bin/raptor-gpu-profile.sh
-    zenity --info --title="Raptor OS" --text="Power Saving profile applied.\nSome changes require a reboot."
+    zenity --question --title="Raptor OS" --text="Power Saving profile applied.\nLog out now to apply changes?" && loginctl terminate-user $USER
+
 elif [ "$CHOICE" = "Auto" ]; then
     sudo rm -f /etc/raptor-force-performance
     sudo rm -f /etc/raptor-force-powersave
     /usr/bin/raptor-gpu-profile.sh
-    zenity --info --title="Raptor OS" --text="Auto profile applied.\nSome changes require a reboot."
+    zenity --question --title="Raptor OS" --text="Auto profile applied.\nLog out now to apply changes?" && loginctl terminate-user $USER
 fi
 EOF
 chmod +x /usr/bin/raptor-profile-switcher.sh
