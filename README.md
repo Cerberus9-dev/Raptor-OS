@@ -40,7 +40,7 @@ systemctl reboot
 ## What's Included
 
 **Browsers & Communication**
-- Firefox, Brave Browser (optional, chosen at first boot), Discord, Thunderbird
+- Firefox or Brave Browser (optional, chosen at first boot), Discord, Thunderbird
 
 **Gaming**
 - Steam, Lutris, Heroic Games Launcher, ProtonUp-Qt, Bottles, Wine, Winetricks, Gamemode, GOverlay
