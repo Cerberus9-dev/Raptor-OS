@@ -21,6 +21,8 @@ Download the latest ISO from [Internet Archive](https://archive.org/details/rapt
 If you already have Bazzite installed and want to switch without reinstalling:
 
 **Step 1:**
+
+**Step 1:**
 ```
 rpm-ostree rebase ostree-unverified-registry:ghcr.io/cerberus9-dev/raptor-os:latest
 ```
@@ -46,10 +48,10 @@ systemctl reboot
 - Steam, Lutris, Heroic Games Launcher, ProtonUp-Qt, Bottles, Wine, Winetricks, Gamemode, GOverlay
 
 **Creative**
-- GIMP, Inkscape, Krita, Kdenlive, OBS Studio, Darktable, Audacity, Blender
+- GIMP, Inkscape, Krita, Kdenlive, Shotcut, OBS Studio, Darktable, Audacity, Blender
 
 **Productivity**
-- LibreOffice, Joplin, MarkText, Calibre, KCalc, Censor, OpenDeck
+- LibreOffice, Joplin, MarkText, Calibre, KCalc, Boatswain
 
 **Development**
 - VSCodium, Git, GitHub CLI, Node.js, Python 3, GCC, CMake, Neovim, Podman, Pods
@@ -59,11 +61,12 @@ systemctl reboot
 
 **Performance**
 - Automatic GPU detection and optimization (AMD/NVIDIA/Intel/iGPU)
-- Performance Mode toggle (Auto/Max Performance/Power Saving)
+- Raptor Profile Switcher — switch between Auto, Max Performance and Power Saving
 - RAM spike protection for large game maps
 - WiFi stability fixes
 - zram memory compression
 - Cloudflare DNS for faster browsing
+- Aggressive Firefox memory optimization
 
 ## Built With
 
