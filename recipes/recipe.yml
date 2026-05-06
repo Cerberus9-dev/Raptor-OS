@@ -10,17 +10,8 @@ modules:
       - source: system_files/raptor-firstboot.service
         destination: /usr/lib/systemd/system/raptor-firstboot.service
       - source: system_files/raptor-browser-choice.sh
-        destination: /usr/local/bin/raptor-browser-choice.sh
-      - source: system_files/raptor-gpu-profile.service
-        destination: /usr/lib/systemd/system/raptor-gpu-profile.service
-      - source: system_files/raptor-ensure-services.service
-        destination: /usr/lib/systemd/system/raptor-ensure-services.service
-  - type: script
-    scripts:
-      - raptor-gpu-profile.sh
-      - raptor-hud.sh
-      - raptor-gaming.sh
-      - raptor-performance.sh
+        destination: /usr/bin/raptor-browser-choice.sh
+
   - type: rpm-ostree
     install:
       - firefox
@@ -67,6 +58,7 @@ modules:
       - bleachbit
       - darktable
       - audacity
+
   - type: default-flatpaks@v1
     notify: true
     system:
@@ -85,9 +77,15 @@ modules:
         - com.usebottles.bottles
         - com.feaneron.Boatswain
         - org.shotcut.Shotcut
+
   - type: systemd
     system:
       enabled:
         - raptor-firstboot.service
         - raptor-gpu-profile.service
-        - raptor-ensure-services.service
+
+  - type: script
+    scripts:
+      - raptor-hud.sh
+      - raptor-performance.sh
+      - raptor-gaming.sh
