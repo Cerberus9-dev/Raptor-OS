@@ -1,7 +1,5 @@
-#!/usr/bin/bash
-
+#!/bin/bash
 CHOICE_FILE="/var/lib/raptor-browser-choice-done"
-
 if [ -f "$CHOICE_FILE" ]; then
     exit 0
 fi
@@ -24,7 +22,7 @@ case $CHOICE in
         xdg-settings set default-web-browser org.mozilla.firefox.desktop
         ;;
     *)
-        exit 1
+        exit 0  # user cancelled — not an error
         ;;
 esac
 
