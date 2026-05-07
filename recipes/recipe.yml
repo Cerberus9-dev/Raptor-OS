@@ -77,6 +77,7 @@ modules:
         - com.usebottles.bottles
         - com.feaneron.Boatswain
         - org.shotcut.Shotcut
+        - org.kde.discover
 
   - type: script
     scripts:
