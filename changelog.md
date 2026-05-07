@@ -26,7 +26,15 @@
   which disabled proactive memory compaction
 - `vm.oom_kill_allocating_task` enabled — kernel now kills the process that triggered
   the OOM event (e.g. Unturned leaking memory) instead of hunting an unrelated victim
-
+- `raptor-browser-choice.sh` shebang corrected from `#!/usr/bin/bash` to `#!/bin/bash`
+  — would silently fail on systems without the symlink
+- `raptor-browser-choice.sh` cancel/close now exits with code 0 instead of 1 — closing
+  the dialog was incorrectly treated as an error
+- `raptor-gpu-profile.sh` performance override profile was missing `RADV_PERFTEST=gpl`
+- Dangerous PID loop removed from `raptor-ram-optimizer.sh` — it attempted to set
+  `oom_score_adj` on every running process, which had no practical effect (value of 4
+  is near-zero in the -1000 to 1000 range) and risked interfering with system processes;
+  kernel-level OOM behaviour is already handled by `vm.oom_kill_allocating_task=1`
 ### Added
 - `WINE_LARGE_ADDRESS_AWARE=1` and `PROTON_FORCE_LARGE_ADDRESS_AWARE=1` added to all
   GPU profiles — allows 32-bit Unity builds (including Unturned) to address more than
@@ -66,7 +74,6 @@
 
 ## [v1.2] - 2026-05-04
 ### Added
-- Betterbird as default email client
 - Calibre ebook manager
 - Joplin note taking app
 - Pods GUI for Podman containers
@@ -82,8 +89,6 @@
 - Darktable photo editor
 - Audacity audio editor
 - Boatswain stream deck controller
-### Removed
-- Thunderbird (replaced by Betterbird)
 ### Fixed
 - KDE theme accent color now uses kwriteconfig6 for Plasma 6 compatibility
 - App menu refresh via kbuildsycoca6
