@@ -38,7 +38,7 @@ systemctl reboot
 **Development**
 - VSCodium, Git, GitHub CLI, Node.js, Python 3, GCC, CMake, Neovim, Podman, Pods
 **System Tools**
-- Fastfetch, BleachBit, Filelight, Mission Center, Flatseal, Variety, Kamoso
+- Fastfetch, BleachBit, Filelight, Mission Center, Flatseal, Variety, Kamoso, Custom app for updating
 **Performance**
 - Automatic GPU detection and optimization (AMD/NVIDIA/Intel/iGPU)
 - Raptor Profile Switcher — switch between Auto, Max Performance and Power Saving
