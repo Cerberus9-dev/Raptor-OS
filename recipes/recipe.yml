@@ -58,6 +58,9 @@ modules:
       - bleachbit
       - darktable
       - audacity
+      - plasma-discover
+      - plasma-discover-flatpak
+      - plasma-discover-rpm-ostree
 
   - type: default-flatpaks@v1
     notify: true
@@ -77,8 +80,7 @@ modules:
         - com.usebottles.bottles
         - com.feaneron.Boatswain
         - org.shotcut.Shotcut
-        - org.kde.discover
-
+      
   - type: script
     scripts:
       - raptor-hud.sh
