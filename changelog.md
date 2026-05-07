@@ -13,6 +13,9 @@
 - **Critical:** Conflicting `vm.swappiness` values between `raptor-memory.conf` and
   `raptor-gaming.conf` resolved — duplicate entries caused unpredictable boot-order
   races; swappiness is now owned exclusively by `raptor-memory.conf`
+- `vm.swappiness` raised from 60 to 80 — zram is in-RAM compressed swap (~10× faster
+  than disk), so a higher swappiness aggressively compresses cold pages instead of
+  triggering the OOM killer on spikes
 - `vm.page-cluster` set to 0 — default value of 3 caused 8-page read-ahead on every
   zram fault, wasting memory and adding latency on compressed swap
 - `vm.min_free_kbytes` raised from 64 MB to 128 MB to prevent page allocator stalls
@@ -36,11 +39,8 @@
 - Hint file written to `/etc/raptor/unturned-launch-options.txt` with recommended Steam
   launch options including `-gc.maxreserved 128` to cap the mono GC heap reservation,
   the single largest source of Unturned RAM bloat
-- `vm.swappiness` raised from 60 to 80 — zram is in-RAM compressed swap (~10× faster
-  than disk), so a higher swappiness aggressively compresses cold pages instead of
-  triggering the OOM killer on spikes
 
-## [v2.1] - 2026-05-04
+## [v2.1] - 2026-05-04 (Mini Hotfix)
 ### Fixed
 - GPU detection now correctly identifies AMD/ATI cards including iGPUs like Cezanne
 - Firefox RAM usage significantly reduced via aggressive memory limits in defaults/pref
@@ -49,6 +49,7 @@
 
 ## [v2.0] - 2026-05-04 (Major Update)
 ### Added
+- (Skipped to v2.0 As this was a major update mainly focusin on performance)
 - Automatic GPU vendor detection (AMD/NVIDIA/Intel/iGPU)
 - Per-vendor GPU optimization profiles
 - Performance Mode toggle with GUI — choose Auto or Max Performance
