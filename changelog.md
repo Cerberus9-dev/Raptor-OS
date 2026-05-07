@@ -47,6 +47,7 @@
 - Hint file written to `/etc/raptor/unturned-launch-options.txt` with recommended Steam
   launch options including `-gc.maxreserved 128` to cap the mono GC heap reservation,
   the single largest source of Unturned RAM bloat
+- Added KDE Discover for a quick ceck update and perform update GUI
 
 ## [v2.1] - 2026-05-04 (Mini Hotfix)
 ### Fixed
