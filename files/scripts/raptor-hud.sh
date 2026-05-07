@@ -128,12 +128,6 @@ echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
 # Compact memory
 echo 1 | sudo tee /proc/sys/vm/compact_memory > /dev/null 2>/dev/null || true
 
-# Trim memory from all processes
-for pid in $(ls /proc | grep -E '^[0-9]+$'); do
-    cat /proc/$pid/status 2>/dev/null | grep -q VmRSS && \
-    echo 4 | sudo tee /proc/$pid/oom_score_adj > /dev/null 2>/dev/null || true
-done
-
 zenity --question \
   --title="Raptor RAM Optimizer" \
   --text="Would you like to free up RAM by suspending background apps?" \
@@ -183,63 +177,76 @@ IS_IGPU=false
 if lspci | grep -i "VGA\|3D\|Display" | grep -qi "intel"; then
     IS_IGPU=true
 fi
-if lspci -v | grep -i "VGA\|3D\|Display" -A5 | grep -qi "cezanne\|renoir\|lucienne\|rembrandt\|mendocino\|integrated\|apu"; then
+if lspci -v | grep -i "VGA\|3D\|Display" -A5 | grep -qi \
+    "cezanne\|renoir\|lucienne\|rembrandt\|mendocino\|integrated\|apu"; then
     IS_IGPU=true
 fi
 
 mkdir -p /etc/environment.d
 
+COMMON_UNITY_VARS="WINE_LARGE_ADDRESS_AWARE=1
+PROTON_FORCE_LARGE_ADDRESS_AWARE=1
+STAGING_SHARED_MEMORY=1"
+
 if [ -f /etc/raptor-force-performance ]; then
-    cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
-AMD_VULKAN_ICD=RADV
-mesa_glthread=true
-MESA_SHADER_CACHE_DISABLE=false
-__GL_SHADER_DISK_CACHE=1
-__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
-PROTON_ENABLE_NVAPI=1
-ENVEOF
-
-elif [ -f /etc/raptor-force-powersave ]; then
-    cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
-mesa_glthread=false
-MESA_SHADER_CACHE_DISABLE=true
-ENVEOF
-
-elif [ "$GPU_VENDOR" = "nvidia" ]; then
-    cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
-__GL_SHADER_DISK_CACHE=1
-__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
-PROTON_ENABLE_NVAPI=1
-__NV_PRIME_RENDER_OFFLOAD=1
-ENVEOF
-
-elif [ "$GPU_VENDOR" = "amd" ] && [ "$IS_IGPU" = true ]; then
-    cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
-AMD_VULKAN_ICD=RADV
-mesa_glthread=true
-MESA_SHADER_CACHE_DISABLE=false
-ENVEOF
-
-elif [ "$GPU_VENDOR" = "amd" ]; then
-    cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
+    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
 RADV_PERFTEST=gpl
 AMD_VULKAN_ICD=RADV
 mesa_glthread=true
 MESA_SHADER_CACHE_DISABLE=false
+__GL_SHADER_DISK_CACHE=1
+__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
+PROTON_ENABLE_NVAPI=1
+$COMMON_UNITY_VARS
+ENVEOF
+
+elif [ -f /etc/raptor-force-powersave ]; then
+    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
+mesa_glthread=false
+MESA_SHADER_CACHE_DISABLE=true
+$COMMON_UNITY_VARS
+ENVEOF
+
+elif [ "$GPU_VENDOR" = "nvidia" ]; then
+    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
+__GL_SHADER_DISK_CACHE=1
+__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
+PROTON_ENABLE_NVAPI=1
+__NV_PRIME_RENDER_OFFLOAD=1
+$COMMON_UNITY_VARS
+ENVEOF
+
+elif [ "$GPU_VENDOR" = "amd" ] && [ "$IS_IGPU" = true ]; then
+    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
+AMD_VULKAN_ICD=RADV
+mesa_glthread=true
+MESA_SHADER_CACHE_DISABLE=false
+$COMMON_UNITY_VARS
+ENVEOF
+
+elif [ "$GPU_VENDOR" = "amd" ]; then
+    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
+RADV_PERFTEST=gpl
+AMD_VULKAN_ICD=RADV
+mesa_glthread=true
+MESA_SHADER_CACHE_DISABLE=false
+$COMMON_UNITY_VARS
 ENVEOF
 
 elif [ "$GPU_VENDOR" = "intel" ]; then
-    cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
+    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
 MESA_LOADER_DRIVER_OVERRIDE=iris
 LIBGL_DRI3_DISABLE=0
 vblank_mode=0
 mesa_glthread=true
+$COMMON_UNITY_VARS
 ENVEOF
 
 else
-    cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
+    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
 mesa_glthread=true
 MESA_SHADER_CACHE_DISABLE=false
+$COMMON_UNITY_VARS
 ENVEOF
 fi
 EOF
