@@ -40,7 +40,7 @@
   than disk), so a higher swappiness aggressively compresses cold pages instead of
   triggering the OOM killer on spikes
 
-## [v2.1] - 2026-05-07
+## [v2.1] - 2026-05-04
 ### Fixed
 - GPU detection now correctly identifies AMD/ATI cards including iGPUs like Cezanne
 - Firefox RAM usage significantly reduced via aggressive memory limits in defaults/pref
