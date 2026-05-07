@@ -61,8 +61,10 @@ systemctl reboot
 - Automatic GPU detection and optimization (AMD/NVIDIA/Intel/iGPU)
 - Raptor Profile Switcher — switch between Auto, Max Performance and Power Saving
 - RAM spike protection for large game maps
+- Unity/Proton memory fixes — 32-bit address space expansion and shared memory for games like Unturned
+- OOM kill tuning — kernel targets the leaking process instead of unrelated victims
 - WiFi stability fixes
-- zram memory compression
+- zram memory compression with optimized kernel tunables
 - Cloudflare DNS for faster browsing
 - Aggressive Firefox memory optimization
 
