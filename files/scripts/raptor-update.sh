@@ -10,7 +10,7 @@ set -oue pipefail
 # In recipe.yml this script is listed AFTER raptor-hud.sh.
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# ── Python GUI ─────────────────────────────────────────────────────────────────
+# ── Python GUI ────────────────────────────────────────────────────────────────
 cat << 'PYEOF' > /usr/bin/raptor-update
 #!/usr/bin/env python3
 """Raptor OS Update Center — GUI updater using ujust update"""
@@ -23,7 +23,6 @@ import subprocess
 import threading
 import sys
 
-
 class RaptorUpdateApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id="io.github.cerberus9dev.RaptorUpdate")
@@ -32,7 +31,6 @@ class RaptorUpdateApp(Adw.Application):
     def on_activate(self, app):
         self.win = RaptorUpdateWindow(application=app)
         self.win.present()
-
 
 class RaptorUpdateWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
@@ -260,23 +258,24 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         )
         dialog.present()
 
-
 if __name__ == "__main__":
     app = RaptorUpdateApp()
     sys.exit(app.run(sys.argv))
 PYEOF
 chmod +x /usr/bin/raptor-update
 
-# ── Wrapper launcher (avoids inline env= bugs in Plasma's Exec= parser) ────────
+# ── Wrapper launcher ──────────────────────────────────────────────────────────
+# GDK_BACKEND=x11 was removed — it silently prevented the app from launching
+# on Wayland sessions (which is the default on Bazzite/KDE). Let GTK
+# auto-detect the backend (Wayland first, XWayland fallback).
 cat << 'EOF' > /usr/bin/raptor-update-launcher
 #!/bin/bash
 export ADW_DISABLE_PORTAL=1
-export GDK_BACKEND=x11
 exec /usr/bin/raptor-update "$@"
 EOF
 chmod +x /usr/bin/raptor-update-launcher
 
-# ── Custom hicolor icon (works on every theme, no dependency on GNOME icons) ───
+# ── Custom hicolor icon ───────────────────────────────────────────────────────
 mkdir -p /usr/share/icons/hicolor/scalable/apps
 cat << 'EOF' > /usr/share/icons/hicolor/scalable/apps/raptor-update.svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
@@ -297,7 +296,7 @@ ln -sf /usr/share/icons/hicolor/scalable/apps/raptor-update.svg \
 
 gtk-update-icon-cache -f /usr/share/icons/hicolor/ 2>/dev/null || true
 
-# ── .desktop entry ─────────────────────────────────────────────────────────────
+# ── .desktop entry ────────────────────────────────────────────────────────────
 mkdir -p /usr/share/applications
 cat << 'EOF' > /usr/share/applications/raptor-update.desktop
 [Desktop Entry]
