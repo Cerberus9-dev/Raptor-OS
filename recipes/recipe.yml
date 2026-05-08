@@ -3,7 +3,6 @@ name: raptor-os
 description: Victory Build.
 base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
-
 modules:
   - type: files
     files:
@@ -11,8 +10,7 @@ modules:
         destination: /usr/lib/systemd/system/raptor-firstboot.service
       - source: system_files/raptor-browser-choice.sh
         destination: /usr/bin/raptor-browser-choice.sh
-
-- type: rpm-ostree
+  - type: rpm-ostree
     install:
       - firefox
       - fastfetch
@@ -63,7 +61,6 @@ modules:
       - power-profiles-daemon
     remove:
       - tuned-ppd
-
   - type: default-flatpaks@v1
     notify: true
     system:
@@ -82,7 +79,6 @@ modules:
         - com.usebottles.bottles
         - com.feaneron.Boatswain
         - org.shotcut.Shotcut
-
   - type: script
     scripts:
       - raptor-hud.sh
@@ -91,7 +87,6 @@ modules:
       - raptor-gaming.sh
       - raptor-ram-optimizer.sh
       - raptor-update.sh
-
   - type: systemd
     system:
       enabled:
