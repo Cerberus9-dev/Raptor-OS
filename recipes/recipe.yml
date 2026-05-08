@@ -12,7 +12,7 @@ modules:
       - source: system_files/raptor-browser-choice.sh
         destination: /usr/bin/raptor-browser-choice.sh
 
-  - type: rpm-ostree
+- type: rpm-ostree
     install:
       - firefox
       - fastfetch
@@ -61,6 +61,8 @@ modules:
       - variety
       - kcalc
       - power-profiles-daemon
+    remove:
+      - tuned-ppd
 
   - type: default-flatpaks@v1
     notify: true
