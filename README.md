@@ -29,16 +29,22 @@ systemctl reboot
 ## What's Included
 **Browsers & Communication**
 - Firefox or Brave Browser (optional, chosen at first boot), Discord, Thunderbird
+
 **Gaming**
 - Steam, Lutris, Heroic Games Launcher, ProtonUp-Qt, Bottles, Wine, Winetricks, Gamemode, GOverlay
+
 **Creative**
 - GIMP, Inkscape, Krita, Kdenlive, Shotcut, OBS Studio, Darktable, Audacity, Blender
+
 **Productivity**
 - LibreOffice, Joplin, MarkText, Calibre, KCalc, Boatswain
+
 **Development**
 - VSCodium, Git, GitHub CLI, Node.js, Python 3, GCC, CMake, Neovim, Podman, Pods
+
 **System Tools**
 - Fastfetch, BleachBit, Filelight, Mission Center, Flatseal, Variety, Kamoso, Custom app for updating
+
 **Performance**
 - Automatic GPU detection and optimization (AMD/NVIDIA/Intel/iGPU)
 - Raptor Profile Switcher — switch between Auto, Max Performance and Power Saving
