@@ -88,6 +88,7 @@ CONF
 # ── CPU / thermal idle management ────────────────────────────────────────────
 mkdir -p /etc/power-profiles-daemon
 cat << 'CONF' > /etc/power-profiles-daemon/raptor-default.conf
+# Raptor OS: start in balanced mode so the CPU doesn't boost at idle.
 [main]
 default-profile=balanced
 CONF
@@ -107,66 +108,4 @@ RemainAfterExit=yes
 WantedBy=graphical.target
 CONF
 
-cat << 'CONF' > /etc/systemd/system/raptor-cpugovernor.service
-[Unit]
-Description=Raptor OS — Set CPU governor to schedutil at boot
-After=sysinit.target
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c '
-    for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-        [ -f "$cpu" ] && echo schedutil > "$cpu" 2>/dev/null || true
-    done
-'
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-CONF
-
-cat << 'CONF' > /etc/udev/rules.d/raptor-cpuboost.rules
-ACTION=="add|change", SUBSYSTEM=="power_supply", \
-  ATTR{online}=="1", \
-  RUN+="/bin/bash -c 'echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true'"
-CONF
-
-# ── Thermal config (mkdir BEFORE the cat write) ───────────────────────────────
-mkdir -p /etc/raptor
-cat << 'CONF' > /etc/raptor/thermal-idle.conf
-# Raptor OS thermal notes:
-# - power-profiles-daemon "balanced" profile handles CPU P-state
-# - raptor-powerprofile.service sets this at boot
-# - raptor-cpugovernor.service sets schedutil as fallback governor
-# - CPU boost disabled at idle via udev rule raptor-cpuboost.rules
-# - gamemode (used by Steam/Lutris) re-enables boost + sets performance
-#   profile automatically when a game starts, and reverts on exit
-#
-# If your laptop still runs hot at desktop:
-#   sudo powerprofilesctl set power-saver
-# To check current profile:
-#   powerprofilesctl
-CONF
-
-mkdir -p /etc/gamemode.d
-cat << 'CONF' > /etc/gamemode.d/raptor.ini
-[general]
-renice=10
-inhibit_screensaver=1
-
-[gpu]
-apply_gpu_optimisations=accept-responsibility
-gpu_device=0
-
-[custom]
-start=/bin/bash -c 'echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null; powerprofilesctl set performance 2>/dev/null || true'
-end=/bin/bash -c 'echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null; powerprofilesctl set balanced 2>/dev/null || true'
-CONF
-
-# ── KDE app menu rebuild on login ─────────────────────────────────────────────
-cat << 'CONF' > /etc/profile.d/raptor-appmenu.sh
-#!/bin/bash
-kbuildsycoca6 --noincremental 2>/dev/null || true
-CONF
-
-echo "PERFORMANCE_READY"
+cat << '
