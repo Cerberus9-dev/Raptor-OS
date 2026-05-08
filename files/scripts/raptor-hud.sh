@@ -111,36 +111,6 @@ esac
 EOF
 chmod +x /usr/bin/raptor-profile-switcher.sh
 
-# ── RAM Optimizer ──────────────────────────────────────────────────────────────
-cat << 'EOF' > /usr/bin/raptor-ram-optimizer.sh
-#!/bin/bash
-BEFORE=$(free -h | awk '/^Mem:/{print $3}')
-TOTAL=$(free -h  | awk '/^Mem:/{print $2}')
-
-zenity --question \
-  --title="Raptor RAM Optimizer" \
-  --text="RAM usage: $BEFORE / $TOTAL\n\nThis will:\n- Sync filesystem buffers\n- Drop page/slab/inode caches\n- Compact memory\n\nContinue?" \
-  --width=360 2>/dev/null || exit 0
-
-sync
-echo 3 | sudo tee /proc/sys/vm/drop_caches    > /dev/null
-echo 1 | sudo tee /proc/sys/vm/compact_memory > /dev/null 2>/dev/null || true
-
-zenity --question \
-  --title="Raptor RAM Optimizer" \
-  --text="Suspend background indexers (baloo, tracker)?\nThey will resume on next login." \
-  --width=380 2>/dev/null && {
-    pkill -STOP -f "baloo_file" 2>/dev/null || true
-    pkill -STOP -f "tracker"    2>/dev/null || true
-}
-
-AFTER=$(free -h | awk '/^Mem:/{print $3}')
-zenity --info \
-  --title="Raptor RAM Optimizer" \
-  --text="Done!\n\nBefore: $BEFORE\nAfter:  $AFTER" \
-  --width=300 2>/dev/null
-EOF
-chmod +x /usr/bin/raptor-ram-optimizer.sh
 
 # ── Browser choice ─────────────────────────────────────────────────────────────
 chmod +x /usr/bin/raptor-browser-choice.sh 2>/dev/null || true
@@ -203,7 +173,7 @@ Version=1.1
 Type=Application
 Name=Raptor RAM Optimizer
 Comment=Free up RAM and optimize memory usage
-Exec=/usr/bin/raptor-ram-optimizer.sh
+Exec=/usr/bin/raptor-ram-launcher
 Icon=memory
 Terminal=false
 Categories=X-RaptorOS;
