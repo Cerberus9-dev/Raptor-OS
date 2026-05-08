@@ -2,18 +2,15 @@
 set -oue pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Raptor OS — Update Center installer
-# Installs the Python GUI updater, wrapper launcher, custom icon,
-# and .desktop entry tagged X-RaptorOS so it appears in the Raptor OS category.
-#
-# IMPORTANT: raptor-hud.sh must run first (it creates the X-RaptorOS menu).
-# In recipe.yml this script is listed AFTER raptor-hud.sh.
+# Raptor OS — Update Manager installer
+# Installs the Python GUI, wrapper launcher, custom icon, and .desktop entry.
+# Must run AFTER raptor-hud.sh (which creates the X-RaptorOS menu category).
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# ── Python GUI ────────────────────────────────────────────────────────────────
+# ── Python GUI ─────────────────────────────────────────────────────────────────
 cat << 'PYEOF' > /usr/bin/raptor-update
 #!/usr/bin/env python3
-"""Raptor OS Update Center — GUI updater using ujust update"""
+"""Raptor OS Update Manager — GUI updater using ujust update"""
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -23,6 +20,7 @@ import subprocess
 import threading
 import sys
 
+
 class RaptorUpdateApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id="io.github.cerberus9dev.RaptorUpdate")
@@ -31,6 +29,7 @@ class RaptorUpdateApp(Adw.Application):
     def on_activate(self, app):
         self.win = RaptorUpdateWindow(application=app)
         self.win.present()
+
 
 class RaptorUpdateWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
@@ -112,7 +111,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.log_view.override_font(Pango.FontDescription.from_string("Monospace 9"))
 
         self.log_buffer = self.log_view.get_buffer()
-        self._append_log("Welcome to Raptor Update Center.\nClick 'Check & Update' to begin.\n")
+        self._append_log("Welcome to Raptor Update Manager.\nClick 'Check & Update' to begin.\n")
 
         log_scroll.set_child(self.log_view)
         log_frame.set_child(log_scroll)
@@ -142,8 +141,6 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         clear_btn.connect("clicked", lambda _: self.log_buffer.set_text(""))
         btn_row.append(clear_btn)
 
-    # ── Helpers ────────────────────────────────────────────────────────────────
-
     def _append_log(self, text):
         end = self.log_buffer.get_end_iter()
         self.log_buffer.insert(end, text)
@@ -161,8 +158,6 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
             self.status_icon.remove_css_class(cls)
         self.status_icon.add_css_class(css_class)
 
-    # ── Update flow ────────────────────────────────────────────────────────────
-
     def on_update_clicked(self, btn):
         if self._update_running:
             return
@@ -172,14 +167,14 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.spinner.set_visible(True)
         self.spinner.start()
         self._set_status(
-            "Updating…",
-            "This may take several minutes — do not close this window",
+            "Updating...",
+            "This may take several minutes - do not close this window",
             "emblem-synchronizing-symbolic",
             "accent",
         )
-        GLib.idle_add(self._append_log, "\n─────────────────────────────────────\n")
-        GLib.idle_add(self._append_log, "Starting Raptor OS update (ujust update)…\n")
-        GLib.idle_add(self._append_log, "─────────────────────────────────────\n\n")
+        GLib.idle_add(self._append_log, "\n-------------------------------------\n")
+        GLib.idle_add(self._append_log, "Starting Raptor OS update (ujust update)...\n")
+        GLib.idle_add(self._append_log, "-------------------------------------\n\n")
         threading.Thread(target=self._run_update, daemon=True).start()
 
     def _run_update(self):
@@ -200,10 +195,8 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
             else:
                 GLib.idle_add(self._on_update_error, rc)
         except FileNotFoundError:
-            GLib.idle_add(
-                self._append_log,
-                "\nERROR: 'ujust' not found. Are you running Raptor OS?\n",
-            )
+            GLib.idle_add(self._append_log,
+                "\nERROR: 'ujust' not found. Are you running Raptor OS?\n")
             GLib.idle_add(self._on_update_error, -1)
         except Exception as e:
             GLib.idle_add(self._append_log, f"\nERROR: {e}\n")
@@ -214,9 +207,9 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.spinner.stop()
         self.spinner.set_visible(False)
         self.update_btn.set_sensitive(True)
-        self._append_log("\n─────────────────────────────────────\n")
-        self._append_log("✓ Update complete! Reboot to apply changes.\n")
-        self._append_log("─────────────────────────────────────\n")
+        self._append_log("\n-------------------------------------\n")
+        self._append_log("Update complete! Reboot to apply changes.\n")
+        self._append_log("-------------------------------------\n")
         self._set_status(
             "Update Complete",
             "Reboot to apply the latest Raptor OS image",
@@ -231,17 +224,15 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.spinner.stop()
         self.spinner.set_visible(False)
         self.update_btn.set_sensitive(True)
-        self._append_log("\n─────────────────────────────────────\n")
-        self._append_log(f"✗ Update failed (exit code {code}).\n")
-        self._append_log("─────────────────────────────────────\n")
+        self._append_log("\n-------------------------------------\n")
+        self._append_log(f"Update failed (exit code {code}).\n")
+        self._append_log("-------------------------------------\n")
         self._set_status(
             "Update Failed",
             f"Something went wrong (exit code {code}). Check the log above.",
             "dialog-error-symbolic",
             "error",
         )
-
-    # ── Reboot dialog ──────────────────────────────────────────────────────────
 
     def on_reboot_clicked(self, btn):
         dialog = Adw.MessageDialog(
@@ -258,16 +249,18 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         )
         dialog.present()
 
+
 if __name__ == "__main__":
     app = RaptorUpdateApp()
     sys.exit(app.run(sys.argv))
 PYEOF
 chmod +x /usr/bin/raptor-update
 
-# ── Wrapper launcher ──────────────────────────────────────────────────────────
-# GDK_BACKEND=x11 was removed — it silently prevented the app from launching
-# on Wayland sessions (which is the default on Bazzite/KDE). Let GTK
-# auto-detect the backend (Wayland first, XWayland fallback).
+# ── Wrapper launcher ───────────────────────────────────────────────────────────
+# Avoids inline env= parsing bugs in KDE Plasma's Exec= handler.
+# Does NOT force GDK_BACKEND — let GTK4 auto-detect Wayland vs X11.
+# ADW_DISABLE_PORTAL stops libadwaita trying to talk to a GNOME portal
+# that doesn't exist on Plasma, which caused silent launch failures.
 cat << 'EOF' > /usr/bin/raptor-update-launcher
 #!/bin/bash
 export ADW_DISABLE_PORTAL=1
@@ -275,7 +268,7 @@ exec /usr/bin/raptor-update "$@"
 EOF
 chmod +x /usr/bin/raptor-update-launcher
 
-# ── Custom hicolor icon ───────────────────────────────────────────────────────
+# ── Custom icon ────────────────────────────────────────────────────────────────
 mkdir -p /usr/share/icons/hicolor/scalable/apps
 cat << 'EOF' > /usr/share/icons/hicolor/scalable/apps/raptor-update.svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
@@ -296,7 +289,9 @@ ln -sf /usr/share/icons/hicolor/scalable/apps/raptor-update.svg \
 
 gtk-update-icon-cache -f /usr/share/icons/hicolor/ 2>/dev/null || true
 
-# ── .desktop entry ────────────────────────────────────────────────────────────
+# ── .desktop entry ─────────────────────────────────────────────────────────────
+# Categories=X-RaptorOS; only — no extra standard categories.
+# raptor-hud.sh already created the X-RaptorOS menu so this will appear there.
 mkdir -p /usr/share/applications
 cat << 'EOF' > /usr/share/applications/raptor-update.desktop
 [Desktop Entry]
@@ -308,10 +303,10 @@ Comment=Check and install Raptor OS system updates
 Exec=/usr/bin/raptor-update-launcher
 Icon=raptor-update
 Terminal=false
-Categories=X-RaptorOS;System;
+Categories=X-RaptorOS;
 Keywords=update;upgrade;system;raptor;ostree;bazzite;
 StartupNotify=true
 X-KDE-SubstituteUID=false
 EOF
 
-echo "UPDATE_CENTER_READY"
+echo "UPDATE_MANAGER_READY"
