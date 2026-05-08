@@ -1,7 +1,17 @@
 #!/bin/bash
 set -oue pipefail
 
-# Apply Neon Green Visuals system-wide
+# ═══════════════════════════════════════════════════════════════════════════════
+# Raptor OS — HUD Script
+# Installs: KDE theme, profile switcher, RAM optimizer,
+#           Raptor OS app menu category, and all .desktop entries
+#           (GPU switcher, RAM optimizer, Update Manager).
+#
+# raptor-gpu-profile.sh handles the GPU detection script + systemd service.
+# raptor-update.sh handles the Update Manager Python app.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Neon Green KDE theme ───────────────────────────────────────────────────────
 mkdir -p /etc/skel/.config
 cat << 'EOF' > /etc/skel/.config/kdeglobals
 [General]
@@ -10,7 +20,6 @@ AccentColor=51,255,51
 accentColorFromWallpaper=false
 EOF
 
-# Also apply to existing users
 for dir in /root /home/*; do
     if [ -d "$dir" ]; then
         mkdir -p "$dir/.config"
@@ -23,18 +32,7 @@ EOF
     fi
 done
 
-# ── X-RaptorOS category directory entry ──────────────────────────────────────
-# Gives the custom category a proper name and icon in the start menu
-mkdir -p /usr/share/desktop-directories
-cat << 'EOF' > /usr/share/desktop-directories/raptor-os.directory
-[Desktop Entry]
-Type=Directory
-Name=Raptor OS
-Comment=Raptor OS system tools
-Icon=raptor-update
-EOF
-
-# ── KDE theme autostart ───────────────────────────────────────────────────────
+# ── Theme autostart ────────────────────────────────────────────────────────────
 mkdir -p /etc/skel/.config/autostart
 cat << 'EOF' > /etc/skel/.config/autostart/raptor-theme.desktop
 [Desktop Entry]
@@ -46,20 +44,6 @@ NoDisplay=false
 X-GNOME-Autostart-enabled=true
 EOF
 
-# ── App menu rebuild autostart ────────────────────────────────────────────────
-# sleep 5 gives KDE time to fully load before rebuilding the menu database.
-# This replaces the old profile.d approach which ran too early and inconsistently.
-cat << 'EOF' > /etc/skel/.config/autostart/raptor-appmenu.desktop
-[Desktop Entry]
-Type=Application
-Name=Raptor App Menu Rebuild
-Exec=bash -c "sleep 5 && kbuildsycoca6 --noincremental"
-Hidden=false
-NoDisplay=true
-X-GNOME-Autostart-enabled=true
-EOF
-
-# Create theme apply script
 cat << 'EOF' > /usr/bin/raptor-theme.sh
 #!/bin/bash
 kwriteconfig6 --file kdeglobals --group General --key AccentColor "51,255,51"
@@ -71,233 +55,159 @@ kbuildsycoca6 --noincremental 2>/dev/null || true
 EOF
 chmod +x /usr/bin/raptor-theme.sh
 
-# Copy autostart entries to existing users
 for dir in /root /home/*; do
     if [ -d "$dir" ]; then
         mkdir -p "$dir/.config/autostart"
         cp /etc/skel/.config/autostart/raptor-theme.desktop \
-            "$dir/.config/autostart/" 2>/dev/null || true
-        cp /etc/skel/.config/autostart/raptor-appmenu.desktop \
-            "$dir/.config/autostart/" 2>/dev/null || true
+           "$dir/.config/autostart/" 2>/dev/null || true
     fi
 done
 
-# Create profile switcher script
+# ── GPU Profile Switcher ───────────────────────────────────────────────────────
 cat << 'EOF' > /usr/bin/raptor-profile-switcher.sh
 #!/bin/bash
-
 CURRENT_GPU="Auto"
 [ -f /etc/raptor-force-performance ] && CURRENT_GPU="Max Performance"
-[ -f /etc/raptor-force-powersave ] && CURRENT_GPU="Power Saving"
+[ -f /etc/raptor-force-powersave ]   && CURRENT_GPU="Power Saving"
 
 CHOICE=$(zenity --list \
-  --title="Raptor OS Profile Switcher" \
+  --title="Raptor OS — GPU Profile Switcher" \
   --text="Current GPU profile: $CURRENT_GPU\n\nSelect a new profile:" \
   --radiolist \
   --column="" --column="Profile" --column="Description" \
-  TRUE "Auto" "Automatically detect and optimize for your GPU" \
+  TRUE  "Auto"            "Automatically detect and optimize for your GPU" \
   FALSE "Max Performance" "Maximum GPU performance, higher power usage" \
-  FALSE "Power Saving" "Reduced GPU usage, better battery life" \
-  --width=600 --height=350)
+  FALSE "Power Saving"    "Reduced GPU usage, better battery life" \
+  --width=640 --height=360 2>/dev/null) || exit 0
 
-if [ "$CHOICE" = "Max Performance" ]; then
+case "$CHOICE" in
+  "Max Performance")
     sudo touch /etc/raptor-force-performance
     sudo rm -f /etc/raptor-force-powersave
     /usr/bin/raptor-gpu-profile.sh
-    zenity --question --title="Raptor OS" --text="Max Performance profile applied.\nLog out now to apply changes?" && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
-
-elif [ "$CHOICE" = "Power Saving" ]; then
+    zenity --question --title="Raptor OS" \
+      --text="Max Performance profile applied.\nLog out now to apply changes?" \
+      --width=340 2>/dev/null \
+      && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
+    ;;
+  "Power Saving")
     sudo touch /etc/raptor-force-powersave
     sudo rm -f /etc/raptor-force-performance
     /usr/bin/raptor-gpu-profile.sh
-    zenity --question --title="Raptor OS" --text="Power Saving profile applied.\nLog out now to apply changes?" && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
-
-elif [ "$CHOICE" = "Auto" ]; then
-    sudo rm -f /etc/raptor-force-performance
-    sudo rm -f /etc/raptor-force-powersave
+    zenity --question --title="Raptor OS" \
+      --text="Power Saving profile applied.\nLog out now to apply changes?" \
+      --width=340 2>/dev/null \
+      && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
+    ;;
+  "Auto")
+    sudo rm -f /etc/raptor-force-performance /etc/raptor-force-powersave
     /usr/bin/raptor-gpu-profile.sh
-    zenity --question --title="Raptor OS" --text="Auto profile applied.\nLog out now to apply changes?" && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
-fi
+    zenity --question --title="Raptor OS" \
+      --text="Auto profile applied.\nLog out now to apply changes?" \
+      --width=340 2>/dev/null \
+      && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
+    ;;
+esac
 EOF
 chmod +x /usr/bin/raptor-profile-switcher.sh
 
-# Create app menu entry for profile switcher
-mkdir -p /usr/share/applications
-cat << 'EOF' > /usr/share/applications/raptor-profile-switcher.desktop
-[Desktop Entry]
-Type=Application
-Name=Raptor Profile Switcher
-Comment=Switch between GPU performance profiles
-Exec=/usr/bin/raptor-profile-switcher.sh
-Icon=preferences-system-performance
-Terminal=false
-Categories=X-RaptorOS;System;Settings;
-Keywords=gpu;performance;power;profile;
-EOF
-
-# Create RAM optimizer script
+# ── RAM Optimizer ──────────────────────────────────────────────────────────────
 cat << 'EOF' > /usr/bin/raptor-ram-optimizer.sh
 #!/bin/bash
-
-BEFORE=$(free -h | grep Mem | awk '{print $3}')
+BEFORE=$(free -h | awk '/^Mem:/{print $3}')
+TOTAL=$(free -h  | awk '/^Mem:/{print $2}')
 
 zenity --question \
   --title="Raptor RAM Optimizer" \
-  --text="Current RAM usage: $BEFORE\n\nThis will:\n• Clear page cache\n• Compact memory\n• Free up inactive RAM\n\nContinue?" \
-  --width=350
-
-if [ $? != 0 ]; then exit 0; fi
+  --text="RAM usage: $BEFORE / $TOTAL\n\nThis will:\n- Sync filesystem buffers\n- Drop page/slab/inode caches\n- Compact memory\n\nContinue?" \
+  --width=360 2>/dev/null || exit 0
 
 sync
-echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+echo 3 | sudo tee /proc/sys/vm/drop_caches    > /dev/null
 echo 1 | sudo tee /proc/sys/vm/compact_memory > /dev/null 2>/dev/null || true
 
 zenity --question \
   --title="Raptor RAM Optimizer" \
-  --text="Would you like to free up RAM by suspending background apps?" \
-  --width=350
+  --text="Suspend background indexers (baloo, tracker)?\nThey will resume on next login." \
+  --width=380 2>/dev/null && {
+    pkill -STOP -f "baloo_file" 2>/dev/null || true
+    pkill -STOP -f "tracker"    2>/dev/null || true
+}
 
-if [ $? = 0 ]; then
-    pkill -STOP -f "baloo" 2>/dev/null || true
-    pkill -STOP -f "tracker" 2>/dev/null || true
-fi
-
-AFTER=$(free -h | grep Mem | awk '{print $3}')
-
+AFTER=$(free -h | awk '/^Mem:/{print $3}')
 zenity --info \
   --title="Raptor RAM Optimizer" \
   --text="Done!\n\nBefore: $BEFORE\nAfter:  $AFTER" \
-  --width=300
+  --width=300 2>/dev/null
 EOF
 chmod +x /usr/bin/raptor-ram-optimizer.sh
 
-# Create app menu entry for RAM optimizer
+# ── Browser choice ─────────────────────────────────────────────────────────────
+chmod +x /usr/bin/raptor-browser-choice.sh 2>/dev/null || true
+
+# ── Raptor OS app menu category ────────────────────────────────────────────────
+# The .directory file defines the folder name/icon in the KDE app menu.
+# The .menu file tells KDE which apps belong in it (via X-RaptorOS category).
+# All three Raptor .desktop files below use Categories=X-RaptorOS; so they
+# all appear here. raptor-update.sh writes the Update Manager entry separately
+# but also uses Categories=X-RaptorOS; so it lands here too.
+
+mkdir -p /usr/share/desktop-directories
+cat << 'EOF' > /usr/share/desktop-directories/raptor-os.directory
+[Desktop Entry]
+Type=Directory
+Name=Raptor OS
+Comment=Raptor OS system tools and utilities
+Icon=system-help
+EOF
+
+mkdir -p /etc/xdg/menus/applications-merged
+cat << 'EOF' > /etc/xdg/menus/applications-merged/raptor-os.menu
+<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
+  "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
+<Menu>
+  <Name>Applications</Name>
+  <Menu>
+    <Name>Raptor OS</Name>
+    <Directory>raptor-os.directory</Directory>
+    <Include>
+      <Category>X-RaptorOS</Category>
+    </Include>
+  </Menu>
+</Menu>
+EOF
+
+# ── .desktop entries ───────────────────────────────────────────────────────────
+# IMPORTANT: Categories must end with just X-RaptorOS; — do not add System;
+# or Settings; as extra categories. KDE Plasma's menu builder can drop entries
+# from custom X- categories when multiple standard categories are also listed.
+
+mkdir -p /usr/share/applications
+
+cat << 'EOF' > /usr/share/applications/raptor-profile-switcher.desktop
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=Raptor GPU Profile Switcher
+Comment=Switch between GPU performance profiles
+Exec=/usr/bin/raptor-profile-switcher.sh
+Icon=preferences-system-performance
+Terminal=false
+Categories=X-RaptorOS;
+Keywords=gpu;performance;power;profile;raptor;
+EOF
+
 cat << 'EOF' > /usr/share/applications/raptor-ram-optimizer.desktop
 [Desktop Entry]
+Version=1.1
 Type=Application
 Name=Raptor RAM Optimizer
 Comment=Free up RAM and optimize memory usage
 Exec=/usr/bin/raptor-ram-optimizer.sh
-Icon=preferences-system-performance
+Icon=memory
 Terminal=false
-Categories=X-RaptorOS;System;Settings;
-Keywords=ram;memory;optimize;performance;
+Categories=X-RaptorOS;
+Keywords=ram;memory;optimize;performance;raptor;
 EOF
-
-# Create GPU profile script
-cat << 'EOF' > /usr/bin/raptor-gpu-profile.sh
-#!/bin/bash
-if lspci | grep -i "VGA\|3D\|Display" | grep -qi "nvidia"; then
-    GPU_VENDOR="nvidia"
-elif lspci | grep -i "VGA\|3D\|Display" | grep -qi "amd\|radeon\|ati"; then
-    GPU_VENDOR="amd"
-elif lspci | grep -i "VGA\|3D\|Display" | grep -qi "intel"; then
-    GPU_VENDOR="intel"
-else
-    GPU_VENDOR="unknown"
-fi
-
-IS_IGPU=false
-if lspci | grep -i "VGA\|3D\|Display" | grep -qi "intel"; then
-    IS_IGPU=true
-fi
-if lspci -v | grep -i "VGA\|3D\|Display" -A5 | grep -qi \
-    "cezanne\|renoir\|lucienne\|rembrandt\|mendocino\|integrated\|apu"; then
-    IS_IGPU=true
-fi
-
-mkdir -p /etc/environment.d
-
-COMMON_UNITY_VARS="WINE_LARGE_ADDRESS_AWARE=1
-PROTON_FORCE_LARGE_ADDRESS_AWARE=1
-STAGING_SHARED_MEMORY=1"
-
-if [ -f /etc/raptor-force-performance ]; then
-    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
-RADV_PERFTEST=gpl
-AMD_VULKAN_ICD=RADV
-mesa_glthread=true
-MESA_SHADER_CACHE_DISABLE=false
-__GL_SHADER_DISK_CACHE=1
-__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
-PROTON_ENABLE_NVAPI=1
-$COMMON_UNITY_VARS
-ENVEOF
-
-elif [ -f /etc/raptor-force-powersave ]; then
-    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
-mesa_glthread=false
-MESA_SHADER_CACHE_DISABLE=true
-$COMMON_UNITY_VARS
-ENVEOF
-
-elif [ "$GPU_VENDOR" = "nvidia" ]; then
-    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
-__GL_SHADER_DISK_CACHE=1
-__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
-PROTON_ENABLE_NVAPI=1
-__NV_PRIME_RENDER_OFFLOAD=1
-$COMMON_UNITY_VARS
-ENVEOF
-
-elif [ "$GPU_VENDOR" = "amd" ] && [ "$IS_IGPU" = true ]; then
-    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
-AMD_VULKAN_ICD=RADV
-mesa_glthread=true
-MESA_SHADER_CACHE_DISABLE=false
-$COMMON_UNITY_VARS
-ENVEOF
-
-elif [ "$GPU_VENDOR" = "amd" ]; then
-    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
-RADV_PERFTEST=gpl
-AMD_VULKAN_ICD=RADV
-mesa_glthread=true
-MESA_SHADER_CACHE_DISABLE=false
-$COMMON_UNITY_VARS
-ENVEOF
-
-elif [ "$GPU_VENDOR" = "intel" ]; then
-    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
-MESA_LOADER_DRIVER_OVERRIDE=iris
-LIBGL_DRI3_DISABLE=0
-vblank_mode=0
-mesa_glthread=true
-$COMMON_UNITY_VARS
-ENVEOF
-
-else
-    cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
-mesa_glthread=true
-MESA_SHADER_CACHE_DISABLE=false
-$COMMON_UNITY_VARS
-ENVEOF
-fi
-EOF
-chmod +x /usr/bin/raptor-gpu-profile.sh
-
-# Create systemd service for GPU detection at boot
-cat << 'EOF' > /usr/lib/systemd/system/raptor-gpu-profile.service
-[Unit]
-Description=Raptor OS GPU Profile Detection
-After=sysinit.target
-Before=display-manager.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/raptor-gpu-profile.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable GPU profile service directly via symlink
-mkdir -p /etc/systemd/system/multi-user.target.wants
-ln -sf /usr/lib/systemd/system/raptor-gpu-profile.service \
-    /etc/systemd/system/multi-user.target.wants/raptor-gpu-profile.service
-
-# Make browser choice script executable
-chmod +x /usr/bin/raptor-browser-choice.sh 2>/dev/null || true
 
 echo "HUD_READY"
