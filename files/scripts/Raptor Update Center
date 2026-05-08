@@ -262,19 +262,65 @@ if __name__ == "__main__":
 PYEOF
 chmod +x /usr/bin/raptor-update
  
+# ── Wrapper script so KDE launcher doesn't choke on inline env vars ────────────
+# Exec= with "env VAR=val command" is unreliable in Plasma; a wrapper is safer.
+cat << 'EOF' > /usr/bin/raptor-update-launcher
+#!/bin/bash
+# Wrapper for Raptor Update Center — sets Adwaita portal env before launch
+export ADW_DISABLE_PORTAL=1
+export GDK_BACKEND=x11          # fallback if Wayland compositor lacks GTK4 support
+exec /usr/bin/raptor-update "$@"
+EOF
+chmod +x /usr/bin/raptor-update-launcher
+ 
+# ── Icon — ship our own SVG so it works on any theme ──────────────────────────
+# KDE will find icons in /usr/share/icons/hicolor before falling back to theme.
+mkdir -p /usr/share/icons/hicolor/scalable/apps
+cat << 'EOF' > /usr/share/icons/hicolor/scalable/apps/raptor-update.svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="30" fill="#1a1a2e" stroke="#33ff33" stroke-width="2"/>
+  <!-- Down arrow (update/download symbol) -->
+  <polyline points="32,14 32,42" stroke="#33ff33" stroke-width="5" stroke-linecap="round"/>
+  <polyline points="20,30 32,44 44,30" stroke="#33ff33" stroke-width="5"
+            stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Base bar -->
+  <rect x="18" y="48" width="28" height="4" rx="2" fill="#33ff33"/>
+</svg>
+EOF
+ 
+# Also drop it at the common 48x48 and 256x256 symlink sizes KDE checks
+mkdir -p /usr/share/icons/hicolor/48x48/apps
+mkdir -p /usr/share/icons/hicolor/256x256/apps
+ln -sf /usr/share/icons/hicolor/scalable/apps/raptor-update.svg \
+        /usr/share/icons/hicolor/48x48/apps/raptor-update.svg
+ln -sf /usr/share/icons/hicolor/scalable/apps/raptor-update.svg \
+        /usr/share/icons/hicolor/256x256/apps/raptor-update.svg
+ 
+# Rebuild the GTK icon cache so the new icon is found immediately
+gtk-update-icon-cache -f /usr/share/icons/hicolor/ 2>/dev/null || true
+ 
 # ── .desktop entry ─────────────────────────────────────────────────────────────
 mkdir -p /usr/share/applications
 cat << 'EOF' > /usr/share/applications/raptor-update.desktop
 [Desktop Entry]
+Version=1.1
 Type=Application
 Name=Raptor Update Center
+GenericName=System Updater
 Comment=Check and install Raptor OS system updates
-Exec=env ADW_DISABLE_PORTAL=1 raptor-update
-Icon=system-software-update
+# Use the wrapper script — avoids inline-env parsing bugs in Plasma
+Exec=/usr/bin/raptor-update-launcher
+# Our own hicolor icon — works on every theme
+Icon=raptor-update
 Terminal=false
 Categories=X-RaptorOS;System;
-Keywords=update;upgrade;system;raptor;ostree;
+Keywords=update;upgrade;system;raptor;ostree;bazzite;
 StartupNotify=true
+X-KDE-SubstituteUID=false
 EOF
+ 
+# Rebuild sysoca so KDE picks up the new .desktop immediately at image boot
+kbuildsycoca6 --noincremental 2>/dev/null || true
  
 echo "UPDATE_CENTER_READY"
