@@ -100,4 +100,3 @@ modules:
     system:
       enabled:
         - raptor-firstboot.service
-        - raptor-gpu-profile.service
