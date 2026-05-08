@@ -5,7 +5,6 @@ base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
 
 modules:
-  # ── Static system files ────────────────────────────────────────────────────
   - type: files
     files:
       - source: system_files/raptor-firstboot.service
@@ -13,39 +12,30 @@ modules:
       - source: system_files/raptor-browser-choice.sh
         destination: /usr/bin/raptor-browser-choice.sh
 
-  # ── RPM packages ───────────────────────────────────────────────────────────
   - type: rpm-ostree
     install:
-      # Browsers
       - firefox
-      # System utilities
       - fastfetch
       - plasma-systemmonitor
       - htop
       - bleachbit
       - filelight
-      # Office / productivity
       - libreoffice
-      # Creative suite
       - kdenlive
       - gimp
       - inkscape
       - krita
       - darktable
       - audacity
-      # Media
       - vlc
       - obs-studio
       - gwenview
       - kamoso
-      # Archiving
       - p7zip
-      # Gaming
       - gamemode
       - goverlay
       - wine
       - winetricks
-      # Development — build tools
       - git
       - gh
       - nodejs
@@ -56,28 +46,21 @@ modules:
       - cmake
       - ninja-build
       - meson
-      # Development — editors / shell
       - neovim
       - tmux
       - ripgrep
       - fzf
-      # GTK4 / Adwaita (required by Raptor Update Center GUI)
       - python3-gobject
       - libadwaita
-      # Containers
       - podman
       - podman-compose
-      # Scripting / network
       - zenity
       - curl
       - wget
       - jq
-      # Wallpaper
       - variety
-      # KDE extras
       - kcalc
 
-  # ── Flatpaks ───────────────────────────────────────────────────────────────
   - type: default-flatpaks@v1
     notify: true
     system:
@@ -97,22 +80,22 @@ modules:
         - com.feaneron.Boatswain
         - org.shotcut.Shotcut
 
-  # ── Build-time scripts (order matters) ────────────────────────────────────
   - type: script
     scripts:
-      # 1. Theme, KDE colours, profile switcher, RAM optimizer,
-      #    GPU profile script, app-menu category, all .desktop entries
+      # 1. KDE theme, profile switcher, RAM optimizer,
+      #    app-menu category, desktop entries
       - raptor-hud.sh
-      # 2. Performance sysctls, zram, memory tuning, DNS, WiFi, Firefox
+      # 2. Performance sysctls, zram, memory, DNS, WiFi, Firefox
       - raptor-performance.sh
-      # 3. GPU env vars at boot (systemd service), gaming ulimits,
-      #    Steam / Lutris config
+      # 3. Writes /usr/lib/systemd/system/raptor-gpu-profile.service
+      #    MUST run before the systemd module below
+      - raptor-gpu-profile.sh
+      # 4. Gaming ulimits, Steam/Lutris config, GPU env vars
       - raptor-gaming.sh
-      # 4. Raptor Update Center GUI — must run AFTER raptor-hud.sh
+      # 5. Raptor Update Manager GUI — runs after raptor-hud.sh
       #    so the X-RaptorOS menu category already exists
       - raptor-update.sh
 
-  # ── systemd ────────────────────────────────────────────────────────────────
   - type: systemd
     system:
       enabled:
