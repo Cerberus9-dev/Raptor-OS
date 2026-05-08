@@ -3,61 +3,81 @@ name: raptor-os
 description: Victory Build.
 base-image: ghcr.io/ublue-os/bazzite
 image-version: latest
+
 modules:
+  # ── Static system files ────────────────────────────────────────────────────
   - type: files
     files:
       - source: system_files/raptor-firstboot.service
         destination: /usr/lib/systemd/system/raptor-firstboot.service
       - source: system_files/raptor-browser-choice.sh
         destination: /usr/bin/raptor-browser-choice.sh
+
+  # ── RPM packages ───────────────────────────────────────────────────────────
   - type: rpm-ostree
     install:
+      # Browsers
       - firefox
+      # System utilities
       - fastfetch
       - plasma-systemmonitor
+      - htop
+      - bleachbit
+      - filelight
+      # Office / productivity
       - libreoffice
+      # Creative suite
       - kdenlive
       - gimp
       - inkscape
       - krita
+      - darktable
+      - audacity
+      # Media
       - vlc
       - obs-studio
-      - p7zip
       - gwenview
-      - filelight
+      - kamoso
+      # Archiving
+      - p7zip
+      # Gaming
       - gamemode
       - goverlay
-      - zenity
+      - wine
+      - winetricks
+      # Development — build tools
       - git
       - gh
       - nodejs
       - python3
       - python3-pip
-      - python3-gobject
-      - libadwaita
       - gcc
       - make
       - cmake
       - ninja-build
       - meson
+      # Development — editors / shell
       - neovim
-      - htop
+      - tmux
+      - ripgrep
+      - fzf
+      # GTK4 / Adwaita (required by Raptor Update Center GUI)
+      - python3-gobject
+      - libadwaita
+      # Containers
       - podman
       - podman-compose
+      # Scripting / network
+      - zenity
       - curl
       - wget
       - jq
-      - ripgrep
-      - fzf
-      - tmux
+      # Wallpaper
       - variety
-      - wine
-      - winetricks
+      # KDE extras
       - kcalc
-      - kamoso
-      - bleachbit
-      - darktable
-      - audacity
+
+  # ── Flatpaks ───────────────────────────────────────────────────────────────
   - type: default-flatpaks@v1
     notify: true
     system:
@@ -76,11 +96,23 @@ modules:
         - com.usebottles.bottles
         - com.feaneron.Boatswain
         - org.shotcut.Shotcut
+
+  # ── Build-time scripts (order matters) ────────────────────────────────────
   - type: script
     scripts:
+      # 1. Theme, KDE colours, profile switcher, RAM optimizer,
+      #    GPU profile script, app-menu category, all .desktop entries
       - raptor-hud.sh
+      # 2. Performance sysctls, zram, memory tuning, DNS, WiFi, Firefox
       - raptor-performance.sh
+      # 3. GPU env vars at boot (systemd service), gaming ulimits,
+      #    Steam / Lutris config
       - raptor-gaming.sh
+      # 4. Raptor Update Center GUI — must run AFTER raptor-hud.sh
+      #    so the X-RaptorOS menu category already exists
+      - raptor-update.sh
+
+  # ── systemd ────────────────────────────────────────────────────────────────
   - type: systemd
     system:
       enabled:
