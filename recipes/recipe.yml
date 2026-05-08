@@ -60,6 +60,7 @@ modules:
       - jq
       - variety
       - kcalc
+      - power-profiles-daemon
 
   - type: default-flatpaks@v1
     notify: true
@@ -82,21 +83,17 @@ modules:
 
   - type: script
     scripts:
-      # 1. KDE theme, profile switcher, RAM optimizer,
-      #    app-menu category, desktop entries
       - raptor-hud.sh
-      # 2. Performance sysctls, zram, memory, DNS, WiFi, Firefox
       - raptor-performance.sh
-      # 3. Writes /usr/lib/systemd/system/raptor-gpu-profile.service
-      #    MUST run before the systemd module below
       - raptor-gpu-profile.sh
-      # 4. Gaming ulimits, Steam/Lutris config, GPU env vars
       - raptor-gaming.sh
-      # 5. Raptor Update Manager GUI — runs after raptor-hud.sh
-      #    so the X-RaptorOS menu category already exists
+      - raptor-ram-optimizer.sh
       - raptor-update.sh
 
   - type: systemd
     system:
       enabled:
         - raptor-firstboot.service
+        - raptor-gpu-profile.service
+        - raptor-powerprofile.service
+        - raptor-cpugovernor.service
