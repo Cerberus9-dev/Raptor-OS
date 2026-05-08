@@ -86,22 +86,12 @@ vm.oom_kill_allocating_task=1
 CONF
 
 # ── CPU / thermal idle management ────────────────────────────────────────────
-# Problem: at the desktop/home screen the CPU governor sits at high frequencies
-# and boost stays on, causing unnecessary heat and fan spin on laptops.
-# Fix: use power-profiles-daemon (ships with Bazzite) set to "balanced" by
-# default, with a udev rule that drops to "power-saver" when no game/app is
-# using the GPU, and a systemd service that enforces the initial state.
-
-# 1. Set power-profiles-daemon default to balanced (not performance)
 mkdir -p /etc/power-profiles-daemon
 cat << 'CONF' > /etc/power-profiles-daemon/raptor-default.conf
-# Raptor OS: start in balanced mode so the CPU doesn't boost at idle.
-# The GPU profile switcher can override this per-session.
 [main]
 default-profile=balanced
 CONF
 
-# 2. Systemd service to apply balanced profile at boot before login screen
 cat << 'CONF' > /usr/lib/systemd/system/raptor-powerprofile.service
 [Unit]
 Description=Raptor OS — Set balanced power profile at boot
@@ -117,8 +107,6 @@ RemainAfterExit=yes
 WantedBy=graphical.target
 CONF
 
-# 3. CPU governor fallback — in case power-profiles-daemon is not active,
-#    force schedutil (tracks actual CPU demand) instead of performance.
 cat << 'CONF' > /etc/systemd/system/raptor-cpugovernor.service
 [Unit]
 Description=Raptor OS — Set CPU governor to schedutil at boot
@@ -137,19 +125,14 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 CONF
 
-# 4. Disable CPU boost at idle via udev — when plugged in but GPU is idle
-#    (desktop/home screen), cap boost. Games restore it via gamemode.
 cat << 'CONF' > /etc/udev/rules.d/raptor-cpuboost.rules
-# Raptor OS: disable CPU boost when on AC and GPU is idle
-# gamemode re-enables boost automatically when a game launches.
 ACTION=="add|change", SUBSYSTEM=="power_supply", \
   ATTR{online}=="1", \
   RUN+="/bin/bash -c 'echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true'"
 CONF
 
-# 5. TLP-compatible thermal config — caps package power at idle
-#    Works alongside power-profiles-daemon (they don't conflict when
-#    TLP_ENABLE is guarded; we only write the thermal section).
+# ── Thermal config (mkdir BEFORE the cat write) ───────────────────────────────
+mkdir -p /etc/raptor
 cat << 'CONF' > /etc/raptor/thermal-idle.conf
 # Raptor OS thermal notes:
 # - power-profiles-daemon "balanced" profile handles CPU P-state
@@ -164,10 +147,7 @@ cat << 'CONF' > /etc/raptor/thermal-idle.conf
 # To check current profile:
 #   powerprofilesctl
 CONF
-mkdir -p /etc/raptor
 
-# 6. gamemode config — ensure gamemode restores boost + performance
-#    profile when a game launches and drops back to balanced on exit
 mkdir -p /etc/gamemode.d
 cat << 'CONF' > /etc/gamemode.d/raptor.ini
 [general]
@@ -179,9 +159,7 @@ apply_gpu_optimisations=accept-responsibility
 gpu_device=0
 
 [custom]
-# Re-enable CPU boost and switch to performance when game starts
 start=/bin/bash -c 'echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null; powerprofilesctl set performance 2>/dev/null || true'
-# Drop back to balanced and disable boost when game exits
 end=/bin/bash -c 'echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null; powerprofilesctl set balanced 2>/dev/null || true'
 CONF
 
