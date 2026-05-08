@@ -23,7 +23,18 @@ EOF
     fi
 done
 
-# KDE theme autostart fix
+# ── X-RaptorOS category directory entry ──────────────────────────────────────
+# Gives the custom category a proper name and icon in the start menu
+mkdir -p /usr/share/desktop-directories
+cat << 'EOF' > /usr/share/desktop-directories/raptor-os.directory
+[Desktop Entry]
+Type=Directory
+Name=Raptor OS
+Comment=Raptor OS system tools
+Icon=raptor-update
+EOF
+
+# ── KDE theme autostart ───────────────────────────────────────────────────────
 mkdir -p /etc/skel/.config/autostart
 cat << 'EOF' > /etc/skel/.config/autostart/raptor-theme.desktop
 [Desktop Entry]
@@ -32,6 +43,19 @@ Name=Raptor Theme
 Exec=/usr/bin/raptor-theme.sh
 Hidden=false
 NoDisplay=false
+X-GNOME-Autostart-enabled=true
+EOF
+
+# ── App menu rebuild autostart ────────────────────────────────────────────────
+# sleep 5 gives KDE time to fully load before rebuilding the menu database.
+# This replaces the old profile.d approach which ran too early and inconsistently.
+cat << 'EOF' > /etc/skel/.config/autostart/raptor-appmenu.desktop
+[Desktop Entry]
+Type=Application
+Name=Raptor App Menu Rebuild
+Exec=bash -c "sleep 5 && kbuildsycoca6 --noincremental"
+Hidden=false
+NoDisplay=true
 X-GNOME-Autostart-enabled=true
 EOF
 
@@ -47,11 +71,14 @@ kbuildsycoca6 --noincremental 2>/dev/null || true
 EOF
 chmod +x /usr/bin/raptor-theme.sh
 
-# Copy autostart to existing users
+# Copy autostart entries to existing users
 for dir in /root /home/*; do
     if [ -d "$dir" ]; then
         mkdir -p "$dir/.config/autostart"
-        cp /etc/skel/.config/autostart/raptor-theme.desktop "$dir/.config/autostart/" 2>/dev/null || true
+        cp /etc/skel/.config/autostart/raptor-theme.desktop \
+            "$dir/.config/autostart/" 2>/dev/null || true
+        cp /etc/skel/.config/autostart/raptor-appmenu.desktop \
+            "$dir/.config/autostart/" 2>/dev/null || true
     fi
 done
 
@@ -104,7 +131,7 @@ Comment=Switch between GPU performance profiles
 Exec=/usr/bin/raptor-profile-switcher.sh
 Icon=preferences-system-performance
 Terminal=false
-Categories=System;Settings;
+Categories=X-RaptorOS;System;Settings;
 Keywords=gpu;performance;power;profile;
 EOF
 
@@ -121,11 +148,8 @@ zenity --question \
 
 if [ $? != 0 ]; then exit 0; fi
 
-# Clear page cache
 sync
 echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-
-# Compact memory
 echo 1 | sudo tee /proc/sys/vm/compact_memory > /dev/null 2>/dev/null || true
 
 zenity --question \
@@ -142,7 +166,7 @@ AFTER=$(free -h | grep Mem | awk '{print $3}')
 
 zenity --info \
   --title="Raptor RAM Optimizer" \
-  --text="Done!\n\nBefore: $BEFORE\nAfter: $AFTER" \
+  --text="Done!\n\nBefore: $BEFORE\nAfter:  $AFTER" \
   --width=300
 EOF
 chmod +x /usr/bin/raptor-ram-optimizer.sh
@@ -156,7 +180,7 @@ Comment=Free up RAM and optimize memory usage
 Exec=/usr/bin/raptor-ram-optimizer.sh
 Icon=preferences-system-performance
 Terminal=false
-Categories=System;Settings;
+Categories=X-RaptorOS;System;Settings;
 Keywords=ram;memory;optimize;performance;
 EOF
 
@@ -269,8 +293,6 @@ WantedBy=multi-user.target
 EOF
 
 # Enable GPU profile service directly via symlink
-# (ensures service is enabled at the correct build stage rather than
-# relying on BlueBuild's systemd module which runs before this script)
 mkdir -p /etc/systemd/system/multi-user.target.wants
 ln -sf /usr/lib/systemd/system/raptor-gpu-profile.service \
     /etc/systemd/system/multi-user.target.wants/raptor-gpu-profile.service
