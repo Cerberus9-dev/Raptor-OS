@@ -77,7 +77,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.set_default_size(700, 600)
         self._update_running = False
         self._has_update = False
-        self._reboot_cancelled = False # initialized here so countdown never throws
+        self._reboot_cancelled = False
         self._build_ui()
         threading.Thread(target=self._do_check, daemon=True).start()
         threading.Thread(target=self._load_changelog, daemon=True).start()
@@ -301,7 +301,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
     def _run_update(self):
         try:
             process = subprocess.Popen(
-                ["script", "-q", "-c", "ujust update", "/dev/null"],
+                ["script", "-q", "-c", "rpm-ostree update", "/dev/null"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -313,12 +313,11 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
                 if clean:
                     GLib.idle_add(self._append_log, clean)
             process.stdout.close()
-            rc = process.wait()
-            # script always exits 0 so treat any clean finish as success
+            process.wait()
             GLib.idle_add(self._on_update_success)
         except FileNotFoundError:
             GLib.idle_add(self._append_log,
-                          "\nERROR: ujust not found. Are you on Raptor OS?\n")
+                          "\nERROR: rpm-ostree not found.\n")
             GLib.idle_add(self._on_update_error, -1)
         except Exception as e:
             GLib.idle_add(self._append_log, f"\nERROR: {e}\n")
