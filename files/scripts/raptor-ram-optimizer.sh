@@ -1,12 +1,153 @@
+
 #!/bin/bash
 set -oue pipefail
 
 # =============================================================================
 # Raptor OS — RAM Optimizer (Raptor Cortex-class memory manager)
-# Full Python GTK4/Adwaita GUI with before/after stats, process suspension,
-# cache clearing, zram compaction, and gaming mode boost.
+# No-auth optimization, Razer Cortex-style game mode with per-service toggles,
+# auto-suspend on game launch via gamemode hooks, auto-resume on game exit.
 # =============================================================================
 
+# ── Privileged helper (NOPASSWD via sudoers) ──────────────────────────────────
+mkdir -p /usr/lib/raptor
+cat << 'EOF' > /usr/lib/raptor/ram-optimize-helper
+#!/bin/bash
+# Called via sudo NOPASSWD — all privileged actions in one shot.
+# Args: cache compact zram gaming oom (each "1" or "0")
+
+DO_CACHE="$1"
+DO_COMPACT="$2"
+DO_ZRAM="$3"
+DO_GAMING="$4"
+DO_OOM="$5"
+
+if [ "$DO_CACHE" = "1" ]; then
+    sync
+    echo 3 > /proc/sys/vm/drop_caches
+    echo 2 > /proc/sys/vm/drop_caches
+    echo 3 > /proc/sys/vm/drop_caches
+fi
+
+if [ "$DO_COMPACT" = "1" ]; then
+    echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
+fi
+
+if [ "$DO_ZRAM" = "1" ]; then
+    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+    echo recompress > /sys/block/zram0/recompress 2>/dev/null || true
+    echo writeback > /sys/block/zram0/writeback 2>/dev/null || true
+fi
+
+if [ "$DO_GAMING" = "1" ]; then
+    echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
+    powerprofilesctl set performance 2>/dev/null || true
+fi
+
+if [ "$DO_OOM" = "1" ]; then
+    for proc in plasmashell kwin_wayland kwin_x11; do
+        for pid in $(pgrep "$proc" 2>/dev/null); do
+            echo -500 > /proc/$pid/oom_score_adj 2>/dev/null || true
+        done
+    done
+fi
+
+# Reclaim malloc memory from key processes
+for proc in plasmashell kwin_wayland kwin_x11 kded6 baloo_file; do
+    for pid in $(pgrep "$proc" 2>/dev/null); do
+        kill -USR1 "$pid" 2>/dev/null || true
+    done
+done
+
+# Temporarily spike swappiness to push cold pages into zram
+CURRENT=$(cat /proc/sys/vm/swappiness)
+echo 100 > /proc/sys/vm/swappiness
+sleep 1
+echo "$CURRENT" > /proc/sys/vm/swappiness
+
+exit 0
+EOF
+chmod +x /usr/lib/raptor/ram-optimize-helper
+
+# ── gamemode hooks ────────────────────────────────────────────────────────────
+cat << 'EOF' > /usr/lib/raptor/gamemode-start
+#!/bin/bash
+# Called by gamemode when a game launches.
+# Reads /etc/raptor/cortex-suspend.conf for which services to suspend.
+CONFIG=/etc/raptor/cortex-suspend.conf
+[ -f "$CONFIG" ] || exit 0
+while IFS= read -r pattern; do
+    [ -z "$pattern" ] && continue
+    [[ "$pattern" == "#"* ]] && continue
+    pgrep -f "$pattern" > /dev/null 2>&1 && \
+        pkill -STOP -f "$pattern" 2>/dev/null || true
+done < "$CONFIG"
+# Run RAM optimize on game launch (no-auth)
+sudo /usr/lib/raptor/ram-optimize-helper 1 1 1 0 0 2>/dev/null || true
+EOF
+chmod +x /usr/lib/raptor/gamemode-start
+
+cat << 'EOF' > /usr/lib/raptor/gamemode-end
+#!/bin/bash
+# Called by gamemode when a game exits.
+# Only resumes services that were in the suspend config.
+CONFIG=/etc/raptor/cortex-suspend.conf
+[ -f "$CONFIG" ] || exit 0
+while IFS= read -r pattern; do
+    [ -z "$pattern" ] && continue
+    [[ "$pattern" == "#"* ]] && continue
+    pkill -CONT -f "$pattern" 2>/dev/null || true
+done < "$CONFIG"
+# Drop back to balanced
+powerprofilesctl set balanced 2>/dev/null || true
+EOF
+chmod +x /usr/lib/raptor/gamemode-end
+
+# ── sudoers NOPASSWD for helper ───────────────────────────────────────────────
+cat << 'EOF' > /etc/sudoers.d/raptor-ram-optimizer
+# Raptor OS: allow all users to run the RAM optimizer helper without a password
+ALL ALL=(root) NOPASSWD: /usr/lib/raptor/ram-optimize-helper
+ALL ALL=(root) NOPASSWD: /usr/lib/raptor/gamemode-start
+ALL ALL=(root) NOPASSWD: /usr/lib/raptor/gamemode-end
+EOF
+chmod 440 /etc/sudoers.d/raptor-ram-optimizer
+
+# ── Default cortex suspend config ─────────────────────────────────────────────
+mkdir -p /etc/raptor
+cat << 'EOF' > /etc/raptor/cortex-suspend.conf
+# Raptor Cortex — services to suspend during gaming
+# Each line is a pgrep -f pattern. Comment out with # to disable.
+# This file is managed by the Raptor RAM Optimizer GUI.
+baloo_file
+tracker
+akonadiserver
+kwalletd
+kdeconnectd
+kio_thumbnail
+kactivitymanagerd
+plasma-geolocation
+kbuildsycoca
+zeitgeist
+evolution-data
+gvfsd-metadata
+EOF
+
+# ── Update gamemode config to use raptor hooks ────────────────────────────────
+mkdir -p /etc/gamemode.d
+cat << CONF > /etc/gamemode.d/raptor.ini
+[general]
+renice=10
+inhibit_screensaver=1
+
+[gpu]
+apply_gpu_optimisations=accept-responsibility
+gpu_device=0
+
+[custom]
+start=/usr/lib/raptor/gamemode-start
+end=/usr/lib/raptor/gamemode-end
+CONF
+
+# ── Python GUI ────────────────────────────────────────────────────────────────
 cat << 'PYEOF' > /usr/bin/raptor-ram-optimizer
 #!/usr/bin/env python3
 """Raptor OS RAM Optimizer — Cortex-class memory manager"""
@@ -14,18 +155,34 @@ cat << 'PYEOF' > /usr/bin/raptor-ram-optimizer
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, GLib, Pango
+from gi.repository import Gtk, Adw, GLib
 import subprocess
 import threading
 import os
 import sys
-import re
+
+CORTEX_CONFIG = "/etc/raptor/cortex-suspend.conf"
+HELPER = "/usr/lib/raptor/ram-optimize-helper"
+
+# All suspendable services: (display_name, pgrep_pattern)
+ALL_SERVICES = [
+    ("Baloo file indexer", "baloo_file"),
+    ("Akonadi server", "akonadiserver"),
+    ("KDE Connect", "kdeconnectd"),
+    ("Thumbnail generator", "kio_thumbnail"),
+    ("Activity manager", "kactivitymanagerd"),
+    ("Evolution data server", "evolution-data"),
+    ("KDE wallet daemon", "kwalletd"),
+    ("Plasma geolocation", "plasma-geolocation"),
+    ("KDE sycoca builder", "kbuildsycoca"),
+    ("Zeitgeist daemon", "zeitgeist"),
+    ("GVFS metadata", "gvfsd-metadata"),
+]
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def read_meminfo():
-    """Return dict of /proc/meminfo values in MB."""
     info = {}
     try:
         with open("/proc/meminfo") as f:
@@ -33,8 +190,7 @@ def read_meminfo():
                 parts = line.split()
                 if len(parts) >= 2:
                     key = parts[0].rstrip(":")
-                    val = int(parts[1]) # kB
-                    info[key] = val // 1024 # -> MB
+                    info[key] = int(parts[1]) // 1024
     except Exception:
         pass
     return info
@@ -46,38 +202,17 @@ def mem_used_mb():
     return total - avail, total
 
 def fmt_mb(mb):
-    if mb >= 1024:
-        return f"{mb/1024:.1f} GB"
-    return f"{mb} MB"
-
-def run_sudo(cmd):
-    """Run a shell command with pkexec for privilege escalation."""
-    try:
-        subprocess.run(
-            ["pkexec", "bash", "-c", cmd],
-            check=False, capture_output=True
-        )
-    except FileNotFoundError:
-        try:
-            subprocess.run(
-                ["sudo", "bash", "-c", cmd],
-                check=False, capture_output=True
-            )
-        except Exception:
-            pass
+    return f"{mb/1024:.1f} GB" if mb >= 1024 else f"{mb} MB"
 
 def get_zram_usage():
-    """Return (used_mb, total_mb, active) for zram0 if present."""
     try:
         if not os.path.exists("/sys/block/zram0"):
             return 0, 0, False
         with open("/sys/block/zram0/disksize") as f:
-            total_bytes = int(f.read().strip())
-        total_mb = total_bytes // (1024 * 1024)
+            total_mb = int(f.read().strip()) // (1024 * 1024)
         try:
             with open("/sys/block/zram0/mm_stat") as f:
-                parts = f.read().split()
-                orig_mb = int(parts[0]) // (1024 * 1024)
+                orig_mb = int(f.read().split()[0]) // (1024 * 1024)
         except Exception:
             orig_mb = 0
         return orig_mb, total_mb, total_mb > 0
@@ -90,27 +225,42 @@ def get_swap_usage():
     free = m.get("SwapFree", 0)
     return total - free, total
 
+def load_cortex_config():
+    """Return set of patterns currently in the suspend config."""
+    patterns = set()
+    try:
+        with open(CORTEX_CONFIG) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    patterns.add(line)
+    except Exception:
+        pass
+    return patterns
 
-# ── Background services that are safe to suspend during gaming ─────────────────
-SUSPENDABLE = [
-    ("Baloo file indexer", "baloo_file", True),
-    ("KDE tracker", "tracker", True),
-    ("Akonadi server", "akonadiserver", True),
-    ("KDE wallet daemon", "kwalletd", False),
-    ("KDE connect daemon", "kdeconnectd", False),
-    ("Thumbnail generator", "kio_thumbnail", True),
-    ("Activity manager", "kactivitymanagerd", False),
-    ("Plasma geolocation", "plasma-geolocation", False),
-    ("KDE sycoca builder", "kbuildsycoca", True),
-    ("Zeitgeist daemon", "zeitgeist", True),
-    ("Evolution data server", "evolution-data", True),
-    ("GVFS metadata", "gvfsd-metadata", True),
-]
+def save_cortex_config(patterns):
+    """Write selected patterns back to the suspend config."""
+    try:
+        lines = [
+            "# Raptor Cortex — services to suspend during gaming\n",
+            "# Each line is a pgrep -f pattern.\n",
+            "# This file is managed by the Raptor RAM Optimizer GUI.\n",
+        ]
+        for _, pattern in ALL_SERVICES:
+            if pattern in patterns:
+                lines.append(pattern + "\n")
+        # Write via sudo tee since /etc/raptor may need root
+        content = "".join(lines)
+        subprocess.run(
+            ["sudo", "tee", CORTEX_CONFIG],
+            input=content, text=True,
+            capture_output=True
+        )
+    except Exception:
+        pass
 
-SUSPENDED = []
 
-
-# ── Main window ────────────────────────────────────────────────────────────────
+# ── App ────────────────────────────────────────────────────────────────────────
 
 class RaptorRAMApp(Adw.Application):
     def __init__(self):
@@ -126,8 +276,10 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_title("Raptor RAM Optimizer")
-        self.set_default_size(680, 680)
+        self.set_default_size(700, 760)
         self._running = False
+        self._suspended_now = []
+        self._cortex_patterns = load_cortex_config()
         self._build_ui()
         self._refresh_stats()
         GLib.timeout_add_seconds(3, self._refresh_stats)
@@ -135,9 +287,7 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
     def _build_ui(self):
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_content(root)
-
-        header = Adw.HeaderBar()
-        root.append(header)
+        root.append(Adw.HeaderBar())
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -167,7 +317,7 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
         banner.append(sub)
         content.append(banner)
 
-        # ── Live stats card ────────────────────────────────────────────────────
+        # ── Stats ──────────────────────────────────────────────────────────────
         stats_group = Adw.PreferencesGroup(title="Memory Status")
         content.append(stats_group)
 
@@ -218,11 +368,6 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
             "Re-runs compression on zram to reclaim physical RAM", True)
         opts_group.add(self.opt_zram)
 
-        self.opt_suspend = self._switch_row(
-            "Suspend background services",
-            "Pauses indexers, thumbnail generators and telemetry daemons", True)
-        opts_group.add(self.opt_suspend)
-
         self.opt_gaming = self._switch_row(
             "Gaming mode boost",
             "Sets power profile to performance and enables CPU boost", False)
@@ -230,10 +375,28 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
 
         self.opt_oom = self._switch_row(
             "Adjust OOM scores",
-            "Makes the kernel protect your game process from being killed", False)
+            "Makes the kernel protect your desktop session from being killed", False)
         opts_group.add(self.opt_oom)
 
-        # ── Result card ────────────────────────────────────────────────────────
+        # ── Cortex game mode ───────────────────────────────────────────────────
+        cortex_group = Adw.PreferencesGroup(title="Raptor Cortex — Game Mode")
+        cortex_group.set_description(
+            "Selected services are suspended automatically when any game launches "
+            "via gamemode (Steam/Lutris) and resumed when the game exits. "
+            "Toggle each service to include or exclude it.")
+        content.append(cortex_group)
+
+        self._service_switches = {}
+        for name, pattern in ALL_SERVICES:
+            row = Adw.SwitchRow()
+            row.set_title(name)
+            row.set_subtitle(f"pgrep: {pattern}")
+            row.set_active(pattern in self._cortex_patterns)
+            row.connect("notify::active", self._on_cortex_toggle, pattern)
+            cortex_group.add(row)
+            self._service_switches[pattern] = row
+
+        # ── Result ─────────────────────────────────────────────────────────────
         self.result_group = Adw.PreferencesGroup(title="Last Result")
         self.result_group.set_visible(False)
         content.append(self.result_group)
@@ -245,8 +408,8 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
         self.result_row.add_prefix(self.result_icon)
         self.result_group.add(self.result_row)
 
-        # ── Suspended services list ────────────────────────────────────────────
-        self.sus_group = Adw.PreferencesGroup(title="Suspended Services")
+        # ── Suspended now list ─────────────────────────────────────────────────
+        self.sus_group = Adw.PreferencesGroup(title="Currently Suspended")
         self.sus_group.set_visible(False)
         content.append(self.sus_group)
 
@@ -280,7 +443,18 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
         row.set_active(default)
         return row
 
-    # ── Stats refresh ──────────────────────────────────────────────────────────
+    def _on_cortex_toggle(self, row, _param, pattern):
+        if row.get_active():
+            self._cortex_patterns.add(pattern)
+        else:
+            self._cortex_patterns.discard(pattern)
+        threading.Thread(
+            target=save_cortex_config,
+            args=(self._cortex_patterns,),
+            daemon=True
+        ).start()
+
+    # ── Stats ──────────────────────────────────────────────────────────────────
 
     def _refresh_stats(self):
         used, total = mem_used_mb()
@@ -299,11 +473,9 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
                 self.ram_bar.remove_css_class("warning")
 
         swap_used, swap_total = get_swap_usage()
-        if swap_total > 0:
-            self.swap_label.set_text(
-                f"{fmt_mb(swap_used)} used / {fmt_mb(swap_total)} total")
-        else:
-            self.swap_label.set_text("No swap configured")
+        self.swap_label.set_text(
+            f"{fmt_mb(swap_used)} used / {fmt_mb(swap_total)} total"
+            if swap_total > 0 else "No swap configured")
 
         zram_orig, zram_total, zram_active = get_zram_usage()
         if zram_active:
@@ -314,7 +486,7 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
                     f"({ratio:.1f}x compression)")
             else:
                 self.zram_label.set_text(
-                    f"Active — {fmt_mb(zram_total)} allocated, idle (nothing swapped yet)")
+                    f"Active — {fmt_mb(zram_total)} allocated, idle")
         else:
             self.zram_label.set_text("zram not active")
 
@@ -333,7 +505,6 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
             "caches": self.opt_caches.get_active(),
             "compact": self.opt_compact.get_active(),
             "zram": self.opt_zram.get_active(),
-            "suspend": self.opt_suspend.get_active(),
             "gaming": self.opt_gaming.get_active(),
             "oom": self.opt_oom.get_active(),
         }
@@ -345,61 +516,35 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
         ).start()
 
     def _do_optimize(self, opts, before_used, before_total):
-        suspended_names = []
+        # Single sudo call — no password prompt
+        subprocess.run([
+            "sudo", HELPER,
+            "1" if opts["caches"] else "0",
+            "1" if opts["compact"] else "0",
+            "1" if opts["zram"] else "0",
+            "1" if opts["gaming"] else "0",
+            "1" if opts["oom"] else "0",
+        ], capture_output=True)
 
-        if opts["caches"]:
-            try:
-                subprocess.run(["sync"], check=False)
-            except Exception:
-                pass
-            run_sudo("echo 3 > /proc/sys/vm/drop_caches")
+        # Suspend selected cortex services (no root needed — SIGSTOP own session)
+        suspended = []
+        for name, pattern in ALL_SERVICES:
+            if pattern not in self._cortex_patterns:
+                continue
+            result = subprocess.run(
+                ["pgrep", "-f", pattern], capture_output=True, text=True)
+            if result.returncode == 0:
+                subprocess.run(["pkill", "-STOP", "-f", pattern],
+                                capture_output=True)
+                suspended.append(name)
 
-        if opts["compact"]:
-            run_sudo("echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true")
-
-        if opts["zram"]:
-            run_sudo(
-                "echo recompress > /sys/block/zram0/recompress 2>/dev/null || true; "
-                "echo writeback > /sys/block/zram0/writeback 2>/dev/null || true"
-            )
-
-        if opts["suspend"]:
-            for name, pattern, resumable in SUSPENDABLE:
-                result = subprocess.run(
-                    ["pgrep", "-f", pattern],
-                    capture_output=True, text=True
-                )
-                if result.returncode == 0:
-                    subprocess.run(
-                        ["pkill", "-STOP", "-f", pattern],
-                        capture_output=True
-                    )
-                    suspended_names.append((name, pattern, resumable))
-            SUSPENDED.clear()
-            SUSPENDED.extend(suspended_names)
-
-        if opts["gaming"]:
-            run_sudo(
-                "echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true"
-            )
-            subprocess.run(
-                ["powerprofilesctl", "set", "performance"],
-                capture_output=True, check=False
-            )
-
-        if opts["oom"]:
-            run_sudo(
-                "for pid in $(pgrep plasmashell kwin_wayland kwin_x11 2>/dev/null); do "
-                " echo -500 > /proc/$pid/oom_score_adj 2>/dev/null || true; "
-                "done"
-            )
-
+        self._suspended_now = suspended
         after_used, _ = mem_used_mb()
         freed = max(0, before_used - after_used)
         GLib.idle_add(self._show_result, before_used, before_total,
-                      after_used, freed, suspended_names)
+                      after_used, freed, suspended)
 
-    def _show_result(self, before, total, after, freed, suspended_names):
+    def _show_result(self, before, total, after, freed, suspended):
         self._running = False
         self.run_btn.set_sensitive(True)
         self.spinner.stop()
@@ -409,36 +554,35 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
         self.result_row.set_title(f"Freed {fmt_mb(freed)}")
         self.result_row.set_subtitle(
             f"Before: {fmt_mb(before)} / {fmt_mb(total)} "
-            f"After: {fmt_mb(after)} / {fmt_mb(total)}"
-        )
+            f"After: {fmt_mb(after)} / {fmt_mb(total)}")
 
-        if suspended_names:
+        if suspended:
             self.resume_btn.set_sensitive(True)
             self.sus_group.set_visible(True)
             child = self.sus_box.get_first_child()
             while child:
-                next_child = child.get_next_sibling()
+                nxt = child.get_next_sibling()
                 self.sus_box.remove(child)
-                child = next_child
-            for name, pattern, resumable in suspended_names:
-                row_lbl = Gtk.Label(label=f" • {name}", xalign=0)
-                row_lbl.add_css_class("dim-label")
-                self.sus_box.append(row_lbl)
+                child = nxt
+            for name in suspended:
+                lbl = Gtk.Label(label=f" • {name}", xalign=0)
+                lbl.add_css_class("dim-label")
+                self.sus_box.append(lbl)
         else:
             self.sus_group.set_visible(False)
 
     # ── Resume ─────────────────────────────────────────────────────────────────
 
     def on_resume(self, btn):
-        for name, pattern, resumable in SUSPENDED:
-            subprocess.run(["pkill", "-CONT", "-f", pattern], capture_output=True)
-        SUSPENDED.clear()
+        for name, pattern in ALL_SERVICES:
+            if pattern in self._cortex_patterns:
+                subprocess.run(["pkill", "-CONT", "-f", pattern],
+                                capture_output=True)
+        self._suspended_now.clear()
         self.resume_btn.set_sensitive(False)
         self.sus_group.set_visible(False)
-        subprocess.run(
-            ["powerprofilesctl", "set", "balanced"],
-            capture_output=True, check=False
-        )
+        subprocess.run(["powerprofilesctl", "set", "balanced"],
+                       capture_output=True, check=False)
 
 
 if __name__ == "__main__":
@@ -468,7 +612,7 @@ Exec=/usr/bin/raptor-ram-launcher
 Icon=memory
 Terminal=false
 Categories=X-RaptorOS;
-Keywords=ram;memory;optimize;performance;gaming;raptor;
+Keywords=ram;memory;optimize;performance;gaming;raptor;cortex;
 StartupNotify=true
 X-KDE-SubstituteUID=false
 EOF
