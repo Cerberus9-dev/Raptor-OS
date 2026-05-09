@@ -6,7 +6,7 @@
 - Custom Raptor OS logo
 - KDE theme fix (ongoing)
 
-## [v2.3] - 2026-05-08 (Build System, App Fixes & Couple new apps)
+## [v2.3] - 2026-05-08 (Build System & App Fixes)
 
 ### Fixed
 - **Critical:** `recipe.yml` YAML parse failure — `- type: rpm-ostree` module entry was
@@ -28,6 +28,9 @@
 - **Critical:** `raptor-ram-optimizer.sh` build failure — `chmod 440` on sudoers file
   and missing `mkdir -p /etc/sudoers.d` caused silent non-zero exit under `set -e`;
   fixed with `|| true` guards and `visudo -cf` validation
+- **Critical:** Steam (Flatpak) silently failing to launch — `memlock unlimited` in
+  `/etc/security/limits.d/raptor-gaming.conf` conflicted with Flatpak sandbox fd
+  limits; replaced with a bounded value of 8 GB (8388608 KB)
 - **zram Compression** status in Raptor RAM Optimizer incorrectly reported "zram not
   active" despite zram being correctly configured and mounted — fixed detection to
   read `/sys/block/zram0/disksize` for existence check and distinguish between idle
@@ -38,9 +41,12 @@
 - **Update Manager** output was severely buffered — rewritten to use `script -q -c`
   to force a PTY, giving real-time line-by-line output matching terminal speed
 - **Update Manager** reboot countdown did not trigger `systemctl reboot` after update
-  completed — fixed with dedicated cancellation flag and correct countdown logic
+  completed — fixed with dedicated `_reboot_cancelled` flag initialized in `__init__`
+  and `getattr` guard in countdown to prevent silent `AttributeError` deaths
 - **Update Manager** ANSI escape codes were printed raw into the log view — now
   stripped before display for clean readable output
+- **Update Manager** switched from `ujust update` to `rpm-ostree update` — `ujust`
+  is not available in all environments and would silently fail with "not found"
 
 ### Added
 - mpv media player
