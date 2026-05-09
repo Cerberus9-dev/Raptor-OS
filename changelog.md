@@ -25,6 +25,9 @@
 - **Critical:** `raptor-performance.sh` file truncation during copy — script was being
   cut off mid-line at the Firefox prefs block, causing `unexpected EOF` errors at
   build time
+- **Critical:** `raptor-ram-optimizer.sh` build failure — `chmod 440` on sudoers file
+  and missing `mkdir -p /etc/sudoers.d` caused silent non-zero exit under `set -e`;
+  fixed with `|| true` guards and `visudo -cf` validation
 - **zram Compression** status in Raptor RAM Optimizer incorrectly reported "zram not
   active" despite zram being correctly configured and mounted — fixed detection to
   read `/sys/block/zram0/disksize` for existence check and distinguish between idle
@@ -33,6 +36,18 @@
   than the end user's hardware — noted as a known limitation pending a runtime
   firstboot service fix
 
+### Added
+- mpv media player
+- qBittorrent torrent client
+- Bitwarden password manager (Flatpak)
+- Thunderbird email client (re-added)
+- Raptor Cortex game mode — per-service toggle in RAM Optimizer GUI; selected services
+  auto-suspend on game launch via gamemode hooks and resume on game exit
+- No-auth RAM optimization — all privileged actions consolidated into a single
+  `NOPASSWD` sudoers helper, eliminating repeated password prompts
+- Raptor RAM Optimizer now writes `/etc/raptor/cortex-suspend.conf` to persist
+  per-user service suspension preferences across reboots
+
 ### Changed
 - Raptor Update Manager fully rewritten — previous version silently crashed on launch
   due to missing `DBUS_SESSION_BUS_ADDRESS` in the wrapper launcher; new version adds
@@ -40,6 +55,9 @@
   during update, and automatic 10-second countdown reboot on success
 - Update Manager flow now mirrors Windows Update: check → confirm → update → reboot
   with cancellable countdown
+- Raptor RAM Optimizer rewritten — all privileged operations consolidated into a single
+  sudo call, Razer Cortex-style per-service game mode toggles added, gamemode hooks
+  integrated for automatic suspend/resume on game launch and exit
 
 ## [v2.2] - 2026-05-07 (Major Fix)
 
