@@ -103,13 +103,15 @@ EOF
 chmod +x /usr/lib/raptor/gamemode-end
 
 # ── sudoers NOPASSWD for helper ───────────────────────────────────────────────
+mkdir -p /etc/sudoers.d
 cat << 'EOF' > /etc/sudoers.d/raptor-ram-optimizer
 # Raptor OS: allow all users to run the RAM optimizer helper without a password
 ALL ALL=(root) NOPASSWD: /usr/lib/raptor/ram-optimize-helper
 ALL ALL=(root) NOPASSWD: /usr/lib/raptor/gamemode-start
 ALL ALL=(root) NOPASSWD: /usr/lib/raptor/gamemode-end
 EOF
-chmod 440 /etc/sudoers.d/raptor-ram-optimizer
+chmod 440 /etc/sudoers.d/raptor-ram-optimizer || true
+visudo -cf /etc/sudoers.d/raptor-ram-optimizer || true
 
 # ── Default cortex suspend config ─────────────────────────────────────────────
 mkdir -p /etc/raptor
@@ -249,7 +251,6 @@ def save_cortex_config(patterns):
         for _, pattern in ALL_SERVICES:
             if pattern in patterns:
                 lines.append(pattern + "\n")
-        # Write via sudo tee since /etc/raptor may need root
         content = "".join(lines)
         subprocess.run(
             ["sudo", "tee", CORTEX_CONFIG],
@@ -516,7 +517,6 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
         ).start()
 
     def _do_optimize(self, opts, before_used, before_total):
-        # Single sudo call — no password prompt
         subprocess.run([
             "sudo", HELPER,
             "1" if opts["caches"] else "0",
@@ -526,7 +526,6 @@ class RaptorRAMWindow(Adw.ApplicationWindow):
             "1" if opts["oom"] else "0",
         ], capture_output=True)
 
-        # Suspend selected cortex services (no root needed — SIGSTOP own session)
         suspended = []
         for name, pattern in ALL_SERVICES:
             if pattern not in self._cortex_patterns:
