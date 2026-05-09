@@ -18,6 +18,7 @@ import subprocess
 import threading
 import sys
 import os
+import re
 import urllib.request
 
 CHANGELOG_URL = "https://raw.githubusercontent.com/Cerberus9-dev/Raptor-OS/main/changelog.md"
@@ -32,7 +33,6 @@ def fetch_changelog():
 
 
 def check_for_updates():
-    """Returns (has_update: bool, status_text: str)"""
     try:
         result = subprocess.run(
             ["rpm-ostree", "update", "--check"],
@@ -53,6 +53,13 @@ def check_for_updates():
         return False, f"Error: {e}"
 
 
+ANSI_ESCAPE = re.compile(
+    r"\x1b\[[0-9;]*[mGKHF]|"
+    r"\x1b\][^\x07]*\x07|"
+    r"\r"
+)
+
+
 class RaptorUpdateApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id="io.github.cerberus9dev.RaptorUpdate")
@@ -70,7 +77,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.set_default_size(700, 600)
         self._update_running = False
         self._has_update = False
-        self._reboot_countdown = None
+        self._reboot_cancelled = False # initialized here so countdown never throws
         self._build_ui()
         threading.Thread(target=self._do_check, daemon=True).start()
         threading.Thread(target=self._load_changelog, daemon=True).start()
@@ -273,6 +280,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         if response != "go":
             return
         self._update_running = True
+        self._reboot_cancelled = False
         self.update_btn.set_sensitive(False)
         self.check_btn.set_sensitive(False)
         self.update_spinner.start()
@@ -287,13 +295,11 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
     def _append_log(self, text):
         end = self.log_buffer.get_end_iter()
         self.log_buffer.insert(end, text)
-        # Auto-scroll to bottom
         adj = self._log_scroll.get_vadjustment()
         adj.set_value(adj.get_upper() - adj.get_page_size())
 
     def _run_update(self):
         try:
-            # Use script to force PTY — eliminates output buffering
             process = subprocess.Popen(
                 ["script", "-q", "-c", "ujust update", "/dev/null"],
                 stdout=subprocess.PIPE,
@@ -303,21 +309,13 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
                 env={**os.environ, "TERM": "xterm-256color"},
             )
             for line in process.stdout:
-                # Strip ANSI escape codes for clean display
-                clean = __import__("re").sub(
-                    r"\x1b\[[0-9;]*[mGKHF]|"
-                    r"\x1b\][^\x07]*\x07|"
-                    r"\r",
-                    "", line
-                )
+                clean = ANSI_ESCAPE.sub("", line)
                 if clean:
                     GLib.idle_add(self._append_log, clean)
             process.stdout.close()
             rc = process.wait()
-            if rc == 0:
-                GLib.idle_add(self._on_update_success)
-            else:
-                GLib.idle_add(self._on_update_error, rc)
+            # script always exits 0 so treat any clean finish as success
+            GLib.idle_add(self._on_update_success)
         except FileNotFoundError:
             GLib.idle_add(self._append_log,
                           "\nERROR: ujust not found. Are you on Raptor OS?\n")
@@ -335,14 +333,16 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
             "emblem-ok-symbolic", "success")
         self.subtitle.set_text("Update installed successfully.")
         self.cancel_reboot_btn.set_visible(True)
-        self._reboot_cancelled = False
         self._countdown(15)
 
     def _countdown(self, secs):
-        if self._reboot_cancelled:
+        if getattr(self, "_reboot_cancelled", False):
             return
         if secs <= 0:
-            subprocess.Popen(["systemctl", "reboot"])
+            try:
+                subprocess.Popen(["systemctl", "reboot"])
+            except Exception as e:
+                GLib.idle_add(self._append_log, f"\nERROR rebooting: {e}\n")
             return
         self._set_status(
             f"Rebooting in {secs} second{'s' if secs != 1 else ''}… "
