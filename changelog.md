@@ -6,7 +6,7 @@
 - Custom Raptor OS logo
 - KDE theme fix (ongoing)
 
-## [v2.3] - 2026-05-08 (Build System & App Fixes)
+## [v2.3] - 2026-05-08 (Build System, App Fixes & Couple new apps)
 
 ### Fixed
 - **Critical:** `recipe.yml` YAML parse failure — `- type: rpm-ostree` module entry was
@@ -35,6 +35,12 @@
 - **zram sizing** evaluated at image build time using the build container's RAM rather
   than the end user's hardware — noted as a known limitation pending a runtime
   firstboot service fix
+- **Update Manager** output was severely buffered — rewritten to use `script -q -c`
+  to force a PTY, giving real-time line-by-line output matching terminal speed
+- **Update Manager** reboot countdown did not trigger `systemctl reboot` after update
+  completed — fixed with dedicated cancellation flag and correct countdown logic
+- **Update Manager** ANSI escape codes were printed raw into the log view — now
+  stripped before display for clean readable output
 
 ### Added
 - mpv media player
@@ -47,12 +53,15 @@
   `NOPASSWD` sudoers helper, eliminating repeated password prompts
 - Raptor RAM Optimizer now writes `/etc/raptor/cortex-suspend.conf` to persist
   per-user service suspension preferences across reboots
+- Update Manager now shows a Cancel Reboot button during the post-update countdown
+  so users can defer the reboot if needed
+- Update Manager log view now auto-scrolls to the latest output line
 
 ### Changed
 - Raptor Update Manager fully rewritten — previous version silently crashed on launch
   due to missing `DBUS_SESSION_BUS_ADDRESS` in the wrapper launcher; new version adds
   automatic update check on launch, live changelog loaded from GitHub, live log output
-  during update, and automatic 10-second countdown reboot on success
+  during update, and automatic 15-second countdown reboot on success
 - Update Manager flow now mirrors Windows Update: check → confirm → update → reboot
   with cancellable countdown
 - Raptor RAM Optimizer rewritten — all privileged operations consolidated into a single
