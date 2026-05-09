@@ -26,6 +26,7 @@ modules:
       - darktable
       - audacity
       - vlc
+      - mpv
       - obs-studio
       - gwenview
       - kamoso
@@ -59,6 +60,8 @@ modules:
       - variety
       - kcalc
       - power-profiles-daemon
+      - qbittorrent
+      - thunderbird
     remove:
       - tuned-ppd
   - type: default-flatpaks@v1
@@ -79,6 +82,7 @@ modules:
         - com.usebottles.bottles
         - com.feaneron.Boatswain
         - org.shotcut.Shotcut
+        - com.bitwarden.desktop
   - type: script
     scripts:
       - raptor-hud.sh
