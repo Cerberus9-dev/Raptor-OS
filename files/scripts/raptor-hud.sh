@@ -2,13 +2,10 @@
 set -oue pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Raptor OS — HUD Script
-# Installs: KDE theme, profile switcher, RAM optimizer,
-#           Raptor OS app menu category, and all .desktop entries
-#           (GPU switcher, RAM optimizer, Update Manager).
-#
-# raptor-gpu-profile.sh handles the GPU detection script + systemd service.
-# raptor-update.sh handles the Update Manager Python app.
+# Raptor OS — HUD Script  v2.0
+# Installs: KDE theme, GPU profile switcher (no-password), RAM optimizer,
+#           background process trimmer, browser launchers,
+#           Raptor OS app menu category, and all .desktop entries.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ── Neon Green KDE theme ───────────────────────────────────────────────────────
@@ -18,17 +15,15 @@ cat << 'EOF' > /etc/skel/.config/kdeglobals
 ColorScheme=BreezeDark
 AccentColor=51,255,51
 accentColorFromWallpaper=false
+
+[KDE]
+AnimationDurationFactor=0.5
 EOF
 
 for dir in /root /home/*; do
     if [ -d "$dir" ]; then
         mkdir -p "$dir/.config"
-        cat << 'EOF' > "$dir/.config/kdeglobals"
-[General]
-ColorScheme=BreezeDark
-AccentColor=51,255,51
-accentColorFromWallpaper=false
-EOF
+        cp /etc/skel/.config/kdeglobals "$dir/.config/kdeglobals"
     fi
 done
 
@@ -63,65 +58,216 @@ for dir in /root /home/*; do
     fi
 done
 
-# ── GPU Profile Switcher ───────────────────────────────────────────────────────
-cat << 'EOF' > /usr/bin/raptor-profile-switcher.sh
+# ── GPU Profile Switcher (no password / no logout) ─────────────────────────────
+cat << 'SWITCHER' > /usr/bin/raptor-profile-switcher.sh
 #!/bin/bash
-CURRENT_GPU="Auto"
-[ -f /etc/raptor-force-performance ] && CURRENT_GPU="Max Performance"
-[ -f /etc/raptor-force-powersave ]   && CURRENT_GPU="Power Saving"
+
+# ── Determine current profile label ──────────────────────────────────────────
+CURRENT_GPU="Auto (Smart detect)"
+[ -f /etc/raptor-force-extreme ]     && CURRENT_GPU="⚡ Extreme Performance"
+[ -f /etc/raptor-force-performance ] && CURRENT_GPU="🚀 Max Performance"
+[ -f /etc/raptor-force-balanced ]    && CURRENT_GPU="⚖  Balanced"
+[ -f /etc/raptor-force-powersave ]   && CURRENT_GPU="🍃 Power Saving"
+
+# Get GPU model for display
+GPU_LINE=$(lspci | grep -i "VGA\|3D\|Display" | head -1 | sed 's/.*: //')
 
 CHOICE=$(zenity --list \
   --title="Raptor OS — GPU Profile Switcher" \
-  --text="Current GPU profile: $CURRENT_GPU\n\nSelect a new profile:" \
+  --text="<b>GPU:</b> ${GPU_LINE}\n<b>Current profile:</b> ${CURRENT_GPU}\n\nSelect a new profile:" \
   --radiolist \
   --column="" --column="Profile" --column="Description" \
-  TRUE  "Auto"            "Automatically detect and optimize for your GPU" \
-  FALSE "Max Performance" "Maximum GPU performance, higher power usage" \
-  FALSE "Power Saving"    "Reduced GPU usage, better battery life" \
-  --width=640 --height=360 2>/dev/null) || exit 0
+  FALSE "⚡ Extreme"     "Unlocked clocks, max CPU governor, async shaders, DXR raytracing" \
+  FALSE "🚀 Performance" "High GPU/CPU clocks, full DXVK async, large shader cache" \
+  TRUE  "🎯 Auto"        "Best settings for your detected hardware (recommended)" \
+  FALSE "⚖  Balanced"   "Good performance, reasonable power draw" \
+  FALSE "🍃 Power Save"  "Minimum clocks, disabled caches — for battery/thermals" \
+  --width=700 --height=420 2>/dev/null) || exit 0
 
-case "$CHOICE" in
-  "Max Performance")
-    sudo touch /etc/raptor-force-performance
-    sudo rm -f /etc/raptor-force-powersave
-    /usr/bin/raptor-gpu-profile.sh
-    zenity --question --title="Raptor OS" \
-      --text="Max Performance profile applied.\nLog out now to apply changes?" \
-      --width=340 2>/dev/null \
-      && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
-    ;;
-  "Power Saving")
-    sudo touch /etc/raptor-force-powersave
-    sudo rm -f /etc/raptor-force-performance
-    /usr/bin/raptor-gpu-profile.sh
-    zenity --question --title="Raptor OS" \
-      --text="Power Saving profile applied.\nLog out now to apply changes?" \
-      --width=340 2>/dev/null \
-      && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
-    ;;
-  "Auto")
-    sudo rm -f /etc/raptor-force-performance /etc/raptor-force-powersave
-    /usr/bin/raptor-gpu-profile.sh
-    zenity --question --title="Raptor OS" \
-      --text="Auto profile applied.\nLog out now to apply changes?" \
-      --width=340 2>/dev/null \
-      && qdbus org.kde.ksmserver /KSMServer logout 0 0 0
-    ;;
+# ── Strip emoji prefix ────────────────────────────────────────────────────────
+CHOICE_CLEAN=$(echo "$CHOICE" | sed 's/^[^ ]* //')
+
+# ── Apply profile flags ───────────────────────────────────────────────────────
+sudo rm -f /etc/raptor-force-extreme \
+           /etc/raptor-force-performance \
+           /etc/raptor-force-powersave \
+           /etc/raptor-force-balanced
+
+case "$CHOICE_CLEAN" in
+  "Extreme")     sudo touch /etc/raptor-force-extreme ;;
+  "Performance") sudo touch /etc/raptor-force-performance ;;
+  "Balanced")    sudo touch /etc/raptor-force-balanced ;;
+  "Power Save")  sudo touch /etc/raptor-force-powersave ;;
+  "Auto")        : ;;  # no flag = auto
 esac
-EOF
+
+# ── Run profile detection (live — no logout needed) ───────────────────────────
+sudo /usr/bin/raptor-gpu-profile.sh
+
+# ── Notify user ───────────────────────────────────────────────────────────────
+zenity --info \
+  --title="Raptor OS" \
+  --text="<b>${CHOICE}</b> profile applied!\n\nChanges are live — no logout required.\nFor best results with shader caches, restart any open games." \
+  --width=400 2>/dev/null || true
+SWITCHER
 chmod +x /usr/bin/raptor-profile-switcher.sh
 
+# ── RAM Optimizer (no password via polkit/sudo) ────────────────────────────────
+cat << 'RAMOPT' > /usr/bin/raptor-ram-launcher
+#!/bin/bash
+# Launcher: shows a menu then calls the real optimizer with sudo (no password needed)
+TOTAL=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+FREE=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+USED=$(( (TOTAL - FREE) / 1024 ))
+TOTAL_MB=$(( TOTAL / 1024 ))
 
-# ── Browser choice ─────────────────────────────────────────────────────────────
+CHOICE=$(zenity --list \
+  --title="Raptor OS — RAM Optimizer" \
+  --text="<b>RAM Usage:</b> ${USED} MB used of ${TOTAL_MB} MB\n\nChoose an optimization level:" \
+  --radiolist \
+  --column="" --column="Level" --column="What it does" \
+  TRUE  "🧹 Quick Clean"     "Drop page caches + compact memory (instant, safe)" \
+  FALSE "🎮 Gaming Mode"     "Quick clean + pause all indexers and background services" \
+  FALSE "💪 Deep Clean"      "Gaming mode + ZRAM rebalance + swap trimming" \
+  FALSE "🔧 Aggressive"      "Deep clean + kill optional background processes" \
+  FALSE "♻  Restore"         "Resume all paused services after gaming" \
+  --width=700 --height=380 2>/dev/null) || exit 0
+
+case "$CHOICE" in
+  *"Quick Clean"*)
+    sudo /usr/bin/raptor-ram-optimizer.sh quick
+    ;;
+  *"Gaming Mode"*)
+    sudo /usr/bin/raptor-ram-optimizer.sh gaming
+    sudo /usr/bin/raptor-trim-background.sh
+    ;;
+  *"Deep Clean"*)
+    sudo /usr/bin/raptor-ram-optimizer.sh deep
+    sudo /usr/bin/raptor-trim-background.sh
+    ;;
+  *"Aggressive"*)
+    sudo /usr/bin/raptor-ram-optimizer.sh aggressive
+    sudo /usr/bin/raptor-trim-background.sh
+    ;;
+  *"Restore"*)
+    sudo /usr/bin/raptor-restore-background.sh
+    ;;
+esac
+
+FREE_AFTER=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+FREE_AFTER_MB=$(( FREE_AFTER / 1024 ))
+
+zenity --info \
+  --title="Raptor OS — RAM Optimizer" \
+  --text="<b>Done!</b>\n\nRAM now available: <b>${FREE_AFTER_MB} MB</b>" \
+  --width=320 2>/dev/null || true
+RAMOPT
+chmod +x /usr/bin/raptor-ram-launcher
+
+cat << 'RAMSCRIPT' > /usr/bin/raptor-ram-optimizer.sh
+#!/bin/bash
+# Raptor OS RAM Optimizer — called by raptor-ram-launcher with a level arg
+LEVEL="${1:-quick}"
+echo "=== Raptor RAM Optimizer: $LEVEL ==="
+
+# ── quick: always run these ─────────────────────────────────────────────────
+sync
+# Drop page caches (1), dentries+inodes (2), or both (3)
+echo 3 > /proc/sys/vm/drop_caches
+echo "✔ Dropped page/dentry/inode caches"
+
+# Compact memory to reduce fragmentation
+echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
+echo "✔ Compacted memory"
+
+if [ "$LEVEL" = "quick" ]; then exit 0; fi
+
+# ── gaming ──────────────────────────────────────────────────────────────────
+# Reduce swappiness temporarily for the session
+sysctl -w vm.swappiness=5 > /dev/null
+echo "✔ Swappiness → 5 (gaming)"
+
+# Force writeback of dirty pages
+echo 0 > /proc/sys/vm/dirty_writeback_centisecs
+sleep 0.5
+echo 500 > /proc/sys/vm/dirty_writeback_centisecs
+echo "✔ Flushed dirty pages"
+
+if [ "$LEVEL" = "gaming" ]; then exit 0; fi
+
+# ── deep ────────────────────────────────────────────────────────────────────
+# Recycle ZRAM if present
+if command -v zramctl &>/dev/null; then
+    ZRAM_DEVS=$(zramctl --noheadings --output NAME 2>/dev/null || true)
+    for dev in $ZRAM_DEVS; do
+        ZRAM_SIZE=$(zramctl --noheadings --output SIZE "$dev" 2>/dev/null || echo "0")
+        swapoff "$dev" 2>/dev/null || true
+        echo 1 > "/sys/block/$(basename $dev)/reset" 2>/dev/null || true
+        echo "✔ ZRAM $dev recycled"
+    done
+    /usr/bin/raptor-zram-setup.sh 2>/dev/null || true
+fi
+
+# Trim SSDs (releases unused blocks)
+fstrim -v / 2>/dev/null || true
+echo "✔ SSD TRIM run"
+
+if [ "$LEVEL" = "deep" ]; then exit 0; fi
+
+# ── aggressive ──────────────────────────────────────────────────────────────
+# Kill optional heavyweight background processes (not system-critical)
+OPTIONAL_PROCS=(
+    "tumblerd"       # KDE thumbnail generator
+    "kio_http_cache" # KDE HTTP cache worker
+    "kactivitymanagerd"
+    "gvfsd-metadata"
+    "tracker-miner-fs"
+    "tracker-store"
+    "zeitgeist-daemon"
+    "evolution-calendar"
+    "evolution-addressbook"
+    "gnome-software"
+    "update-notifier"
+)
+for proc in "${OPTIONAL_PROCS[@]}"; do
+    if pkill -0 "$proc" 2>/dev/null; then
+        pkill "$proc" 2>/dev/null || true
+        echo "✔ Stopped $proc"
+    fi
+done
+
+# Set OOM score on known memory hogs to let kernel clean them up under pressure
+for proc in "web_content" "plugin_container" "npviewer"; do
+    for pid in $(pgrep "$proc" 2>/dev/null); do
+        echo 500 > "/proc/$pid/oom_score_adj" 2>/dev/null || true
+    done
+done
+
+echo "=== Aggressive clean complete ==="
+RAMSCRIPT
+chmod +x /usr/bin/raptor-ram-optimizer.sh
+
+# sudoers entry for RAM optimizer
+cat << 'RAMSU' >> /etc/sudoers.d/raptor-gpu
+ALL ALL=(root) NOPASSWD: /usr/bin/raptor-ram-optimizer.sh
+RAMSU
+
+# polkit rule for RAM optimizer
+cat << 'POLKIT2' > /etc/polkit-1/rules.d/49-raptor-ram.rules
+polkit.addRule(function(action, subject) {
+    if (action.id === "org.freedesktop.policykit.exec" &&
+        action.lookup("program") &&
+        action.lookup("program").indexOf("raptor-ram") !== -1 &&
+        subject.active && subject.local) {
+        return polkit.Result.YES;
+    }
+});
+POLKIT2
+
+# ── Browser choice ──────────────────────────────────────────────────────────
 chmod +x /usr/bin/raptor-browser-choice.sh 2>/dev/null || true
 
-# ── Raptor OS app menu category ────────────────────────────────────────────────
-# The .directory file defines the folder name/icon in the KDE app menu.
-# The .menu file tells KDE which apps belong in it (via X-RaptorOS category).
-# All three Raptor .desktop files below use Categories=X-RaptorOS; so they
-# all appear here. raptor-update.sh writes the Update Manager entry separately
-# but also uses Categories=X-RaptorOS; so it lands here too.
-
+# ── Raptor OS app menu category ─────────────────────────────────────────────
 mkdir -p /usr/share/desktop-directories
 cat << 'EOF' > /usr/share/desktop-directories/raptor-os.directory
 [Desktop Entry]
@@ -147,10 +293,9 @@ cat << 'EOF' > /etc/xdg/menus/applications-merged/raptor-os.menu
 </Menu>
 EOF
 
-# ── .desktop entries ───────────────────────────────────────────────────────────
-# IMPORTANT: Categories must end with just X-RaptorOS; — do not add System;
-# or Settings; as extra categories. KDE Plasma's menu builder can drop entries
-# from custom X- categories when multiple standard categories are also listed.
+# ── .desktop entries ─────────────────────────────────────────────────────────
+# NOTE: Categories must end with X-RaptorOS; only — extra standard categories
+# can cause KDE Plasma to drop entries from custom X- folders.
 
 mkdir -p /usr/share/applications
 
@@ -159,12 +304,12 @@ cat << 'EOF' > /usr/share/applications/raptor-profile-switcher.desktop
 Version=1.1
 Type=Application
 Name=Raptor GPU Profile Switcher
-Comment=Switch between GPU performance profiles
+Comment=Switch GPU profiles instantly — no password or logout required
 Exec=/usr/bin/raptor-profile-switcher.sh
 Icon=preferences-system-performance
 Terminal=false
 Categories=X-RaptorOS;
-Keywords=gpu;performance;power;profile;raptor;
+Keywords=gpu;performance;power;profile;raptor;extreme;
 EOF
 
 cat << 'EOF' > /usr/share/applications/raptor-ram-optimizer.desktop
@@ -172,12 +317,52 @@ cat << 'EOF' > /usr/share/applications/raptor-ram-optimizer.desktop
 Version=1.1
 Type=Application
 Name=Raptor RAM Optimizer
-Comment=Free up RAM and optimize memory usage
+Comment=Free RAM, pause indexers, optimize memory for gaming — no password needed
 Exec=/usr/bin/raptor-ram-launcher
 Icon=memory
 Terminal=false
 Categories=X-RaptorOS;
-Keywords=ram;memory;optimize;performance;raptor;
+Keywords=ram;memory;optimize;performance;raptor;gaming;
+EOF
+
+cat << 'EOF' > /usr/share/applications/raptor-background-trim.desktop
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=Raptor Background Trimmer
+Comment=Pause background services and free resources before gaming
+Exec=bash -c "pkexec /usr/bin/raptor-trim-background.sh && zenity --info --title='Raptor OS' --text='Background services paused.\nRun \"Raptor Restore Background\" after gaming.' --width=360"
+Icon=system-run
+Terminal=false
+Categories=X-RaptorOS;
+Keywords=background;services;gaming;performance;raptor;trim;
+EOF
+
+cat << 'EOF' > /usr/share/applications/raptor-restore-background.desktop
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=Raptor Restore Background
+Comment=Resume background services after gaming
+Exec=bash -c "pkexec /usr/bin/raptor-restore-background.sh && zenity --info --title='Raptor OS' --text='Background services restored.' --width=300"
+Icon=system-reboot
+Terminal=false
+Categories=X-RaptorOS;
+Keywords=background;restore;services;raptor;
+EOF
+
+cat << 'EOF' > /usr/share/applications/raptor-brave-optimized.desktop
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=Brave (Raptor Optimized)
+Comment=Brave browser with GPU acceleration and performance flags
+Exec=/usr/local/bin/brave-optimized %U
+Icon=brave-browser
+Terminal=false
+MimeType=x-scheme-handler/http;x-scheme-handler/https;
+Categories=X-RaptorOS;Network;WebBrowser;
+Keywords=brave;browser;optimized;raptor;
 EOF
 
 echo "HUD_READY"
