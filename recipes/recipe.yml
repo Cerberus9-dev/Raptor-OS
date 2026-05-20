@@ -1,88 +1,144 @@
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: raptor-os
-description: Victory Build.
+description: Raptor OS — a Bazzite-based custom image for gaming, development, and creative workflows.
 base-image: ghcr.io/ublue-os/bazzite
-image-version: latest
+image-version: stable
+
 modules:
+  # ── Static files ────────────────────────────────────────────────────────────
   - type: files
     files:
       - source: system_files/raptor-firstboot.service
         destination: /usr/lib/systemd/system/raptor-firstboot.service
+      - source: system_files/raptor-ensure-services.service
+        destination: /usr/lib/systemd/system/raptor-ensure-services.service
       - source: system_files/raptor-browser-choice.sh
         destination: /usr/bin/raptor-browser-choice.sh
+
+  # ── RPM packages ────────────────────────────────────────────────────────────
   - type: rpm-ostree
     install:
+      # Browser
       - firefox
+
+      # System utilities
       - fastfetch
-      - plasma-systemmonitor
       - htop
+      - btop
       - bleachbit
       - filelight
-      - libreoffice
+      - p7zip
+      - curl
+      - wget
+      - jq
+      - zenity
+
+      # KDE extras
+      - plasma-systemmonitor
+      - gwenview
+      - kamoso
+      - kcalc
+      - variety
+
+      # Power management
+      - power-profiles-daemon
+
+      # Multimedia
+      - vlc
+      - mpv
+      - obs-studio
+      - audacity
       - kdenlive
+
+      # Creative
       - gimp
       - inkscape
       - krita
       - darktable
-      - audacity
-      - vlc
-      - mpv
-      - obs-studio
-      - gwenview
-      - kamoso
-      - p7zip
+
+      # Office
+      - libreoffice
+
+      # Gaming
       - gamemode
       - goverlay
       - wine
       - winetricks
+
+      # Development — runtimes
       - git
       - gh
       - nodejs
       - python3
       - python3-pip
+      - python3-gobject
+
+      # Development — build tools
       - gcc
       - make
       - cmake
       - ninja-build
       - meson
+
+      # Development — terminal tools
       - neovim
       - tmux
       - ripgrep
       - fzf
-      - python3-gobject
+
+      # GTK / theming
       - libadwaita
+
+      # Containers
       - podman
       - podman-compose
-      - zenity
-      - curl
-      - wget
-      - jq
-      - variety
-      - kcalc
-      - power-profiles-daemon
+
+      # Networking
       - qbittorrent
       - thunderbird
+
     remove:
-      - tuned-ppd
+      - tuned-ppd   # replaced by power-profiles-daemon
+
+  # ── Flatpaks ─────────────────────────────────────────────────────────────────
   - type: default-flatpaks@v1
     notify: true
     system:
       install:
+        # Communication
         - com.discordapp.Discord
+
+        # Gaming
         - com.heroicgameslauncher.hgl
+        - net.davidotek.pupgui2
+        - com.usebottles.bottles
+
+        # Development
         - com.vscodium.codium
+
+        # Container management
         - com.github.marhkb.Pods
+
+        # Creative / media
+        - org.blender.Blender
+        - org.shotcut.Shotcut
+
+        # Productivity
         - com.calibre_ebook.calibre
         - net.cozic.joplin_desktop
         - com.github.marktext.marktext
+
+        # System tools
         - io.missioncenter.MissionCenter
-        - net.davidotek.pupgui2
-        - org.blender.Blender
         - com.github.tchx84.Flatseal
-        - com.usebottles.bottles
-        - com.feaneron.Boatswain
-        - org.shotcut.Shotcut
+
+        # Security
         - com.bitwarden.desktop
+
+        # Hardware control
+        - com.feaneron.Boatswain
+
+  # ── Custom build scripts ─────────────────────────────────────────────────────
   - type: script
     scripts:
       - raptor-hud.sh
@@ -91,10 +147,13 @@ modules:
       - raptor-gaming.sh
       - raptor-ram-optimizer.sh
       - raptor-update.sh
+
+  # ── Systemd units ─────────────────────────────────────────────────────────────
   - type: systemd
     system:
       enabled:
         - raptor-firstboot.service
+        - raptor-ensure-services.service
         - raptor-gpu-profile.service
         - raptor-powerprofile.service
         - raptor-cpugovernor.service
