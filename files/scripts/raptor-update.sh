@@ -1,274 +1,299 @@
 #!/bin/bash
-set -oue pipefail
+# raptor-update.sh
+# BlueBuild script module — installs the Raptor OS Update Manager.
+# Writes the Python GUI app, launcher wrapper, icon, and .desktop entry.
 
-# =============================================================================
-# Raptor OS — Update Manager
-# Windows-style GUI: check for updates, show changelog, update + reboot
-# =============================================================================
+set -euo pipefail
 
-cat << 'PYEOF' > /usr/bin/raptor-update
+# ── Python GUI application ────────────────────────────────────────────────────
+cat > /usr/bin/raptor-update << 'PYEOF'
 #!/usr/bin/env python3
-"""Raptor OS Update Manager"""
+"""Raptor OS Update Manager — GTK4/libadwaita GUI for rpm-ostree updates."""
 
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw, GLib
-import subprocess
-import threading
-import sys
+
 import os
 import re
+import sys
+import threading
+import subprocess
 import urllib.request
 
-CHANGELOG_URL = "https://raw.githubusercontent.com/Cerberus9-dev/Raptor-OS/main/changelog.md"
+# ── Constants ────────────────────────────────────────────────────────────────
+
+APP_ID       = "io.github.cerberus9dev.RaptorUpdate"
+CHANGELOG_URL = (
+    "https://raw.githubusercontent.com/Cerberus9-dev/Raptor-OS/main/CHANGELOG.md"
+)
+ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[mGKHF]|\][^\x07]*\x07)|\r")
 
 
-def fetch_changelog():
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _strip_ansi(text: str) -> str:
+    return ANSI_RE.sub("", text)
+
+
+def fetch_changelog() -> str:
     try:
-        with urllib.request.urlopen(CHANGELOG_URL, timeout=8) as r:
-            return r.read().decode("utf-8")
-    except Exception as e:
-        return f"Could not load changelog: {e}"
+        with urllib.request.urlopen(CHANGELOG_URL, timeout=10) as resp:
+            return resp.read().decode("utf-8")
+    except Exception as exc:
+        return f"(Could not load changelog: {exc})"
 
 
-def check_for_updates():
+def check_for_updates() -> tuple[bool, str]:
+    """Return (has_update, human_readable_message)."""
     try:
         result = subprocess.run(
             ["rpm-ostree", "update", "--check"],
-            capture_output=True, text=True, timeout=60
+            capture_output=True,
+            text=True,
+            timeout=90,
         )
-        output = result.stdout + result.stderr
-        if result.returncode == 77 or "No updates available" in output:
+        combined = result.stdout + result.stderr
+        # rc=77 means "nothing to update" for rpm-ostree
+        if result.returncode == 77 or "No updates available" in combined:
             return False, "Your system is up to date."
-        elif "AvailableUpdate" in output or result.returncode == 0:
+        if "AvailableUpdate" in combined or result.returncode == 0:
             return True, "A system update is available."
-        else:
-            return False, "Could not determine update status."
+        return False, "Could not determine update status."
     except subprocess.TimeoutExpired:
-        return False, "Update check timed out."
+        return False, "Update check timed out — try again later."
     except FileNotFoundError:
-        return False, "rpm-ostree not found."
-    except Exception as e:
-        return False, f"Error: {e}"
+        return False, "rpm-ostree not found on this system."
+    except Exception as exc:
+        return False, f"Unexpected error: {exc}"
 
 
-ANSI_ESCAPE = re.compile(
-    r"\x1b\[[0-9;]*[mGKHF]|"
-    r"\x1b\][^\x07]*\x07|"
-    r"\r"
-)
-
-
-class RaptorUpdateApp(Adw.Application):
-    def __init__(self):
-        super().__init__(application_id="io.github.cerberus9dev.RaptorUpdate")
-        self.connect("activate", self.on_activate)
-
-    def on_activate(self, app):
-        self.win = RaptorUpdateWindow(application=app)
-        self.win.present()
-
+# ── Main window ──────────────────────────────────────────────────────────────
 
 class RaptorUpdateWindow(Adw.ApplicationWindow):
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_title("Raptor Update Manager")
-        self.set_default_size(700, 600)
-        self._update_running = False
-        self._has_update = False
+        self.set_default_size(720, 640)
+        self.set_resizable(True)
+
+        self._update_running  = False
+        self._has_update      = False
         self._reboot_cancelled = False
+
         self._build_ui()
-        threading.Thread(target=self._do_check, daemon=True).start()
+        self._start_check()
         threading.Thread(target=self._load_changelog, daemon=True).start()
+
+    # ── UI construction ──────────────────────────────────────────────────────
 
     def _build_ui(self):
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_content(root)
-        root.append(Adw.HeaderBar())
 
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        content.set_margin_top(24)
-        content.set_margin_bottom(24)
-        content.set_margin_start(24)
-        content.set_margin_end(24)
-        root.append(content)
+        # Header bar
+        header = Adw.HeaderBar()
+        root.append(header)
 
-        # ── Banner ─────────────────────────────────────────────────────────────
-        banner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        banner.set_halign(Gtk.Align.CENTER)
+        # Scrollable content area
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+        root.append(scroll)
 
-        self.banner_icon = Gtk.Image.new_from_icon_name(
-            "software-update-available-symbolic")
-        self.banner_icon.set_pixel_size(64)
-        self.banner_icon.add_css_class("accent")
-        banner.append(self.banner_icon)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        content.set_margin_top(28)
+        content.set_margin_bottom(28)
+        content.set_margin_start(28)
+        content.set_margin_end(28)
+        scroll.set_child(content)
 
-        title = Gtk.Label(label="<b>Raptor Update Manager</b>")
-        title.set_use_markup(True)
-        title.add_css_class("title-1")
-        banner.append(title)
+        # ── Hero banner ──────────────────────────────────────────────────────
+        hero = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        hero.set_halign(Gtk.Align.CENTER)
 
-        self.subtitle = Gtk.Label(label="Checking for updates…")
-        self.subtitle.add_css_class("dim-label")
-        banner.append(self.subtitle)
-        content.append(banner)
+        self._hero_icon = Gtk.Image.new_from_icon_name(
+            "software-update-available-symbolic"
+        )
+        self._hero_icon.set_pixel_size(72)
+        self._hero_icon.add_css_class("accent")
+        hero.append(self._hero_icon)
 
-        # ── Status card ────────────────────────────────────────────────────────
-        group = Adw.PreferencesGroup()
-        content.append(group)
+        title_lbl = Gtk.Label(label="<b>Raptor Update Manager</b>")
+        title_lbl.set_use_markup(True)
+        title_lbl.add_css_class("title-1")
+        hero.append(title_lbl)
 
-        self.status_row = Adw.ActionRow()
-        self.status_row.set_title("System Status")
-        self.status_row.set_subtitle("Checking…")
+        self._subtitle_lbl = Gtk.Label(label="Checking for updates…")
+        self._subtitle_lbl.add_css_class("dim-label")
+        hero.append(self._subtitle_lbl)
 
-        self.status_icon = Gtk.Image.new_from_icon_name(
-            "emblem-synchronizing-symbolic")
-        self.status_icon.add_css_class("accent")
-        self.status_row.add_prefix(self.status_icon)
+        content.append(hero)
 
-        self.check_spinner = Gtk.Spinner()
-        self.check_spinner.start()
-        self.status_row.add_suffix(self.check_spinner)
-        group.add(self.status_row)
+        # ── Status card ──────────────────────────────────────────────────────
+        status_group = Adw.PreferencesGroup(title="System Status")
+        content.append(status_group)
 
-        # ── Changelog ──────────────────────────────────────────────────────────
+        self._status_row = Adw.ActionRow()
+        self._status_row.set_title("Update Status")
+        self._status_row.set_subtitle("Checking…")
+
+        self._status_icon = Gtk.Image.new_from_icon_name(
+            "emblem-synchronizing-symbolic"
+        )
+        self._status_icon.add_css_class("accent")
+        self._status_row.add_prefix(self._status_icon)
+
+        self._check_spinner = Gtk.Spinner()
+        self._check_spinner.start()
+        self._status_row.add_suffix(self._check_spinner)
+
+        status_group.add(self._status_row)
+
+        # ── Changelog ────────────────────────────────────────────────────────
         cl_group = Adw.PreferencesGroup(title="Changelog")
         cl_group.set_vexpand(True)
         content.append(cl_group)
 
-        cl_frame = Gtk.Frame()
-        cl_frame.set_vexpand(True)
-
         cl_scroll = Gtk.ScrolledWindow()
         cl_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        cl_scroll.set_min_content_height(160)
+        cl_scroll.set_min_content_height(180)
         cl_scroll.set_vexpand(True)
 
-        self.cl_view = Gtk.TextView()
-        self.cl_view.set_editable(False)
-        self.cl_view.set_cursor_visible(False)
-        self.cl_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.cl_view.set_margin_top(10)
-        self.cl_view.set_margin_bottom(10)
-        self.cl_view.set_margin_start(10)
-        self.cl_view.set_margin_end(10)
-        self.cl_buffer = self.cl_view.get_buffer()
-        self.cl_buffer.set_text("Loading changelog…")
-        cl_scroll.set_child(self.cl_view)
+        self._cl_view = Gtk.TextView()
+        self._cl_view.set_editable(False)
+        self._cl_view.set_cursor_visible(False)
+        self._cl_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self._cl_view.set_margin_top(10)
+        self._cl_view.set_margin_bottom(10)
+        self._cl_view.set_margin_start(12)
+        self._cl_view.set_margin_end(12)
+        self._cl_buffer = self._cl_view.get_buffer()
+        self._cl_buffer.set_text("Loading changelog…")
+
+        cl_frame = Gtk.Frame()
+        cl_frame.set_vexpand(True)
         cl_frame.set_child(cl_scroll)
+        cl_scroll.set_child(self._cl_view)
         cl_group.add(cl_frame)
 
-        # ── Log output ─────────────────────────────────────────────────────────
-        self.log_group = Adw.PreferencesGroup(title="Update Log")
-        self.log_group.set_visible(False)
-        self.log_group.set_vexpand(True)
-        content.append(self.log_group)
-
-        log_frame = Gtk.Frame()
-        log_frame.set_vexpand(True)
+        # ── Update log (hidden until an update runs) ──────────────────────────
+        self._log_group = Adw.PreferencesGroup(title="Update Log")
+        self._log_group.set_visible(False)
+        self._log_group.set_vexpand(True)
+        content.append(self._log_group)
 
         log_scroll = Gtk.ScrolledWindow()
         log_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        log_scroll.set_min_content_height(160)
+        log_scroll.set_min_content_height(180)
         log_scroll.set_vexpand(True)
         self._log_scroll = log_scroll
 
-        self.log_view = Gtk.TextView()
-        self.log_view.set_editable(False)
-        self.log_view.set_cursor_visible(False)
-        self.log_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.log_view.set_margin_top(8)
-        self.log_view.set_margin_bottom(8)
-        self.log_view.set_margin_start(8)
-        self.log_view.set_margin_end(8)
-        self.log_view.add_css_class("monospace")
-        self.log_buffer = self.log_view.get_buffer()
+        self._log_view = Gtk.TextView()
+        self._log_view.set_editable(False)
+        self._log_view.set_cursor_visible(False)
+        self._log_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self._log_view.set_margin_top(8)
+        self._log_view.set_margin_bottom(8)
+        self._log_view.set_margin_start(8)
+        self._log_view.set_margin_end(8)
+        self._log_view.add_css_class("monospace")
+        self._log_buffer = self._log_view.get_buffer()
 
-        log_scroll.set_child(self.log_view)
+        log_frame = Gtk.Frame()
+        log_frame.set_vexpand(True)
         log_frame.set_child(log_scroll)
-        self.log_group.add(log_frame)
+        log_scroll.set_child(self._log_view)
+        self._log_group.add(log_frame)
 
-        # ── Buttons ────────────────────────────────────────────────────────────
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        btn_box.set_halign(Gtk.Align.CENTER)
-        content.append(btn_box)
+        # ── Action buttons ────────────────────────────────────────────────────
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_row.set_halign(Gtk.Align.CENTER)
+        content.append(btn_row)
 
-        self.check_btn = Gtk.Button(label="Check Again")
-        self.check_btn.add_css_class("pill")
-        self.check_btn.set_sensitive(False)
-        self.check_btn.connect("clicked", self.on_check_clicked)
-        btn_box.append(self.check_btn)
+        self._check_btn = Gtk.Button(label="Check Again")
+        self._check_btn.add_css_class("pill")
+        self._check_btn.set_sensitive(False)
+        self._check_btn.connect("clicked", self._on_check_clicked)
+        btn_row.append(self._check_btn)
 
-        self.update_btn = Gtk.Button(label="Update & Reboot")
-        self.update_btn.add_css_class("suggested-action")
-        self.update_btn.add_css_class("pill")
-        self.update_btn.set_sensitive(False)
-        self.update_btn.connect("clicked", self.on_update_clicked)
-        btn_box.append(self.update_btn)
+        self._update_btn = Gtk.Button(label="Update & Reboot")
+        self._update_btn.add_css_class("suggested-action")
+        self._update_btn.add_css_class("pill")
+        self._update_btn.set_sensitive(False)
+        self._update_btn.connect("clicked", self._on_update_clicked)
+        btn_row.append(self._update_btn)
 
-        self.cancel_reboot_btn = Gtk.Button(label="Cancel Reboot")
-        self.cancel_reboot_btn.add_css_class("pill")
-        self.cancel_reboot_btn.set_visible(False)
-        self.cancel_reboot_btn.connect("clicked", self.on_cancel_reboot)
-        btn_box.append(self.cancel_reboot_btn)
+        self._cancel_reboot_btn = Gtk.Button(label="Cancel Reboot")
+        self._cancel_reboot_btn.add_css_class("pill")
+        self._cancel_reboot_btn.set_visible(False)
+        self._cancel_reboot_btn.connect("clicked", self._on_cancel_reboot_clicked)
+        btn_row.append(self._cancel_reboot_btn)
 
-        self.update_spinner = Gtk.Spinner()
-        btn_box.append(self.update_spinner)
+        self._update_spinner = Gtk.Spinner()
+        btn_row.append(self._update_spinner)
 
-    # ── Changelog ──────────────────────────────────────────────────────────────
+    # ── Changelog ────────────────────────────────────────────────────────────
 
     def _load_changelog(self):
         text = fetch_changelog()
-        GLib.idle_add(self.cl_buffer.set_text, text)
+        GLib.idle_add(self._cl_buffer.set_text, text)
 
-    # ── Update check ──────────────────────────────────────────────────────────
+    # ── Update check ─────────────────────────────────────────────────────────
 
-    def on_check_clicked(self, btn):
-        self.check_btn.set_sensitive(False)
-        self.update_btn.set_sensitive(False)
-        self.check_spinner.start()
+    def _start_check(self):
+        self._check_spinner.start()
         self._set_status("Checking…", "emblem-synchronizing-symbolic", "accent")
-        self.subtitle.set_text("Checking for updates…")
         threading.Thread(target=self._do_check, daemon=True).start()
+
+    def _on_check_clicked(self, _btn):
+        self._check_btn.set_sensitive(False)
+        self._update_btn.set_sensitive(False)
+        self._subtitle_lbl.set_text("Checking for updates…")
+        self._start_check()
 
     def _do_check(self):
         has_update, msg = check_for_updates()
         GLib.idle_add(self._on_check_done, has_update, msg)
 
-    def _on_check_done(self, has_update, msg):
+    def _on_check_done(self, has_update: bool, msg: str):
         self._has_update = has_update
-        self.check_spinner.stop()
-        self.check_btn.set_sensitive(True)
+        self._check_spinner.stop()
+        self._check_btn.set_sensitive(True)
 
         if has_update:
             self._set_status(msg, "software-update-available-symbolic", "accent")
-            self.subtitle.set_text("An update is ready to install.")
-            self.banner_icon.set_from_icon_name(
-                "software-update-available-symbolic")
-            self.update_btn.set_sensitive(True)
+            self._subtitle_lbl.set_text("An update is ready to install.")
+            self._hero_icon.set_from_icon_name("software-update-available-symbolic")
+            self._update_btn.set_sensitive(True)
         else:
             self._set_status(msg, "emblem-ok-symbolic", "success")
-            self.subtitle.set_text("Your Raptor OS is up to date.")
-            self.banner_icon.set_from_icon_name("emblem-ok-symbolic")
-            self.update_btn.set_sensitive(False)
+            self._subtitle_lbl.set_text("Raptor OS is up to date.")
+            self._hero_icon.set_from_icon_name("emblem-ok-symbolic")
+            self._update_btn.set_sensitive(False)
 
-    def _set_status(self, subtitle, icon_name, css):
-        self.status_row.set_subtitle(subtitle)
-        self.status_icon.set_from_icon_name(icon_name)
-        for c in ["success", "warning", "error", "accent"]:
-            self.status_icon.remove_css_class(c)
-        self.status_icon.add_css_class(css)
+    def _set_status(self, subtitle: str, icon_name: str, css_class: str):
+        self._status_row.set_subtitle(subtitle)
+        self._status_icon.set_from_icon_name(icon_name)
+        for cls in ("success", "warning", "error", "accent"):
+            self._status_icon.remove_css_class(cls)
+        self._status_icon.add_css_class(css_class)
 
-    # ── Update + reboot ───────────────────────────────────────────────────────
+    # ── Confirm & run update ──────────────────────────────────────────────────
 
-    def on_update_clicked(self, btn):
+    def _on_update_clicked(self, _btn):
         if self._update_running:
             return
         dialog = Adw.MessageDialog(
             transient_for=self,
             heading="Update & Reboot?",
-            body="Raptor OS will update and reboot when complete. Save any open work first.",
+            body=(
+                "Raptor OS will download and apply the latest update, "
+                "then reboot automatically.\n\n"
+                "Save any open work before continuing."
+            ),
         )
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("go", "Update & Reboot")
@@ -276,31 +301,35 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         dialog.connect("response", self._on_confirm_response)
         dialog.present()
 
-    def _on_confirm_response(self, dialog, response):
+    def _on_confirm_response(self, _dialog, response: str):
         if response != "go":
             return
-        self._update_running = True
+        self._update_running   = True
         self._reboot_cancelled = False
-        self.update_btn.set_sensitive(False)
-        self.check_btn.set_sensitive(False)
-        self.update_spinner.start()
-        self.log_group.set_visible(True)
-        self.log_buffer.set_text("")
+        self._update_btn.set_sensitive(False)
+        self._check_btn.set_sensitive(False)
+        self._update_spinner.start()
+        self._log_group.set_visible(True)
+        self._log_buffer.set_text("")
         self._set_status(
             "Updating — do not close this window…",
-            "emblem-synchronizing-symbolic", "accent")
-        self.subtitle.set_text("Installing update…")
+            "emblem-synchronizing-symbolic",
+            "accent",
+        )
+        self._subtitle_lbl.set_text("Installing update…")
         threading.Thread(target=self._run_update, daemon=True).start()
 
-    def _append_log(self, text):
-        end = self.log_buffer.get_end_iter()
-        self.log_buffer.insert(end, text)
+    # ── Live log output ───────────────────────────────────────────────────────
+
+    def _append_log(self, text: str):
+        end_iter = self._log_buffer.get_end_iter()
+        self._log_buffer.insert(end_iter, text)
         adj = self._log_scroll.get_vadjustment()
         adj.set_value(adj.get_upper() - adj.get_page_size())
 
     def _run_update(self):
         try:
-            process = subprocess.Popen(
+            proc = subprocess.Popen(
                 ["script", "-q", "-c", "rpm-ostree update", "/dev/null"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -308,74 +337,97 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
                 bufsize=1,
                 env={**os.environ, "TERM": "xterm-256color"},
             )
-            for line in process.stdout:
-                clean = ANSI_ESCAPE.sub("", line)
+            for line in proc.stdout:
+                clean = _strip_ansi(line)
                 if clean:
                     GLib.idle_add(self._append_log, clean)
-            process.stdout.close()
-            process.wait()
-            GLib.idle_add(self._on_update_success)
+            proc.stdout.close()
+            returncode = proc.wait()
+            if returncode == 0:
+                GLib.idle_add(self._on_update_success)
+            else:
+                GLib.idle_add(self._on_update_error, returncode)
         except FileNotFoundError:
-            GLib.idle_add(self._append_log,
-                          "\nERROR: rpm-ostree not found.\n")
+            GLib.idle_add(self._append_log, "\nERROR: rpm-ostree not found.\n")
             GLib.idle_add(self._on_update_error, -1)
-        except Exception as e:
-            GLib.idle_add(self._append_log, f"\nERROR: {e}\n")
+        except Exception as exc:
+            GLib.idle_add(self._append_log, f"\nERROR: {exc}\n")
             GLib.idle_add(self._on_update_error, -1)
+
+    # ── Post-update / reboot countdown ───────────────────────────────────────
 
     def _on_update_success(self):
         self._update_running = False
-        self.update_spinner.stop()
+        self._update_spinner.stop()
         self._append_log("\n✓ Update complete. Rebooting in 15 seconds…\n")
         self._set_status(
             "Update complete! Rebooting in 15 seconds…",
-            "emblem-ok-symbolic", "success")
-        self.subtitle.set_text("Update installed successfully.")
-        self.cancel_reboot_btn.set_visible(True)
-        self._countdown(15)
+            "emblem-ok-symbolic",
+            "success",
+        )
+        self._subtitle_lbl.set_text("Update installed successfully.")
+        self._cancel_reboot_btn.set_visible(True)
+        self._tick_countdown(15)
 
-    def _countdown(self, secs):
-        if getattr(self, "_reboot_cancelled", False):
+    def _tick_countdown(self, remaining: int):
+        if self._reboot_cancelled:
             return
-        if secs <= 0:
+        if remaining <= 0:
             try:
                 subprocess.Popen(["systemctl", "reboot"])
-            except Exception as e:
-                GLib.idle_add(self._append_log, f"\nERROR rebooting: {e}\n")
+            except Exception as exc:
+                GLib.idle_add(self._append_log, f"\nERROR triggering reboot: {exc}\n")
             return
+        suffix = "s" if remaining != 1 else ""
         self._set_status(
-            f"Rebooting in {secs} second{'s' if secs != 1 else ''}… "
-            f"(click Cancel Reboot to stop)",
-            "emblem-ok-symbolic", "success")
-        GLib.timeout_add_seconds(1, lambda: self._countdown(secs - 1) or False)
+            f"Rebooting in {remaining} second{suffix}… (click Cancel Reboot to stop)",
+            "emblem-ok-symbolic",
+            "success",
+        )
+        GLib.timeout_add_seconds(1, lambda: self._tick_countdown(remaining - 1) or False)
 
-    def on_cancel_reboot(self, btn):
+    def _on_cancel_reboot_clicked(self, _btn):
         self._reboot_cancelled = True
-        self.cancel_reboot_btn.set_visible(False)
+        self._cancel_reboot_btn.set_visible(False)
+        self._check_btn.set_sensitive(True)
         self._set_status(
             "Reboot cancelled — reboot manually when ready.",
-            "emblem-ok-symbolic", "success")
-        self.check_btn.set_sensitive(True)
+            "emblem-ok-symbolic",
+            "success",
+        )
 
-    def _on_update_error(self, code):
+    def _on_update_error(self, code: int):
         self._update_running = False
-        self.update_spinner.stop()
-        self.update_btn.set_sensitive(True)
-        self.check_btn.set_sensitive(True)
+        self._update_spinner.stop()
+        self._update_btn.set_sensitive(True)
+        self._check_btn.set_sensitive(True)
         self._set_status(
-            f"Update failed (exit code {code}). Check the log.",
-            "dialog-error-symbolic", "error")
-        self.subtitle.set_text("Something went wrong.")
+            f"Update failed (exit code {code}). See the log for details.",
+            "dialog-error-symbolic",
+            "error",
+        )
+        self._subtitle_lbl.set_text("Something went wrong.")
+
+
+# ── Application ───────────────────────────────────────────────────────────────
+
+class RaptorUpdateApp(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID)
+        self.connect("activate", self._on_activate)
+
+    def _on_activate(self, app):
+        win = RaptorUpdateWindow(application=app)
+        win.present()
 
 
 if __name__ == "__main__":
-    app = RaptorUpdateApp()
-    sys.exit(app.run(sys.argv))
+    sys.exit(RaptorUpdateApp().run(sys.argv))
 PYEOF
 chmod +x /usr/bin/raptor-update
 
-# ── Wrapper launcher ───────────────────────────────────────────────────────────
-cat << 'EOF' > /usr/bin/raptor-update-launcher
+# ── Launcher wrapper (fixes portal / D-Bus issues on some desktops) ───────────
+cat > /usr/bin/raptor-update-launcher << 'EOF'
 #!/bin/bash
 export ADW_DISABLE_PORTAL=1
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
@@ -383,42 +435,51 @@ exec /usr/bin/raptor-update "$@"
 EOF
 chmod +x /usr/bin/raptor-update-launcher
 
-# ── Custom icon ────────────────────────────────────────────────────────────────
-mkdir -p /usr/share/icons/hicolor/scalable/apps
-cat << 'EOF' > /usr/share/icons/hicolor/scalable/apps/raptor-update.svg
+# ── App icon (SVG) ────────────────────────────────────────────────────────────
+ICON_DIR="/usr/share/icons/hicolor/scalable/apps"
+mkdir -p "$ICON_DIR"
+
+cat > "$ICON_DIR/raptor-update.svg" << 'EOF'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <circle cx="32" cy="32" r="30" fill="#1a1a2e" stroke="#33ff33" stroke-width="2"/>
-  <line x1="32" y1="14" x2="32" y2="42" stroke="#33ff33" stroke-width="5" stroke-linecap="round"/>
-  <polyline points="20,30 32,44 44,30" stroke="#33ff33" stroke-width="5"
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="30" fill="#1a1a2e" stroke="#4a9eff" stroke-width="2"/>
+  <!-- Down-arrow shaft -->
+  <line x1="32" y1="12" x2="32" y2="40"
+        stroke="#4a9eff" stroke-width="5" stroke-linecap="round"/>
+  <!-- Down-arrow head -->
+  <polyline points="20,28 32,42 44,28"
+            stroke="#4a9eff" stroke-width="5"
             stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <rect x="18" y="48" width="28" height="4" rx="2" fill="#33ff33"/>
+  <!-- Base bar -->
+  <rect x="18" y="48" width="28" height="4" rx="2" fill="#4a9eff"/>
 </svg>
 EOF
 
-mkdir -p /usr/share/icons/hicolor/48x48/apps \
-         /usr/share/icons/hicolor/256x256/apps
-ln -sf /usr/share/icons/hicolor/scalable/apps/raptor-update.svg \
-       /usr/share/icons/hicolor/48x48/apps/raptor-update.svg
-ln -sf /usr/share/icons/hicolor/scalable/apps/raptor-update.svg \
-       /usr/share/icons/hicolor/256x256/apps/raptor-update.svg
+# Symlink to raster sizes (icon themes fall back to SVG automatically)
+for size in 48x48 128x128 256x256; do
+    mkdir -p "/usr/share/icons/hicolor/${size}/apps"
+    ln -sf "$ICON_DIR/raptor-update.svg" \
+           "/usr/share/icons/hicolor/${size}/apps/raptor-update.svg"
+done
+
 gtk-update-icon-cache -f /usr/share/icons/hicolor/ 2>/dev/null || true
 
-# ── .desktop entry ─────────────────────────────────────────────────────────────
+# ── .desktop entry ────────────────────────────────────────────────────────────
 mkdir -p /usr/share/applications
-cat << 'EOF' > /usr/share/applications/raptor-update.desktop
+cat > /usr/share/applications/raptor-update.desktop << 'EOF'
 [Desktop Entry]
 Version=1.1
 Type=Application
 Name=Raptor Update Manager
-GenericName=System Update Manager
-Comment=Check and install Raptor OS system updates
+GenericName=System Updater
+Comment=Check for and install Raptor OS system updates
 Exec=/usr/bin/raptor-update-launcher
 Icon=raptor-update
 Terminal=false
-Categories=X-RaptorOS;
+Categories=System;Settings;X-RaptorOS;
 Keywords=update;upgrade;system;raptor;ostree;bazzite;
 StartupNotify=true
 X-KDE-SubstituteUID=false
 EOF
 
-echo "UPDATE_MANAGER_READY"
+echo "raptor-update: installation complete."
