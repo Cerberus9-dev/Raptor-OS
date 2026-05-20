@@ -6,6 +6,80 @@
 - Custom Raptor OS logo
 - KDE theme fix (ongoing)
 
+## [v2.4] - 2026-05-20 (Full Script Overhaul)
+
+### Fixed
+- **Critical:** `raptor-firstboot.service` targeted `graphical.target` (system-level) instead
+  of `graphical-session.target` (per-user session) — GUI dialog would fail to display on
+  desktops where the session bus isn't available at the system target
+- **Critical:** `raptor-firstboot.service` `ExecStart` path pointed to `/usr/local/bin/` —
+  corrected to `/usr/bin/` to match the path `recipe.yml` installs the script to
+- **Critical:** `raptor-firstboot.service` had a redundant `ExecStartPost=touch` writing the
+  stamp file independently of the script — caused a race where the stamp could be written
+  even if the browser dialog was cancelled, permanently suppressing the dialog; stamp
+  management is now owned exclusively by `raptor-browser-choice.sh`
+- **Critical:** `raptor-ensure-services.service` only guarded `raptor-gpu-profile.service` —
+  `raptor-powerprofile.service` and `raptor-cpugovernor.service` were silently never
+  re-enabled if accidentally disabled
+- **Critical:** `raptor-browser-choice.sh` had no prerequisite check for `zenity` — on
+  minimal or headless boots the script would crash with an unhelpful "command not found"
+  rather than logging and exiting cleanly
+- **Critical:** `raptor-browser-choice.sh` "Decide Later" / dialog close wrote the stamp file,
+  permanently suppressing the browser choice dialog even though the user never made a
+  selection — cancellation now exits without writing the stamp so the dialog re-appears
+  next session
+- **Critical:** `raptor-update.sh` Python GUI — `_run_update` always called `_on_update_success`
+  regardless of `rpm-ostree` exit code; a failed update would incorrectly trigger the
+  reboot countdown — now checks `returncode` and routes to `_on_update_error` on non-zero
+- `raptor-browser-choice.sh` stamp file location moved from `/var/lib/` root to
+  `/var/lib/raptor/` — consolidates all Raptor OS runtime state under one directory
+- `raptor-ensure-services.service` did not start newly-enabled units immediately — `--now`
+  added so units come up in the current boot rather than waiting for the next reboot
+- `raptor-update.sh` icon colour changed from `#33ff33` (harsh neon green) to `#4a9eff`
+  (blue) to align with standard GNOME/KDE accent colour conventions and reduce visual clash
+
+### Added
+- `btop` added to RPM packages as a modern, full-featured alternative to `htop`
+- `raptor-ensure-services.service` now included in the `files` module of `recipe.yml`
+  and added to the `systemd` enabled list — it was referenced but never actually deployed
+- `raptor-firstboot.service` now sets `SuccessExitStatus=0 1` so a headless boot or
+  user cancellation does not mark the unit as failed in `journalctl`
+- `raptor-browser-choice.sh` shows a user-facing error dialog if the Brave Flatpak
+  installation fails, with Firefox kept as the fallback default
+- `raptor-browser-choice.sh` dialog enriched with a Notes column describing each browser
+  ("pre-installed" / "will be downloaded from Flathub") to inform the user before choosing
+- Per-unit `logger` calls in `raptor-ensure-services.service` — each service enable/fail
+  is individually reported to the journal under the `raptor-ensure-services` identifier
+- `build.yml` now triggers on pull requests to `main` so CI validates changes before merge
+- `build.yml` weekly scheduled rebuild (Sundays 04:00 UTC) to automatically pick up
+  upstream Bazzite base image updates
+- `build.yml` `concurrency` block cancels stale in-progress runs on new pushes
+- `build.yml` ISO artifact upload now includes the `.sha256` checksum file alongside
+  the ISO for integrity verification
+- `Containerfile` now includes full OCI standard `LABEL` block (title, description,
+  URL, source, vendor, license)
+- `raptor-update.sh` icon symlinks now include `128x128` in addition to `48x48` and
+  `256x256` for better icon theme coverage
+- `raptor-update.sh` `.desktop` entry `Categories` field expanded with `System;Settings;`
+  for correct placement in KDE and GNOME app menus
+
+### Changed
+- All scripts overhauled with `set -euo pipefail` and structured `logger` logging —
+  errors now surface in `journalctl` with identifiable tags rather than silently swallowing failures
+- `recipe.yml` `image-version` changed from `latest` to `stable` for safer, reproducible builds
+- `recipe.yml` RPM package list reorganised into labelled sections (Browser, System Utilities,
+  KDE Extras, Power Management, Multimedia, Creative, Gaming, Development, etc.) for readability
+- `raptor-ensure-services.service` `ExecStart` rewritten from a single hardcoded `systemctl`
+  call to a loop over all three Raptor services with existence checks before enabling
+- `raptor-update.sh` Python GUI refactored — all methods renamed to `_private` convention,
+  `_strip_ansi()` extracted as a named top-level function, `check_for_updates()` and
+  `fetch_changelog()` separated as standalone testable functions
+- `build.yml` `registry_token` corrected from deprecated `${{ github.token }}` shorthand
+  to `${{ secrets.GITHUB_TOKEN }}`
+- `build.yml` ISO job now skips on pull request events — ISOs are only built on merges to main
+- `build.yml` artifact `retention-days` extended from 5 to 14 days
+- `build.yml` disk cleanup step added to the ISO job (was previously only in the build job)
+
 ## [v2.3] - 2026-05-08 (Build System & App Fixes)
 
 ### Fixed
