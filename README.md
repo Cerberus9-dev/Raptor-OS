@@ -4,17 +4,20 @@ A custom Bazzite-based Linux distribution with a neon green KDE theme, gaming to
 > ⚠️ **HEAVY W.I.P — Feedback is appreciated!**
 > ℹ️ **This is NOT a live OS.** It requires a separate drive, replacing your current OS, or dual booting. For dual booting, make sure you have 40-50GB available. If you don't have space or time, it can be run in a VM for testing first.
 
+## System Requirements
+
+- **CPU:** 64-bit x86_64 processor (Intel or AMD)
+- **RAM:** 8 GB minimum, 16 GB recommended
+- **Storage:** 40–50 GB free (SSD recommended)
+- **GPU:** AMD, NVIDIA, or Intel — all supported with automatic detection
+- **Boot mode:** UEFI required (Legacy BIOS is not supported)
+
 ## Installation
 Download the latest ISO from [Internet Archive](https://archive.org/details/raptor-os_202605), then flash it to a USB drive using one of the following:
 
 - [Rufus](https://rufus.ie/en/) — when prompted, select **DD image mode** and **GPT** partition scheme
 - [Ventoy](https://www.ventoy.net)
 - [Fedora Media Writer](https://github.com/FedoraQt/MediaWriter) — guaranteed to work if others fail
-
-## Rebasing to Raptor OS
-> If you already have Raptor OS installed, just run the **Raptor Update Manager** from the app menu, or run `ujust update` in a terminal and reboot to get the latest version.
-
-If you already have Bazzite installed and want to switch without reinstalling:
 
 **Step 1:**
 ## Rebasing to Raptor OS
@@ -79,4 +82,4 @@ systemctl reboot
 - [Bazzite](https://bazzite.gg) — base image
 
 ## Changelog
-See [CHANGELOG.md](CHANGELOG.md) for the full changelog.
+See [changelog.md](https://github.com/Cerberus9-dev/Raptor-OS/blob/main/changelog.md)
