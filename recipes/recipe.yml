@@ -110,7 +110,6 @@ modules:
 
       # Theming — Raptor HUD
       - cairo-dock
-      - cairo-dock-plugins
       - kvantum
       - kvantum-qt5
       - papirus-icon-theme
