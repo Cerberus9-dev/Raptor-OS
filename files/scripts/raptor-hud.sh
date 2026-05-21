@@ -5,8 +5,8 @@ set -e
 # Raptor HUD — F-22 Themed KDE Plasma Shell
 # • RaptorOS color scheme (gunmetal + electric blue + amber)
 # • Slim Plasma top bar (system tray only)
-# • Cairo-Dock bottom floating dock
-# • Monochrome military stencil icon theme
+# • Papirus-Dark icon theme
+# • Aurorae window decoration
 # • Aurorae window decoration
 # • Applied at first login via systemd user unit
 # =============================================================================
@@ -22,11 +22,7 @@ set -e
 # Text:       #c8d6e8  (cool grey-white)
 # Dim text:   #5a6a7e  (muted)
 
-# ── Cairo-Dock config ─────────────────────────────────────────────────────────
-# cairo-dock is installed via rpm-ostree in recipe.yml.
-# This script ships its config + theme.
-
-mkdir -p /usr/lib/raptor/hud/cairo-dock
+mkdir -p /usr/lib/raptor/hud
 
 # ── RaptorOS KDE Color Scheme ─────────────────────────────────────────────────
 # Installed system-wide; user firstboot script symlinks it as active scheme.
@@ -275,192 +271,55 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
 </svg>
 SVGEOF
 
-# ── Monochrome Military Icon Theme ────────────────────────────────────────────
-# Ships an index.theme that inherits Papirus-Dark (sharp, flat icons)
-# and overrides the folder/app colors to monochrome via a colorize hack.
-# Papirus-Dark must be installed (added to recipe.yml).
-mkdir -p /usr/share/icons/RaptorOS-Icons/apps/scalable
-mkdir -p /usr/share/icons/RaptorOS-Icons/places/scalable
+# ── RaptorOS App Category ─────────────────────────────────────────────────────
+# Creates an "Raptor OS" category in the KDE app launcher.
+# Apps belonging to this category must include Categories=X-RaptorOS; in their
+# .desktop files (raptor-gpu-profile.sh, raptor-cortex.sh, etc.).
 
-cat << 'EOF' > /usr/share/icons/RaptorOS-Icons/index.theme
-[Icon Theme]
-Name=RaptorOS Icons
-Comment=Military monochrome icon theme for Raptor OS
-Inherits=Papirus-Dark,breeze-dark,hicolor
-Directories=apps/scalable,places/scalable
+mkdir -p /usr/share/desktop-directories
 
-[apps/scalable]
-Size=48
-MinSize=16
-MaxSize=256
-Type=Scalable
-Context=Applications
-
-[places/scalable]
-Size=48
-MinSize=16
-MaxSize=256
-Type=Scalable
-Context=Places
-EOF
-
-# Override folder icon with a sharp gunmetal/blue stencil folder
-cat << 'SVGEOF' > /usr/share/icons/RaptorOS-Icons/places/scalable/folder.svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <defs>
-    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#2a3c52"/>
-      <stop offset="100%" stop-color="#1a2636"/>
-    </linearGradient>
-  </defs>
-  <!-- Folder body — sharp corners, military flat -->
-  <path d="M4 14 L4 40 L44 40 L44 18 L22 18 L18 14 Z" fill="url(#fg)"/>
-  <!-- Tab -->
-  <path d="M4 14 L18 14 L22 18 L4 18 Z" fill="#1e90ff" opacity="0.6"/>
-  <!-- Top edge accent -->
-  <line x1="4" y1="18" x2="44" y2="18" stroke="#1e90ff" stroke-width="1" opacity="0.4"/>
-  <!-- Border -->
-  <path d="M4 14 L4 40 L44 40 L44 18 L22 18 L18 14 Z"
-        fill="none" stroke="#2a3c52" stroke-width="1"/>
-</svg>
-SVGEOF
-
-# ── Cairo-Dock Theme ──────────────────────────────────────────────────────────
-# Installed to /usr/lib/raptor/hud/cairo-dock/ and copied to
-# ~/.config/cairo-dock/ by the firstboot script.
-
-mkdir -p /usr/lib/raptor/hud/cairo-dock/RaptorHUD
-
-# Main dock configuration
-cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/cairo-dock.conf
-[Accessibility]
-auto-hide-margin=1
-reserve-space=false
-show-delay=150
-
-[Background]
-bg-image=
-frame-margin=2
-frame-position=center
-nb-strip=1
-rounded-bottom=false
-rounded-corner-radius=6
-stripe-width=10
-thickness=4
-
-[Icon]
-icon-size=44
-icon-zoom=1.7
-icon-reflect-size=16
-icon-reflect-alpha=0.3
-icon-separation=4
-icon-text-font=JetBrains Mono 9
-icon-text-color=200;214;232;255
-label-bg-color=28;35;48;230
-label-border-color=30;144;255;180
-
-[Position]
-x-gap=0
-y-gap=6
-side=bottom
-visibility=2
-pop-up=false
-max-percent=90
-min-percent=0
-nb-desktops=0
-
-[Taskbar]
-show-applis=true
-show-appli-name=false
-overwrite-indicator=true
-grouped-applis=false
-applis-sort-order=0
-demandsAttentionAnimation=pulse
-active-indicator-below=false
-minimize-on-click=true
-show-desktop-button=false
-add-launcher-from-appli=false
-
-[System]
-config-version=3.4.0
-dynamic-order=false
-keep-above=false
-lock-icons=false
-multi-screen=true
-use-opengl=true
-EOF
-
-# Decoration / appearance config (sets the dark HUD theme)
-cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/RaptorHUD/RaptorHUD.conf
-[Colors]
-bg-color=28;35;48;235
-border-color=30;144;255;120
-line-width=1
-gradient=false
-reflect=true
-reflection-alpha=0.25
-reflection-ratio=0.3
-
-[Labels]
-text-font=JetBrains Mono 9
-text-color=200;214;232;255
-bg-color=13;15;18;210
-border-color=30;144;255;140
-style=0
-margin=4
-
-[Icon]
-icon-size=44
-icon-spacing=6
-icon-zoom=1.65
-zoom-animation=ease-in-out
-hover-animation=pulse
-icon-gravity=0
-indicator-color=30;144;255;255
-EOF
-
-# Default launchers shipped with the dock
-# Cairo-dock launchers live in the dock's config dir as .desktop-style entries
-mkdir -p /usr/lib/raptor/hud/cairo-dock/launchers
-
-cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/00-dolphin.desktop
+cat << 'EOF' > /usr/share/desktop-directories/RaptorOS.directory
 [Desktop Entry]
-Name=Files
-Exec=dolphin
-Icon=system-file-manager
-Type=Application
+Type=Directory
+Name=Raptor OS
+Comment=Raptor OS tools and utilities
+Icon=preferences-system
 EOF
 
-cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/01-konsole.desktop
-[Desktop Entry]
-Name=Terminal
-Exec=konsole
-Icon=utilities-terminal
-Type=Application
+mkdir -p /etc/xdg/menus/applications-merged
+
+cat << 'EOF' > /etc/xdg/menus/applications-merged/raptor-os.menu
+<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
+  "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
+<Menu>
+  <Name>Applications</Name>
+  <Menu>
+    <Name>Raptor OS</Name>
+    <Directory>RaptorOS.directory</Directory>
+    <Include>
+      <Category>X-RaptorOS</Category>
+    </Include>
+  </Menu>
+</Menu>
 EOF
 
-cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/02-firefox.desktop
-[Desktop Entry]
-Name=Firefox
-Exec=firefox
-Icon=firefox
-Type=Application
-EOF
+# ── GPU Profiler app entry ────────────────────────────────────────────────────
+# Launcher for the Raptor GPU profiler. The underlying script/service is
+# managed by raptor-gpu-profile.sh — this .desktop entry surfaces it in the
+# app menu and the RaptorOS category.
 
-cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/03-codium.desktop
-[Desktop Entry]
-Name=VSCodium
-Exec=codium
-Icon=com.vscodium.codium
-Type=Application
-EOF
+mkdir -p /usr/share/applications
 
-cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/04-steam.desktop
+cat << 'EOF' > /usr/share/applications/raptor-gpu-profile.desktop
 [Desktop Entry]
-Name=Steam
-Exec=steam
-Icon=steam
 Type=Application
+Name=Raptor GPU Profiler
+Comment=Monitor and manage GPU performance profiles
+Exec=/usr/bin/raptor-gpu-profile-ui.sh
+Icon=preferences-system-performance
+Terminal=false
+Categories=X-RaptorOS;System;
+Keywords=gpu;profile;performance;raptor;
 EOF
 
 # ── Plasma Top Panel Config ───────────────────────────────────────────────────
@@ -494,37 +353,13 @@ kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 \
 kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 \
     --key theme "__aurorae__svg__RaptorOS"
 
-# Apply icon theme
-kwriteconfig5 --file kdeglobals --group Icons --key Theme RaptorOS-Icons
+# Apply icon theme — Papirus-Dark (clean, ships in Fedora, no custom wrapper)
+kwriteconfig5 --file kdeglobals --group Icons --key Theme Papirus-Dark
 
 # Plasma style — use Breeze Dark as base (closest to our palette without
 # a full plasmoid theme build)
 kwriteconfig5 --file kdeglobals --group KDE --key LookAndFeelPackage \
     org.kde.breezedark.desktop
-
-# ── Cairo-Dock: install config and launch ─────────────────────────────────────
-if command -v cairo-dock &>/dev/null; then
-    # Copy default config if this is a fresh setup
-    if [ ! -f "$HOME/.config/cairo-dock/cairo-dock.conf" ]; then
-        mkdir -p "$HOME/.config/cairo-dock"
-        cp -r /usr/lib/raptor/hud/cairo-dock/. "$HOME/.config/cairo-dock/"
-    fi
-
-    # Register cairo-dock as a KDE autostart entry so it survives reboots
-    mkdir -p "$HOME/.config/autostart"
-    cat > "$HOME/.config/autostart/cairo-dock.desktop" << 'AUTOSTART'
-[Desktop Entry]
-Name=Cairo-Dock
-Comment=Raptor HUD dock
-Exec=cairo-dock -o
-Type=Application
-X-KDE-autostart-phase=2
-X-GNOME-Autostart-enabled=true
-AUTOSTART
-
-    # Start the dock immediately (background, non-blocking)
-    cairo-dock -o &>/dev/null &
-fi
 
 # Reload KWin + Plasma shell
 qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
@@ -709,7 +544,7 @@ Encoding=UTF-8
 [X11 Properties]
 GtkTheme=RaptorOS-GTK
 MetacityTheme=RaptorOS-GTK
-IconTheme=RaptorOS-Icons
+IconTheme=Papirus-Dark
 CursorTheme=Adwaita
 ButtonLayout=close,minimize,maximize:
 
@@ -919,15 +754,18 @@ EOF
 cat << 'EOF'
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ADD TO recipe.yml rpm-ostree install block:
-    - cairo-dock
-    - cairo-dock-plugins
     - kvantum
     - kvantum-qt5
-    - papirus-icon-theme   # base for RaptorOS-Icons inheritance
-    - jetbrains-mono-fonts # Konsole font + dock labels
+    - papirus-icon-theme   # icon theme
+    - jetbrains-mono-fonts # Konsole font
 
-  ADD TO recipe.yml scripts block:
-    - raptor-hud.sh
+  NOTE: raptor-gpu-profile.desktop Exec points to
+    /usr/bin/raptor-gpu-profile-ui.sh — ensure raptor-gpu-profile.sh
+    creates that script, or update the Exec line to match.
+
+  Any Raptor-branded app should include:
+    Categories=X-RaptorOS;
+  in its .desktop file to appear in the Raptor OS app menu category.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
 
