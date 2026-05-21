@@ -6,26 +6,26 @@ image-version: stable
 
 modules:
    # ── Static files ─────────────────────────────────────────────────────────
-  - type: files
+   - type: files
     files:
       # Systemd units
-      - source: system_files/raptor-firstboot.service
+      - source: ../files/system_files/raptor-firstboot.service
         destination: /usr/lib/systemd/system/raptor-firstboot.service
-      - source: system_files/raptor-ensure-services.service
+      - source: ../files/system_files/raptor-ensure-services.service
         destination: /usr/lib/systemd/system/raptor-ensure-services.service
-      - source: system_files/raptor-cpugovernor.service              # ADD THIS
-        destination: /usr/lib/systemd/system/raptor-cpugovernor.service  # ADD THIS
-      - source: system_files/raptor-powerprofile.service            # ADD THIS
-        destination: /usr/lib/systemd/system/raptor-powerprofile.service # ADD THIS
+      - source: ../files/system_files/raptor-cpugovernor.service
+        destination: /usr/lib/systemd/system/raptor-cpugovernor.service
+      - source: ../files/system_files/raptor-powerprofile.service
+        destination: /usr/lib/systemd/system/raptor-powerprofile.service
 
       # Scripts
-      - source: system_files/raptor-browser-choice.sh
+      - source: ../files/system_files/raptor-browser-choice.sh
         destination: /usr/bin/raptor-browser-choice.sh
 
       # zram configuration
-      - source: system_files/zram-generator.conf
+      - source: ../files/system_files/zram-generator.conf
         destination: /etc/systemd/zram-generator.conf
-
+        
   # ── RPM packages ─────────────────────────────────────────────────────────
   - type: rpm-ostree
     install:
