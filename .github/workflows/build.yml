@@ -39,6 +39,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare files
+        run: |
+          mkdir -p /tmp/files
+          cp -r system_files /tmp/files/
+      
       - name: Build and Push Image
         uses: blue-build/github-action@v1
         with:
