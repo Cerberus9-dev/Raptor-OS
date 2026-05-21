@@ -2,10 +2,16 @@
 set -oue pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Raptor OS — Gaming & System Optimization  v2.0
+# Raptor OS — Gaming & System Optimization  v2.1
 # Covers: Lutris, Steam, ulimits, browser hardening (Firefox + Brave),
 #         background process trimmer, ZRAM setup, and I/O scheduler tuning.
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Ensure required directories exist ─────────────────────────────────────────
+mkdir -p /usr/local/bin \
+         /etc/raptor \
+         /usr/lib/raptor \
+         /usr/lib/systemd/system
 
 # ── Lutris ─────────────────────────────────────────────────────────────────────
 mkdir -p /etc/skel/.config/lutris
@@ -52,60 +58,41 @@ cat << 'EOF' > /etc/security/limits.d/raptor-gaming.conf
 EOF
 
 # ── I/O Scheduler tuning ───────────────────────────────────────────────────────
-# Prefer mq-deadline for NVMe (low latency), bfq for rotational (better fairness)
 cat << 'EOF' > /usr/lib/udev/rules.d/60-raptor-iosched.rules
 # Raptor OS I/O scheduler rules
-# NVMe / SSD: mq-deadline for lowest latency
 ACTION=="add|change", KERNEL=="nvme[0-9]*", ATTR{queue/scheduler}="mq-deadline"
 ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="mq-deadline"
-# HDD: bfq gives best interactivity under load
 ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="1", ATTR{queue/scheduler}="bfq"
-# Large queue depth for NVMe
 ACTION=="add|change", KERNEL=="nvme[0-9]*", ATTR{queue/nr_requests}="2048"
-# Read-ahead: larger for HDD, smaller for SSD
 ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="1", ATTR{queue/read_ahead_kb}="2048"
 ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/read_ahead_kb}="256"
 EOF
 udevadm control --reload-rules 2>/dev/null || true
 
-# ── ZRAM swap setup ────────────────────────────────────────────────────────────
-# ZRAM compresses RAM into itself — much faster than disk swap, great for gaming
+# ── ZRAM swap setup (runtime) ──────────────────────────────────────────────────
+# /proc/meminfo is not reliably available at image build time.
+# A oneshot service calculates the correct size and sets up ZRAM on first boot.
+
+cat << 'ZRAMSCRIPT' > /usr/lib/raptor/zram-setup.sh
+#!/bin/bash
+set -euo pipefail
 TOTAL_RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 TOTAL_RAM_GB=$(( TOTAL_RAM_KB / 1024 / 1024 ))
-# ZRAM size = half of physical RAM, capped at 8 GB
 ZRAM_SIZE_GB=$(( TOTAL_RAM_GB / 2 ))
 [ "$ZRAM_SIZE_GB" -lt 1 ] && ZRAM_SIZE_GB=1
 [ "$ZRAM_SIZE_GB" -gt 8 ] && ZRAM_SIZE_GB=8
 
-cat << ZRAMEOF > /etc/systemd/system/raptor-zram.service
-[Unit]
-Description=Raptor OS ZRAM Swap
-After=local-fs.target
-DefaultDependencies=no
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/bin/raptor-zram-setup.sh
-ExecStop=/usr/bin/raptor-zram-teardown.sh
-
-[Install]
-WantedBy=multi-user.target
-ZRAMEOF
-
-cat << ZRAMSCRIPT > /usr/bin/raptor-zram-setup.sh
-#!/bin/bash
 modprobe zram 2>/dev/null || true
 sleep 0.2
-ZDEV=\$(zramctl --find --size ${ZRAM_SIZE_GB}G --algorithm zstd 2>/dev/null || \
-        zramctl --find --size ${ZRAM_SIZE_GB}G --algorithm lz4 2>/dev/null)
-if [ -n "\$ZDEV" ]; then
-    mkswap "\$ZDEV"
-    swapon -p 100 "\$ZDEV"
-    echo "ZRAM swap on \$ZDEV (${ZRAM_SIZE_GB}G)"
+ZDEV=$(zramctl --find --size ${ZRAM_SIZE_GB}G --algorithm zstd 2>/dev/null || \
+       zramctl --find --size ${ZRAM_SIZE_GB}G --algorithm lz4 2>/dev/null)
+if [ -n "$ZDEV" ]; then
+    mkswap "$ZDEV"
+    swapon -p 100 "$ZDEV"
+    echo "ZRAM swap on $ZDEV (${ZRAM_SIZE_GB}G)"
 fi
 ZRAMSCRIPT
-chmod +x /usr/bin/raptor-zram-setup.sh
+chmod +x /usr/lib/raptor/zram-setup.sh
 
 cat << 'TEARDOWN' > /usr/bin/raptor-zram-teardown.sh
 #!/bin/bash
@@ -115,16 +102,28 @@ for dev in $(zramctl --noheadings --output NAME 2>/dev/null); do
 done
 TEARDOWN
 chmod +x /usr/bin/raptor-zram-teardown.sh
-systemctl enable raptor-zram.service 2>/dev/null || true
+
+cat << 'ZRAMSVC' > /usr/lib/systemd/system/raptor-zram.service
+[Unit]
+Description=Raptor OS ZRAM Swap
+After=local-fs.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/raptor/zram-setup.sh
+ExecStop=/usr/bin/raptor-zram-teardown.sh
+
+[Install]
+WantedBy=multi-user.target
+ZRAMSVC
 
 # ── Firefox optimization profile ───────────────────────────────────────────────
-# Writes a user.js to every existing Firefox profile on the system.
-# Also creates /etc/skel default so new users get it automatically.
 setup_firefox_optimizations() {
     local PROFILE_DIR="$1"
     cat << 'FFJS' > "$PROFILE_DIR/user.js"
 // ── Raptor OS: Firefox Performance & Privacy Hardening ─────────────────────
-// Applied automatically — do not edit (will be overwritten on updates).
 
 // ── Rendering / GPU ──────────────────────────────────────────────────────────
 user_pref("layers.acceleration.enabled", true);
@@ -133,23 +132,16 @@ user_pref("gfx.webrender.compositor", true);
 user_pref("gfx.webrender.compositor.force-enabled", true);
 user_pref("media.hardware-video-decoding.enabled", true);
 user_pref("media.hardware-video-decoding.force-enabled", true);
-// Offload compositing to GPU thread
 user_pref("layers.offmainthreadcomposition.enabled", true);
 user_pref("dom.webgpu.enabled", true);
 
 // ── Process & memory ─────────────────────────────────────────────────────────
-// Use more content processes (better tab isolation + perf)
 user_pref("dom.ipc.processCount", 8);
 user_pref("dom.ipc.processCount.webIsolated", 4);
-// Trim RAM aggressively when minimized
 user_pref("config.trim_on_minimize", true);
-// Limit back-forward cache to save RAM
 user_pref("browser.sessionhistory.max_total_viewers", 4);
-// Reduce memory cache size (in KB) — 256 MB
 user_pref("browser.cache.memory.capacity", 262144);
-// Disk cache: 512 MB max
 user_pref("browser.cache.disk.capacity", 524288);
-// Garbage collect more aggressively
 user_pref("javascript.options.mem.gc_incremental_slice_ms", 5);
 user_pref("javascript.options.mem.gc_min_number_of_chunks", 16);
 
@@ -163,7 +155,6 @@ user_pref("network.http.proxy.pipelining", true);
 user_pref("network.prefetch-next", true);
 user_pref("network.dns.disablePrefetch", false);
 user_pref("network.predictor.enabled", true);
-// DoH via Cloudflare (fast, private) — remove if you prefer system DNS
 user_pref("network.trr.mode", 2);
 user_pref("network.trr.uri", "https://cloudflare-dns.com/dns-query");
 
@@ -178,19 +169,14 @@ user_pref("app.shield.optoutstudies.enabled", false);
 user_pref("extensions.shield-recipe-client.enabled", false);
 user_pref("browser.newtabpage.activity-stream.feeds.telemetry", false);
 user_pref("browser.newtabpage.activity-stream.telemetry", false);
-// Disable Pocket
 user_pref("extensions.pocket.enabled", false);
-// Disable sponsored content on new tab
 user_pref("browser.newtabpage.activity-stream.showSponsored", false);
 user_pref("browser.newtabpage.activity-stream.showSponsoredTopSites", false);
-// Disable crash reporter
 user_pref("breakpad.reportURL", "");
 user_pref("browser.tabs.crashReporting.sendReport", false);
 
 // ── Startup ──────────────────────────────────────────────────────────────────
-// Don't restore previous session crash dialogs
 user_pref("browser.sessionstore.resume_from_crash", false);
-// Reduce startup I/O
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.rights.3.shown", true);
 
@@ -203,7 +189,6 @@ user_pref("mousewheel.system_scroll_override.enabled", true);
 FFJS
 }
 
-# Apply to any existing user Firefox profiles
 for profdir in /home/*/.mozilla/firefox/*.default* \
                /home/*/.mozilla/firefox/*.default-release \
                /root/.mozilla/firefox/*.default*; do
@@ -213,20 +198,16 @@ for profdir in /home/*/.mozilla/firefox/*.default* \
     fi
 done
 
-# Skeleton for new users
 mkdir -p /etc/skel/.mozilla/firefox/raptor-default
 setup_firefox_optimizations "/etc/skel/.mozilla/firefox/raptor-default"
 
 # ── Brave optimization ─────────────────────────────────────────────────────────
-# Brave uses Chromium flags — write to the Preferences JSON and a flags file
 setup_brave_optimizations() {
     local BRAVE_CONFIG_DIR="$1"
     mkdir -p "$BRAVE_CONFIG_DIR"
 
-    # Command-line flags via the "Local State" or flags file
     cat << 'BRAVEFLAGS' > "$BRAVE_CONFIG_DIR/raptor-brave-flags.conf"
 # Raptor OS: Brave / Chromium performance flags
-# Source this file or copy flags to brave-flags.conf or the Brave launcher.
 --enable-features=VaapiVideoDecoder,VaapiVideoEncoder,CanvasOopRasterization,UseOzonePlatform,WebRTCPipeWireCapturer,Vulkan,DefaultANGLEVulkan,VulkanFromANGLE,ParallelDownloading,OverlayScrollbar,BackForwardCache,LightweightNoStatePrefetch
 --disable-features=UseChromeOSDirectVideoDecoder
 --enable-accelerated-video-decode
@@ -246,8 +227,6 @@ setup_brave_optimizations() {
 --reduce-user-agent-minor-version
 BRAVEFLAGS
 
-    # Brave-specific preferences for performance
-    # Only write if Preferences doesn't already exist (new profile)
     if [ ! -f "$BRAVE_CONFIG_DIR/Preferences" ]; then
         cat << 'BRAVEPREFS' > "$BRAVE_CONFIG_DIR/Preferences"
 {
@@ -271,10 +250,9 @@ BRAVEPREFS
     fi
 }
 
-# Apply to existing Brave profiles
 for bravedir in /home/*/.config/BraveSoftware/Brave-Browser/Default \
                 /root/.config/BraveSoftware/Brave-Browser/Default; do
-    if [ -d "$(dirname $bravedir)" ]; then
+    if [ -d "$(dirname "$bravedir")" ]; then
         setup_brave_optimizations "$bravedir"
         echo "Brave optimizations applied: $bravedir"
     fi
@@ -282,7 +260,7 @@ done
 mkdir -p /etc/skel/.config/BraveSoftware/Brave-Browser/Default
 setup_brave_optimizations "/etc/skel/.config/BraveSoftware/Brave-Browser/Default"
 
-# Brave launcher wrapper — injects flags automatically
+# Brave launcher wrapper — /usr/local/bin is guaranteed to exist (created at top)
 cat << 'BRAVELAUNCHER' > /usr/local/bin/brave-optimized
 #!/bin/bash
 # Raptor OS: Brave with performance flags
@@ -298,50 +276,26 @@ chmod +x /usr/local/bin/brave-optimized
 # ── Background process trimmer ─────────────────────────────────────────────────
 cat << 'TRIMMER' > /usr/bin/raptor-trim-background.sh
 #!/bin/bash
-# Raptor OS: Background Process Optimizer
-# Reduces CPU/RAM usage of non-game background services.
-# Safe to run before gaming; services are only degraded, not killed.
-
 echo "=== Raptor Background Trimmer ==="
-
-# 1. Sync & drop page caches (safe — kernel will repopulate on demand)
 sync
 echo 1 > /proc/sys/vm/drop_caches
 echo "✔ Dropped page caches"
-
-# 2. Compact memory (reduces fragmentation)
 echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
 echo "✔ Compacted memory"
 
-# 3. Reduce nice priority of known background hogs
 BACKGROUND_PROCS=(
-    "tracker-miner"
-    "tracker-store"
-    "tracker3"
-    "baloo_file"
-    "baloo_file_extractor"
-    "akonadi"
-    "kded"
-    "kdeconnectd"
-    "gvfs"
-    "zeitgeist"
-    "tumblerd"
-    "packagekitd"
-    "apt-get"
-    "dpkg"
-    "updatedb"
-    "mlocate"
-    "snapd"
-    "unattended-upgrade"
-    "evolution"
-    "gnome-software"
+    "tracker-miner" "tracker-store" "tracker3"
+    "baloo_file" "baloo_file_extractor" "akonadi"
+    "kded" "kdeconnectd" "gvfs" "zeitgeist"
+    "tumblerd" "packagekitd" "apt-get" "dpkg"
+    "updatedb" "mlocate" "snapd" "unattended-upgrade"
+    "evolution" "gnome-software"
 )
 for proc in "${BACKGROUND_PROCS[@]}"; do
-    pkill -STOP "$proc" 2>/dev/null || true   # pause indexers
+    pkill -STOP "$proc" 2>/dev/null || true
 done
-echo "✔ Paused background indexers (Baloo, Tracker, Zeitgeist)"
+echo "✔ Paused background indexers"
 
-# 4. Freeze KDE/GNOME indexers via ionice too
 for proc in baloo tracker zeitgeist; do
     for pid in $(pgrep -x "$proc" 2>/dev/null); do
         ionice -c 3 -p "$pid" 2>/dev/null || true
@@ -350,25 +304,17 @@ for proc in baloo tracker zeitgeist; do
 done
 echo "✔ IO-niced & re-niced indexers"
 
-# 5. Throttle snap daemon if present
 if systemctl is-active snapd &>/dev/null; then
     systemctl stop snapd.service 2>/dev/null || true
-    echo "✔ Stopped snapd (re-enable after gaming with: systemctl start snapd)"
+    echo "✔ Stopped snapd"
 fi
 
-# 6. Suspend KDE's file indexer
 kbuildsycoca6 --invalidate 2>/dev/null || true
-balooctl6 suspend 2>/dev/null || \
-    balooctl  suspend 2>/dev/null || true
+balooctl6 suspend 2>/dev/null || balooctl suspend 2>/dev/null || true
 echo "✔ Suspended Baloo indexer"
 
-# 7. Reduce preload/fstrim service impact
 systemctl stop fstrim.service 2>/dev/null || true
-
-# 8. Set dirty writeback to 60s (fewer I/O interruptions during gaming)
 echo 6000 > /proc/sys/vm/dirty_writeback_centisecs
-
-# 9. Set CPU scheduler to prefer interactive (game) tasks
 echo "interactive" > /sys/kernel/debug/sched/tunable 2>/dev/null || true
 
 echo ""
@@ -377,29 +323,18 @@ echo "Run 'raptor-restore-background.sh' after gaming to resume services."
 TRIMMER
 chmod +x /usr/bin/raptor-trim-background.sh
 
-# Companion restore script
 cat << 'RESTORE' > /usr/bin/raptor-restore-background.sh
 #!/bin/bash
 echo "=== Raptor: Restoring background services ==="
-
-# Resume paused processes
 for proc in tracker-miner tracker-store tracker3 baloo_file baloo_file_extractor \
             akonadi kded kdeconnectd gvfs zeitgeist tumblerd; do
     pkill -CONT "$proc" 2>/dev/null || true
 done
 echo "✔ Resumed background processes"
-
-# Resume Baloo
-balooctl6 resume 2>/dev/null || \
-    balooctl  resume 2>/dev/null || true
+balooctl6 resume 2>/dev/null || balooctl resume 2>/dev/null || true
 echo "✔ Resumed Baloo"
-
-# Restore snapd
 systemctl start snapd.service 2>/dev/null || true
-
-# Restore dirty writeback to default (5s)
 echo 500 > /proc/sys/vm/dirty_writeback_centisecs
-
 echo "=== Background services restored ==="
 RESTORE
 chmod +x /usr/bin/raptor-restore-background.sh
@@ -408,12 +343,11 @@ chmod +x /usr/bin/raptor-restore-background.sh
 cat << 'SUDOERS' >> /etc/sudoers.d/raptor-gpu
 ALL ALL=(root) NOPASSWD: /usr/bin/raptor-trim-background.sh
 ALL ALL=(root) NOPASSWD: /usr/bin/raptor-restore-background.sh
-ALL ALL=(root) NOPASSWD: /usr/bin/raptor-zram-setup.sh
+ALL ALL=(root) NOPASSWD: /usr/lib/raptor/zram-setup.sh
 ALL ALL=(root) NOPASSWD: /usr/bin/raptor-zram-teardown.sh
 SUDOERS
 
-# ── Unturned / Unity launch options ────────────────────────────────────────────
-mkdir -p /etc/raptor
+# ── Game launch option hints ───────────────────────────────────────────────────
 cat << 'EOF' > /etc/raptor/unturned-launch-options.txt
 Recommended Steam launch options for Unturned (Unity / low-RAM systems):
 
@@ -427,10 +361,10 @@ Recommended Steam launch options for Unturned (Unity / low-RAM systems):
 
 Notes:
   -gc.maxreserved 128     Cap Unity's reserved GC heap to 128 MB
-  -force-gfx-jobs native  Native threads for graphics jobs (less fragmentation)
+  -force-gfx-jobs native  Native threads for graphics jobs
   -disable-gpu-skinning   Moves skinning to CPU (frees iGPU VRAM)
   -no-sandbox             Removes Chromium sandbox (~40 MB address space savings)
-  -force-vulkan           Use Vulkan renderer (better performance on Mesa/RADV)
+  -force-vulkan           Use Vulkan renderer (better on Mesa/RADV)
   DXVK_ASYNC=1            Async shader compilation (reduces stutter)
 EOF
 
@@ -446,9 +380,8 @@ Recommended Steam launch options for Project Zomboid:
 
 Notes:
   -Xmx4096m     Cap Java heap at 4 GB (adjust to your RAM)
-  -Xms512m      Start JVM heap small (avoids over-allocation at launch)
+  -Xms512m      Start JVM heap small
   -XX:+UseG1GC  G1 GC — fewer long pauses vs default collector
 EOF
 
-echo "Hint files written to /etc/raptor/"
 echo "GAMING_READY"
