@@ -109,7 +109,6 @@ modules:
       - thunderbird
 
       # Theming — Raptor HUD
-      - cairo-dock
       - kvantum
       - kvantum-qt5
       - papirus-icon-theme
