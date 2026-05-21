@@ -108,8 +108,12 @@ modules:
       - qbittorrent
       - thunderbird
 
-    remove:
-      - tuned-ppd   # replaced by power-profiles-daemon
+      # Theming — Raptor HUD
+      - latte-dock           # custom animated dock
+      - kvantum              # Qt app styling engine
+      - kvantum-qt5          # Qt5 compat
+      - papirus-icon-theme   # base inherited by RaptorOS-Icons
+      - jetbrains-mono-fonts # Konsole + editor font
 
   # ── Flatpaks ──────────────────────────────────────────────────────────
   - type: default-flatpaks@v1
@@ -159,10 +163,12 @@ modules:
       - raptor-update.sh
     
   # ── Systemd units ────────────────────────────────────────────────────────
-  - type: systemd
+   - type: systemd
     system:
       enabled:
         - raptor-firstboot.service
         - raptor-ensure-services.service
         - raptor-gpu-profile.service
         - raptor-cpugovernor.service
+    # raptor-hud-apply runs as a USER unit (systemctl --global enable)
+    # so it does NOT go in the system enabled list — raptor-hud.sh handles it
