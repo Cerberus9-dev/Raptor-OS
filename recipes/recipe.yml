@@ -5,8 +5,8 @@ base-image: ghcr.io/ublue-os/bazzite
 image-version: stable
 
 modules:
-   # ── Static files ─────────────────────────────────────────────────────────
-   - type: files
+  # ── Static files ─────────────────────────────────────────────────────────
+  - type: files
     files:
       # Systemd units
       - source: ../files/system_files/raptor-firstboot.service
