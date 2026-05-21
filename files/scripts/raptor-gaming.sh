@@ -2,7 +2,7 @@
 set -oue pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Raptor OS — Gaming & System Optimization  v2.1
+# Raptor OS — Gaming & System Optimization  v2.2
 # Covers: Lutris, Steam, ulimits, browser hardening (Firefox + Brave),
 #         background process trimmer, ZRAM setup, and I/O scheduler tuning.
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -70,9 +70,6 @@ EOF
 udevadm control --reload-rules 2>/dev/null || true
 
 # ── ZRAM swap setup (runtime) ──────────────────────────────────────────────────
-# /proc/meminfo is not reliably available at image build time.
-# A oneshot service calculates the correct size and sets up ZRAM on first boot.
-
 cat << 'ZRAMSCRIPT' > /usr/lib/raptor/zram-setup.sh
 #!/bin/bash
 set -euo pipefail
@@ -118,6 +115,9 @@ ExecStop=/usr/bin/raptor-zram-teardown.sh
 [Install]
 WantedBy=multi-user.target
 ZRAMSVC
+
+# FIX v2.2: Enable ZRAM service — was written but never activated
+systemctl enable raptor-zram.service 2>/dev/null || true
 
 # ── Firefox optimization profile ───────────────────────────────────────────────
 setup_firefox_optimizations() {
@@ -260,10 +260,9 @@ done
 mkdir -p /etc/skel/.config/BraveSoftware/Brave-Browser/Default
 setup_brave_optimizations "/etc/skel/.config/BraveSoftware/Brave-Browser/Default"
 
-# Brave launcher wrapper — /usr/local/bin is guaranteed to exist (created at top)
+# Brave launcher wrapper
 cat << 'BRAVELAUNCHER' > /usr/local/bin/brave-optimized
 #!/bin/bash
-# Raptor OS: Brave with performance flags
 FLAGS_FILE="$HOME/.config/BraveSoftware/Brave-Browser/Default/raptor-brave-flags.conf"
 EXTRA_FLAGS=""
 if [ -f "$FLAGS_FILE" ]; then
@@ -299,7 +298,7 @@ echo "✔ Paused background indexers"
 for proc in baloo tracker zeitgeist; do
     for pid in $(pgrep -x "$proc" 2>/dev/null); do
         ionice -c 3 -p "$pid" 2>/dev/null || true
-        renice +15 -p "$pid"  2>/dev/null || true
+        renice +15 -p "$pid" 2>/dev/null || true
     done
 done
 echo "✔ IO-niced & re-niced indexers"
