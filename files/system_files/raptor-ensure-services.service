@@ -5,13 +5,7 @@ Before=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c '\
-  for svc in raptor-gpu-profile.service raptor-powerprofile.service raptor-cpugovernor.service; do \
-    if ! systemctl is-enabled "$svc" &>/dev/null; then \
-      logger -t raptor-ensure-services "Enabling $svc"; \
-      systemctl enable --now "$svc" || logger -t raptor-ensure-services -p user.err "Failed to enable $svc"; \
-    fi; \
-  done'
+ExecStart=/bin/bash -c 'systemctl enable raptor-gpu-profile.service || logger -t raptor-ensure-services -p user.err "Failed to enable raptor-gpu-profile.service"'
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal

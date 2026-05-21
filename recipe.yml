@@ -1,0 +1,168 @@
+# yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
+name: raptor-os
+description: Raptor OS — a Bazzite-based custom image for gaming, development, and creative workflows.
+base-image: ghcr.io/ublue-os/bazzite
+image-version: stable
+
+modules:
+  # ── Static files ─────────────────────────────────────────────────────────
+  - type: files
+    files:
+      # Systemd units
+      - source: system_files/raptor-firstboot.service
+        destination: /usr/lib/systemd/system/raptor-firstboot.service
+      - source: system_files/raptor-ensure-services.service
+        destination: /usr/lib/systemd/system/raptor-ensure-services.service
+      - source: system_files/raptor-cpugovernor.service
+        destination: /usr/lib/systemd/system/raptor-cpugovernor.service
+      - source: system_files/raptor-powerprofile.service
+        destination: /usr/lib/systemd/system/raptor-powerprofile.service
+
+      # Scripts
+      - source: system_files/raptor-browser-choice.sh
+        destination: /usr/bin/raptor-browser-choice.sh
+
+      # zram — size is evaluated at runtime against actual system RAM.
+      # "ram / 2" means half of MemTotal, which zram-generator resolves on first boot.
+      # This replaces any build-time zram sizing in raptor-cortex.sh.
+      - source: system_files/zram-generator.conf
+        destination: /etc/systemd/zram-generator.conf
+
+  # ── RPM packages ─────────────────────────────────────────────────────────
+  - type: rpm-ostree
+    install:
+      # Browser
+      - firefox
+
+      # System utilities
+      - fastfetch
+      - htop
+      - btop
+      - bleachbit
+      - filelight
+      - p7zip
+      - curl
+      - wget
+      - jq
+      - zenity
+
+      # KDE extras
+      - plasma-systemmonitor
+      - gwenview
+      - kamoso
+      - kcalc
+      - variety
+
+      # Power management
+      - power-profiles-daemon
+
+      # Multimedia
+      - vlc
+      - mpv
+      - obs-studio
+      - audacity
+      - kdenlive
+
+      # Creative
+      - gimp
+      - inkscape
+      - krita
+      - darktable
+
+      # Office
+      - libreoffice
+
+      # Gaming
+      - gamemode
+      - goverlay
+      - wine
+      - winetricks
+
+      # Development — runtimes
+      - git
+      - gh
+      - nodejs
+      - python3
+      - python3-pip
+      - python3-gobject
+
+      # Development — build tools
+      - gcc
+      - make
+      - cmake
+      - ninja-build
+      - meson
+
+      # Development — terminal tools
+      - neovim
+      - tmux
+      - ripgrep
+      - fzf
+
+      # GTK / theming
+      - libadwaita
+
+      # Containers
+      - podman
+      - podman-compose
+
+      # Networking / downloads
+      - qbittorrent
+      - thunderbird
+
+    remove:
+      - tuned-ppd   # replaced by power-profiles-daemon
+
+  # ── Flatpaks ──────────────────────────────────────────────────────────
+  - type: default-flatpaks@v1
+    notify: true
+    system:
+      install:
+        # Communication
+        - com.discordapp.Discord
+
+        # Gaming
+        - com.heroicgameslauncher.hgl
+        - net.davidotek.pupgui2
+        - com.usebottles.bottles
+
+        # Development
+        - com.vscodium.codium
+
+        # Container management
+        - com.github.marhkb.Pods
+
+        # Creative / media
+        - org.blender.Blender
+        - org.shotcut.Shotcut
+
+        # Productivity
+        - com.calibre_ebook.calibre
+        - net.cozic.joplin_desktop
+        - com.github.marktext.marktext
+
+        # System tools
+        - io.missioncenter.MissionCenter
+        - com.github.tchx84.Flatseal
+
+        # Security
+        - com.bitwarden.desktop
+
+        # Hardware control
+        - com.feaneron.Boatswain
+
+  # ── Custom build scripts ──────────────────────────────────────────────────────
+  - type: script
+    scripts:
+      - raptor-hud.sh
+      - raptor-cortex.sh
+      - raptor-gpu-profile.sh
+      - raptor-gaming.sh
+      - raptor-update.sh
+    
+  # ── Systemd units ────────────────────────────────────────────────────────
+  - type: systemd
+    system:
+      enabled:
+        - raptor-firstboot.service
+        - raptor-ensure-services.service

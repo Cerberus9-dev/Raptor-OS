@@ -1,0 +1,16 @@
+[Unit]
+Description=Raptor OS Power Profile Configuration
+After=sysinit.target power-profiles-daemon.service
+Before=multi-user.target
+Wants=power-profiles-daemon.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+# Power profile is managed by power-profiles-daemon when available
+# This service is a placeholder to ensure the service file exists
+
+[Install]
+WantedBy=multi-user.target
