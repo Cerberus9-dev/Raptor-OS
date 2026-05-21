@@ -25,7 +25,7 @@ modules:
       # zram configuration
       - source: ../files/system_files/zram-generator.conf
         destination: /etc/systemd/zram-generator.conf
-        
+
   # ── RPM packages ─────────────────────────────────────────────────────────
   - type: rpm-ostree
     install:
@@ -109,13 +109,16 @@ modules:
       - thunderbird
 
       # Theming — Raptor HUD
-      - latte-dock           # custom animated dock
-      - kvantum              # Qt app styling engine
-      - kvantum-qt5          # Qt5 compat
-      - papirus-icon-theme   # base inherited by RaptorOS-Icons
-      - jetbrains-mono-fonts # Konsole + editor font
+      - latte-dock
+      - kvantum
+      - kvantum-qt5
+      - papirus-icon-theme
+      - jetbrains-mono-fonts
 
-  # ── Flatpaks ──────────────────────────────────────────────────────────
+    remove:
+      - tuned-ppd
+
+  # ── Flatpaks ──────────────────────────────────────────────────────────────
   - type: default-flatpaks@v1
     notify: true
     system:
@@ -153,7 +156,7 @@ modules:
         # Hardware control
         - com.feaneron.Boatswain
 
-  # ── Custom build scripts ──────────────────────────────────────────────────────
+  # ── Custom build scripts ──────────────────────────────────────────────────
   - type: script
     scripts:
       - raptor-hud.sh
@@ -161,14 +164,12 @@ modules:
       - raptor-gpu-profile.sh
       - raptor-gaming.sh
       - raptor-update.sh
-    
-  # ── Systemd units ────────────────────────────────────────────────────────
-   - type: systemd
+
+  # ── Systemd units ─────────────────────────────────────────────────────────
+  - type: systemd
     system:
       enabled:
         - raptor-firstboot.service
         - raptor-ensure-services.service
         - raptor-gpu-profile.service
         - raptor-cpugovernor.service
-    # raptor-hud-apply runs as a USER unit (systemctl --global enable)
-    # so it does NOT go in the system enabled list — raptor-hud.sh handles it
