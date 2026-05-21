@@ -22,7 +22,7 @@ import threading
 import subprocess
 import urllib.request
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# ── Constants ────────────────────────────────────────────────────────────[...]
 
 APP_ID       = "io.github.cerberus9dev.RaptorUpdate"
 CHANGELOG_URL = (
@@ -31,7 +31,7 @@ CHANGELOG_URL = (
 ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[mGKHF]|\][^\x07]*\x07)|\r")
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────────────────────[...]
 
 def _strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text)
@@ -49,7 +49,7 @@ def check_for_updates() -> tuple[bool, str]:
     """Return (has_update, human_readable_message)."""
     try:
         result = subprocess.run(
-            ["rpm-ostree", "update", "--check"],
+            ["/usr/bin/rpm-ostree", "update", "--check"],
             capture_output=True,
             text=True,
             timeout=90,
@@ -69,7 +69,7 @@ def check_for_updates() -> tuple[bool, str]:
         return False, f"Unexpected error: {exc}"
 
 
-# ── Main window ──────────────────────────────────────────────────────────────
+# ── Main window ──────────────────────────────────────────────────────────[...]
 
 class RaptorUpdateWindow(Adw.ApplicationWindow):
 
@@ -235,7 +235,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self._update_spinner = Gtk.Spinner()
         btn_row.append(self._update_spinner)
 
-    # ── Changelog ────────────────────────────────────────────────────────────
+    # ── Changelog ───────────────────────────────────────────────────────────[...]
 
     def _load_changelog(self):
         text = fetch_changelog()
@@ -330,7 +330,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
     def _run_update(self):
         try:
             proc = subprocess.Popen(
-                ["script", "-q", "-c", "rpm-ostree update", "/dev/null"],
+                ["script", "-q", "-c", "/usr/bin/rpm-ostree update", "/dev/null"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -409,7 +409,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self._subtitle_lbl.set_text("Something went wrong.")
 
 
-# ── Application ───────────────────────────────────────────────────────────────
+# ── Application ───────────────────────────────────────────────────────────[...]
 
 class RaptorUpdateApp(Adw.Application):
     def __init__(self):
@@ -435,7 +435,7 @@ exec /usr/bin/raptor-update "$@"
 EOF
 chmod +x /usr/bin/raptor-update-launcher
 
-# ── App icon (SVG) ────────────────────────────────────────────────────────────
+# ── App icon (SVG) ──────────────────────────────────────────────────────────[...]
 ICON_DIR="/usr/share/icons/hicolor/scalable/apps"
 mkdir -p "$ICON_DIR"
 
@@ -464,7 +464,7 @@ done
 
 gtk-update-icon-cache -f /usr/share/icons/hicolor/ 2>/dev/null || true
 
-# ── .desktop entry ────────────────────────────────────────────────────────────
+# ── .desktop entry ──────────────────────────────────────────────────────────[...]
 mkdir -p /usr/share/applications
 cat > /usr/share/applications/raptor-update.desktop << 'EOF'
 [Desktop Entry]
