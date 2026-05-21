@@ -163,5 +163,4 @@ modules:
         - raptor-firstboot.service
         - raptor-ensure-services.service
         - raptor-gpu-profile.service
-        - raptor-powerprofile.service
         - raptor-cpugovernor.service
