@@ -8,12 +8,21 @@ modules:
   # ── Static files ────────────────────────────────────────────────────────────
   - type: files
     files:
+      # Systemd units
       - source: system_files/raptor-firstboot.service
         destination: /usr/lib/systemd/system/raptor-firstboot.service
       - source: system_files/raptor-ensure-services.service
         destination: /usr/lib/systemd/system/raptor-ensure-services.service
+
+      # Scripts
       - source: system_files/raptor-browser-choice.sh
         destination: /usr/bin/raptor-browser-choice.sh
+
+      # zram — size is evaluated at runtime against actual system RAM.
+      # "ram / 2" means half of MemTotal, which zram-generator resolves on first boot.
+      # This replaces any build-time zram sizing in raptor-performance.sh.
+      - source: system_files/zram-generator.conf
+        destination: /etc/systemd/zram-generator.conf
 
   # ── RPM packages ────────────────────────────────────────────────────────────
   - type: rpm-ostree
@@ -93,7 +102,7 @@ modules:
       - podman
       - podman-compose
 
-      # Networking
+      # Networking / downloads
       - qbittorrent
       - thunderbird
 
@@ -138,7 +147,7 @@ modules:
         # Hardware control
         - com.feaneron.Boatswain
 
-  # ── Custom build scripts ─────────────────────────────────────────────────────
+  # ── Custom build scripts ──────────────────────────────────────────────────────
   - type: script
     scripts:
       - raptor-hud.sh
