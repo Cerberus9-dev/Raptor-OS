@@ -7,6 +7,9 @@ set -oue pipefail
 # Firefox heavy optimization · Brave heavy optimization · bg-process masking
 # =============================================================================
 
+# ── Create /etc/raptor early — used throughout this script ───────────────────
+mkdir -p /etc/raptor
+
 # ── DNS ───────────────────────────────────────────────────────────────────────
 mkdir -p /etc/systemd/resolved.conf.d
 cat << 'CONF' > /etc/systemd/resolved.conf.d/dns.conf
@@ -134,8 +137,6 @@ CONF
 done
 
 # ── Brave browser heavy optimization ─────────────────────────────────────────
-# Brave uses Chromium flags — write a system-wide default flags file.
-# This file is read by all users on first launch before their own flags.
 mkdir -p /etc/brave/policies/managed \
          /etc/brave/policies/recommended
 
@@ -172,11 +173,9 @@ cat << 'CONF' > /etc/brave/policies/recommended/raptor-performance.json
 }
 CONF
 
-# System-wide Brave launch flags (applied before per-user flags)
-# Written to /etc/brave-flags.conf which raptor-browser-choice.sh symlinks.
+# System-wide Brave launch flags
 cat << 'CONF' > /etc/raptor/brave-flags.conf
 # Raptor OS — Brave performance flags
-# These are appended to the command line for all users.
 --enable-gpu-rasterization
 --enable-zero-copy
 --ignore-gpu-blocklist
@@ -199,18 +198,25 @@ cat << 'CONF' > /etc/raptor/brave-flags.conf
 --disable-logging
 CONF
 
-# Per-user Brave flags file hook (applied at image build for existing home dirs)
+# Per-user Brave flags hook for any home dirs present at build time
 for dir in /root /home/*; do
     [ -d "$dir" ] || continue
     local_brave="$dir/.config/BraveSoftware/Brave-Browser"
     mkdir -p "$local_brave"
-    # Only write if the user hasn't customised flags yet
     if [ ! -f "$local_brave/brave_flags.conf" ]; then
         cp /etc/raptor/brave-flags.conf "$local_brave/brave_flags.conf"
     fi
 done
 
-# ── Dynamic zram ──────────────────────────────────────────────────────────────
+# ── Dynamic zram (runtime) ────────────────────────────────────────────────────
+# /proc/meminfo is NOT reliably available at image build time and would reflect
+# the CI runner's RAM, not the user's machine. A oneshot service writes the
+# correct config on first boot instead.
+mkdir -p /usr/lib/raptor
+
+cat << 'CONF' > /usr/lib/raptor/zram-setup.sh
+#!/bin/bash
+set -euo pipefail
 TOTAL_RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 TOTAL_RAM_GB=$((TOTAL_RAM_KB / 1024 / 1024))
 
@@ -221,11 +227,28 @@ elif [ "$TOTAL_RAM_GB" -le 32 ]; then ZRAM_SIZE="ram / 3"
 else                                   ZRAM_SIZE="8192"
 fi
 
-cat << CONF > /etc/systemd/zram-generator.conf
+cat > /etc/systemd/zram-generator.conf << EOF
 [zram0]
-zram-size = $ZRAM_SIZE
+zram-size = ${ZRAM_SIZE}
 compression-algorithm = zstd
 writeback-device = none
+EOF
+CONF
+chmod +x /usr/lib/raptor/zram-setup.sh
+
+cat << 'CONF' > /usr/lib/systemd/system/raptor-zram-setup.service
+[Unit]
+Description=Raptor OS — Configure dynamic zram on first boot
+After=sysinit.target
+ConditionPathExists=!/etc/systemd/zram-generator.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/raptor/zram-setup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
 CONF
 
 # ── VM / memory tunables ──────────────────────────────────────────────────────
@@ -243,8 +266,6 @@ vm.dirty_writeback_centisecs=500
 vm.dirty_ratio=10
 vm.dirty_background_ratio=5
 vm.oom_kill_allocating_task=1
-# Transparent hugepages compaction: less CPU spike
-vm.compaction_proactiveness=20
 # Allow more inotify watches (needed by VS Code, IDEs, file watchers)
 fs.inotify.max_user_watches=524288
 fs.inotify.max_user_instances=1024
@@ -315,14 +336,10 @@ ACTION=="add|change", SUBSYSTEM=="power_supply", \
 CONF
 
 # ── Transparent hugepages ─────────────────────────────────────────────────────
-# madvise: only allocate THP when processes explicitly request them.
-# This gives gaming workloads the benefit while not wasting RAM on idle apps.
 cat << 'CONF' > /etc/raptor/thp.conf
-# Raptor OS: Transparent hugepages set to madvise at boot.
-# raptor-cpugovernor.service also applies this via ExecStart.
+# Raptor OS: Transparent hugepages set to madvise at boot via raptor-thp.service
 CONF
 
-# Append THP to cpugovernor service so it runs in the same pass
 cat << 'CONF' > /etc/systemd/system/raptor-thp.service
 [Unit]
 Description=Raptor OS — Set transparent hugepages to madvise
@@ -338,23 +355,20 @@ WantedBy=multi-user.target
 CONF
 
 # ── Background service masking ────────────────────────────────────────────────
-# Mask high-overhead services not needed on a gaming / desktop rig.
-# Using a drop-in override rather than hard masking so the user can unmask.
 BLOAT_SERVICES=(
     "ModemManager.service"
-    "bluetooth.service"          # re-enable manually if needed
+    "bluetooth.service"
     "avahi-daemon.service"
     "avahi-daemon.socket"
     "cups-browsed.service"
     "geoclue.service"
     "accounts-daemon.service"
     "switcheroo-control.service"
-    "udisks2.service"            # re-enabled if needed by file manager
+    "udisks2.service"
 )
 
 mkdir -p /etc/systemd/system
 for svc in "${BLOAT_SERVICES[@]}"; do
-    # Only create a drop-in, don't hard-mask — user can easily re-enable
     dir="/etc/systemd/system/${svc}.d"
     mkdir -p "$dir"
     cat << EOF > "$dir/raptor-disable.conf"
@@ -364,7 +378,7 @@ ConditionPathExists=/etc/raptor/enable-${svc%%.service}
 EOF
 done
 
-# Bluetooth is commonly needed; provide a quick re-enable helper
+# Bluetooth re-enable helper
 cat << 'EOF' > /usr/bin/raptor-enable-bluetooth
 #!/bin/bash
 touch /etc/raptor/enable-bluetooth
@@ -393,13 +407,13 @@ end=/usr/lib/raptor/gamemode-end
 CONF
 
 # ── Thermal notes ─────────────────────────────────────────────────────────────
-mkdir -p /etc/raptor
 cat << 'CONF' > /etc/raptor/thermal-idle.conf
 # Raptor OS thermal notes:
 # - power-profiles-daemon "balanced" handles CPU P-state at desktop
 # - raptor-powerprofile.service enforces this at boot
 # - raptor-cpugovernor.service sets schedutil governor
 # - raptor-thp.service sets THP to madvise
+# - raptor-zram-setup.service configures zram on first boot
 # - CPU boost disabled at idle via udev raptor-cpuboost.rules
 # - gamemode re-enables boost + sets performance profile on game start
 #
