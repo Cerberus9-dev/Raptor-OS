@@ -5,7 +5,7 @@ set -e
 # Raptor HUD — F-22 Themed KDE Plasma Shell
 # • RaptorOS color scheme (gunmetal + electric blue + amber)
 # • Slim Plasma top bar (system tray only)
-# • Latte Dock bottom floating dock
+# • Cairo-Dock bottom floating dock
 # • Monochrome military stencil icon theme
 # • Aurorae window decoration
 # • Applied at first login via systemd user unit
@@ -22,11 +22,11 @@ set -e
 # Text:       #c8d6e8  (cool grey-white)
 # Dim text:   #5a6a7e  (muted)
 
-# ── Install Latte Dock ────────────────────────────────────────────────────────
-# Latte Dock is installed via rpm-ostree in recipe.yml.
-# This script ships its layout + config.
+# ── Cairo-Dock config ─────────────────────────────────────────────────────────
+# cairo-dock is installed via rpm-ostree in recipe.yml.
+# This script ships its config + theme.
 
-mkdir -p /usr/lib/raptor/hud
+mkdir -p /usr/lib/raptor/hud/cairo-dock
 
 # ── RaptorOS KDE Color Scheme ─────────────────────────────────────────────────
 # Installed system-wide; user firstboot script symlinks it as active scheme.
@@ -325,89 +325,142 @@ cat << 'SVGEOF' > /usr/share/icons/RaptorOS-Icons/places/scalable/folder.svg
 </svg>
 SVGEOF
 
-# ── Latte Dock Layout ─────────────────────────────────────────────────────────
-# Installed to /usr/lib/raptor/hud/ and copied to user dir by firstboot script.
-mkdir -p /usr/lib/raptor/hud/latte
+# ── Cairo-Dock Theme ──────────────────────────────────────────────────────────
+# Installed to /usr/lib/raptor/hud/cairo-dock/ and copied to
+# ~/.config/cairo-dock/ by the firstboot script.
 
-cat << 'EOF' > /usr/lib/raptor/hud/latte/RaptorHUD.layout.latte
-[ActionPlugins][1]
-RightButton;NoModifier=org.kde.contextmenu
+mkdir -p /usr/lib/raptor/hud/cairo-dock/RaptorHUD
 
-[Containments][1]
-activityId=
-byPassWM=false
-containmentType=Latte
-disablePlasmoidFollowsMouse=false
-isMoveFromFinishedAnimation=false
-lastScreen=0
-location=4
-onPrimary=true
-plugin=org.kde.latte.containment
-wallpaperplugin=org.kde.image
+# Main dock configuration
+cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/cairo-dock.conf
+[Accessibility]
+auto-hide-margin=1
+reserve-space=false
+show-delay=150
 
-[Containments][1][Applets][2]
-immutability=1
-plugin=org.kde.latte.plasmoid
+[Background]
+bg-image=
+frame-margin=2
+frame-position=center
+nb-strip=1
+rounded-bottom=false
+rounded-corner-radius=6
+stripe-width=10
+thickness=4
 
-[Containments][1][Applets][2][Configuration]
-PreloadWeight=0
+[Icon]
+icon-size=44
+icon-zoom=1.7
+icon-reflect-size=16
+icon-reflect-alpha=0.3
+icon-separation=4
+icon-text-font=JetBrains Mono 9
+icon-text-color=200;214;232;255
+label-bg-color=28;35;48;230
+label-border-color=30;144;255;180
 
-[Containments][1][Applets][2][Configuration][General]
-isInLatteDock=true
-
-[Containments][1][Applets][3]
-immutability=1
-plugin=org.kde.plasma.taskmanager
-
-[Containments][1][Applets][3][Configuration]
-PreloadWeight=0
-
-[Containments][1][Applets][3][Configuration][General]
-isInLatteDock=true
-launchers=applications:org.kde.dolphin.desktop,applications:org.kde.konsole.desktop,applications:firefox.desktop,applications:com.vscodium.codium.desktop,applications:steam.desktop,applications:raptor-cortex.desktop,applications:raptor-hud.desktop
-
-[Containments][1][General]
-advanced=false
-alignmentType=10
-animationsEnabled=true
-appletOrder=2;3
-autoDecreaseIconSize=false
-backgroundRadius=8
-canvasOpacity=80
-colorStyle=0
-customBackground=true
-customBackgroundColor=28,35,48
-customBackgroundOpacity=92
-customBorderColor=30,144,255
-customBorderWidth=1
-directRenderingEnabled=true
-dockBackgroundStyle=1
-glowEnabled=true
-glowColor=30,144,255
-glowOpacity=45
-iconSize=44
-iconSpacing=6
-inConfigureAppletsMode=false
-latteAppletPos=0
-maxLength=90
-maxLengthPercentage=90
-minLength=70
-offsetX=0
-panelPosition=10
-panelSize=56
-panelShadowsActive=true
-proportionIconSize=-1
-screenEdgeMargin=6
-shadowColor=0,0,0
-shadowOpacity=70
-shadowSize=20
-showGlow=true
-shrinkThickMargins=true
-taskbarStyle=0
-thicknessMargin=6
-useThemePanel=false
+[Position]
+x-gap=0
+y-gap=6
+side=bottom
 visibility=2
-zoomFactor=1.15
+pop-up=false
+max-percent=90
+min-percent=0
+nb-desktops=0
+
+[Taskbar]
+show-applis=true
+show-appli-name=false
+overwrite-indicator=true
+grouped-applis=false
+applis-sort-order=0
+demandsAttentionAnimation=pulse
+active-indicator-below=false
+minimize-on-click=true
+show-desktop-button=false
+add-launcher-from-appli=false
+
+[System]
+config-version=3.4.0
+dynamic-order=false
+keep-above=false
+lock-icons=false
+multi-screen=true
+use-opengl=true
+EOF
+
+# Decoration / appearance config (sets the dark HUD theme)
+cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/RaptorHUD/RaptorHUD.conf
+[Colors]
+bg-color=28;35;48;235
+border-color=30;144;255;120
+line-width=1
+gradient=false
+reflect=true
+reflection-alpha=0.25
+reflection-ratio=0.3
+
+[Labels]
+text-font=JetBrains Mono 9
+text-color=200;214;232;255
+bg-color=13;15;18;210
+border-color=30;144;255;140
+style=0
+margin=4
+
+[Icon]
+icon-size=44
+icon-spacing=6
+icon-zoom=1.65
+zoom-animation=ease-in-out
+hover-animation=pulse
+icon-gravity=0
+indicator-color=30;144;255;255
+EOF
+
+# Default launchers shipped with the dock
+# Cairo-dock launchers live in the dock's config dir as .desktop-style entries
+mkdir -p /usr/lib/raptor/hud/cairo-dock/launchers
+
+cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/00-dolphin.desktop
+[Desktop Entry]
+Name=Files
+Exec=dolphin
+Icon=system-file-manager
+Type=Application
+EOF
+
+cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/01-konsole.desktop
+[Desktop Entry]
+Name=Terminal
+Exec=konsole
+Icon=utilities-terminal
+Type=Application
+EOF
+
+cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/02-firefox.desktop
+[Desktop Entry]
+Name=Firefox
+Exec=firefox
+Icon=firefox
+Type=Application
+EOF
+
+cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/03-codium.desktop
+[Desktop Entry]
+Name=VSCodium
+Exec=codium
+Icon=com.vscodium.codium
+Type=Application
+EOF
+
+cat << 'EOF' > /usr/lib/raptor/hud/cairo-dock/launchers/04-steam.desktop
+[Desktop Entry]
+Name=Steam
+Exec=steam
+Icon=steam
+Type=Application
 EOF
 
 # ── Plasma Top Panel Config ───────────────────────────────────────────────────
@@ -416,8 +469,6 @@ cat << 'EOF' > /usr/lib/raptor/hud/apply-plasma-panel.sh
 #!/bin/bash
 # Applies the slim Raptor HUD top panel via kwriteconfig5.
 # Run as the target USER (not root) from the firstboot service.
-
-KCONF="$HOME/.config/plasmashellrc"
 
 # Remove default panel and create our slim top bar
 # (Plasma recreates panels from plasmashellrc on next login)
@@ -451,13 +502,28 @@ kwriteconfig5 --file kdeglobals --group Icons --key Theme RaptorOS-Icons
 kwriteconfig5 --file kdeglobals --group KDE --key LookAndFeelPackage \
     org.kde.breezedark.desktop
 
-# Latte: import and apply layout
-if command -v latte-dock &>/dev/null; then
-    mkdir -p "$HOME/.config/latte"
-    cp /usr/lib/raptor/hud/latte/RaptorHUD.layout.latte \
-       "$HOME/.config/latte/RaptorHUD.layout.latte"
-    latte-dock --import-layout \
-       "$HOME/.config/latte/RaptorHUD.layout.latte" &>/dev/null &
+# ── Cairo-Dock: install config and launch ─────────────────────────────────────
+if command -v cairo-dock &>/dev/null; then
+    # Copy default config if this is a fresh setup
+    if [ ! -f "$HOME/.config/cairo-dock/cairo-dock.conf" ]; then
+        mkdir -p "$HOME/.config/cairo-dock"
+        cp -r /usr/lib/raptor/hud/cairo-dock/. "$HOME/.config/cairo-dock/"
+    fi
+
+    # Register cairo-dock as a KDE autostart entry so it survives reboots
+    mkdir -p "$HOME/.config/autostart"
+    cat > "$HOME/.config/autostart/cairo-dock.desktop" << 'AUTOSTART'
+[Desktop Entry]
+Name=Cairo-Dock
+Comment=Raptor HUD dock
+Exec=cairo-dock -o
+Type=Application
+X-KDE-autostart-phase=2
+X-GNOME-Autostart-enabled=true
+AUTOSTART
+
+    # Start the dock immediately (background, non-blocking)
+    cairo-dock -o &>/dev/null &
 fi
 
 # Reload KWin + Plasma shell
@@ -853,11 +919,12 @@ EOF
 cat << 'EOF'
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ADD TO recipe.yml rpm-ostree install block:
-    - latte-dock
+    - cairo-dock
+    - cairo-dock-plugins
     - kvantum
     - kvantum-qt5
     - papirus-icon-theme   # base for RaptorOS-Icons inheritance
-    - jetbrains-mono-fonts # Konsole font
+    - jetbrains-mono-fonts # Konsole font + dock labels
 
   ADD TO recipe.yml scripts block:
     - raptor-hud.sh
