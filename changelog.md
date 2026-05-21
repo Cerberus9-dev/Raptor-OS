@@ -6,6 +6,24 @@
 - Custom Raptor OS logo
 - KDE theme fix (ongoing)
 
+## [v2.5] - 2026-05-21 (Script Consolidation & Build Fix)
+
+### Fixed
+- **Critical:** `recipe.yml` script module referenced non-existent `raptor-performance.sh` and
+  `raptor-ram-optimizer.sh` — build would fail with "Script does not exist" error during
+  image compilation; corrected to reference actual scripts `raptor-cortex.sh` instead
+
+### Changed
+- `raptor-performance.sh` and `raptor-ram-optimizer.sh` consolidated into unified `raptor-cortex.sh`
+  — single script now handles CPU throttling, thermal management, memory compression (zram),
+  gaming mode service suspension, and RAM optimization GUI; eliminates script duplication and
+  simplifies maintenance
+- `recipe.yml` script module updated to reflect consolidation — now lists only the six active
+  scripts: `raptor-hud.sh`, `raptor-cortex.sh`, `raptor-gpu-profile.sh`, `raptor-gaming.sh`,
+  and `raptor-update.sh`
+- Comments in `recipe.yml` updated to note that zram sizing is now handled by
+  `zram-generator.conf` at runtime rather than `raptor-performance.sh` at build time
+
 ## [v2.4] - 2026-05-20 (Full Script Overhaul)
 
 ### Fixed
