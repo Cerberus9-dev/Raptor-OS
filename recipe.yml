@@ -147,7 +147,7 @@ modules:
         # Hardware control
         - com.feaneron.Boatswain
 
-  # ── Custom build scripts ──────────────────────────────────────────────────
+  # ── Custom build scripts ──────────────────────────────────────────────────────
   - type: script
     scripts:
       - raptor-hud.sh
@@ -155,7 +155,7 @@ modules:
       - raptor-gpu-profile.sh
       - raptor-gaming.sh
       - raptor-update.sh
-
+    
   # ── Systemd units ────────────────────────────────────────────────────────
   - type: systemd
     system:
