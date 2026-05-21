@@ -1,11 +1,11 @@
-[Unit]
+[[Unit]
 Description=Raptor OS CPU Governor Management
 After=sysinit.target
 Before=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/lib/raptor/gpu-detect.sh
+ExecStart=/usr/bin/raptor-cpugovernor.sh
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
