@@ -9,13 +9,6 @@
 ## [v2.5] - 2026-05-21 (Script Consolidation, Build Fix & Radar HUD)
 
 ### Fixed
-- **Critical:** `recipe.yml` script module referenced non-existent `raptor-performance.sh` and
-  `raptor-ram-optimizer.sh` — build would fail with "Script does not exist" error during
-  image compilation; corrected to reference actual scripts `raptor-cortex.sh` instead
-- **Critical:** `raptor-hud.sh` line 1090 referenced
-  `/usr/share/plasma/plasmoids/org.raptoros.radararc/contents/config/main.xml` which did
-  not exist — build would crash with "No such file or directory" and fail the entire
-  script module; resolved by adding the plasmoid file structure to `files/`
 - **KDE Theme FINALLY fixed!**
 
 ### Added
