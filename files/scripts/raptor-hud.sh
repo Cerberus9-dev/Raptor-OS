@@ -286,7 +286,13 @@ for MENUFILE in /etc/xdg/menus/applications.menu \
                 /etc/xdg/menus/kde-applications.menu; do
   if [ -f "$MENUFILE" ]; then
     if ! grep -q 'X-RaptorOS' "$MENUFILE" 2>/dev/null; then
-      sed -i 's|</Menu>$|  <Menu>\n    <Name>Raptor OS<\/Name>\n    <Directory>raptor-os.directory<\/Directory>\n    <Include><Category>X-RaptorOS<\/Category><\/Include>\n  <\/Menu>\n<\/Menu>|' "$MENUFILE"
+      # Try matching with End Applications comment (Fedora/Bazzite style)
+      if grep -q '<!-- End Applications -->' "$MENUFILE" 2>/dev/null; then
+        sed -i 's|</Menu> <!-- End Applications -->|  <Menu>\n    <Name>Raptor OS</Name>\n    <Directory>raptor-os.directory</Directory>\n    <Include><Category>X-RaptorOS</Category></Include>\n  </Menu>\n</Menu> <!-- End Applications -->|' "$MENUFILE"
+      else
+        # Fallback: match bare closing tag
+        sed -i 's|</Menu>$|  <Menu>\n    <Name>Raptor OS</Name>\n    <Directory>raptor-os.directory</Directory>\n    <Include><Category>X-RaptorOS</Category></Include>\n  </Menu>\n</Menu>|' "$MENUFILE"
+      fi
     fi
   else
     cat << 'MENUEOF' > "$MENUFILE"
@@ -305,6 +311,11 @@ for MENUFILE in /etc/xdg/menus/applications.menu \
 MENUEOF
   fi
 done
+
+# Ensure KDE picks up the category via applications-merged
+mkdir -p /etc/xdg/menus/applications-merged
+cp /etc/xdg/menus/kde-applications.menu \
+   /etc/xdg/menus/applications-merged/raptor-os.menu 2>/dev/null || true
 
 # ── GPU Profile Detection, Configuration & Profiler UI ───────────────────────
 mkdir -p /usr/bin \
