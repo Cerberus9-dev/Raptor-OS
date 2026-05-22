@@ -4,14 +4,25 @@
 - Custom GRUB bootloader theme
 - Custom KDE splash screen
 - Custom Raptor OS logo
-- KDE theme fix (ongoing)
+- Better seamless fully custom wallpaper system like windows
 
-## [v2.5] - 2026-05-21 (Script Consolidation & Build Fix)
+## [v2.5] - 2026-05-21 (Script Consolidation, Build Fix & Radar HUD)
 
 ### Fixed
 - **Critical:** `recipe.yml` script module referenced non-existent `raptor-performance.sh` and
   `raptor-ram-optimizer.sh` — build would fail with "Script does not exist" error during
   image compilation; corrected to reference actual scripts `raptor-cortex.sh` instead
+- **Critical:** `raptor-hud.sh` line 1090 referenced
+  `/usr/share/plasma/plasmoids/org.raptoros.radararc/contents/config/main.xml` which did
+  not exist — build would crash with "No such file or directory" and fail the entire
+  script module; resolved by adding the plasmoid file structure to `files/`
+- **KDE Theme FINALLY fixed!**
+
+### Added
+- `org.raptoros.radararc` Plasma plasmoid — cockpit radar arc widget with rotating sweep
+  line, fade trail, concentric range rings, crosshair grid, and monospace clock overlay;
+  configurable arc colour, sweep colour, sweep speed, opacity, and ring count via
+  Plasma widget settings
 
 ### Changed
 - `raptor-performance.sh` and `raptor-ram-optimizer.sh` consolidated into unified `raptor-cortex.sh`
