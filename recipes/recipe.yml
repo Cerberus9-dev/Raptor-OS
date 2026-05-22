@@ -17,6 +17,12 @@ modules:
         destination: /usr/lib/systemd/system/raptor-cpugovernor.service
       - source: ../files/system_files/raptor-powerprofile.service
         destination: /usr/lib/systemd/system/raptor-powerprofile.service
+      - source: ../files/system_files/raptor-firstboot.service
+        destination: /usr/lib/systemd/system/raptor-firstboot.service
+
+      # Raptor HUD plasmoid
+      - source: ../files/usr/share/plasma/plasmoids/org.raptoros.radararc
+        destination: /usr/share/plasma/plasmoids/org.raptoros.radararc
 
       # Scripts
       - source: ../files/system_files/raptor-browser-choice.sh
