@@ -83,7 +83,7 @@ import urllib.request
 import sys
 import re
 
-CHANGELOG_URL = "https://raw.githubusercontent.com/Cerberus9-dev/Raptor-OS/main/CHANGELOG.md"
+CHANGELOG_URL = "https://raw.githubusercontent.com/Cerberus9-dev/Raptor-OS/refs/heads/main/changelog.md"
 UPDATE_HELPER  = "/usr/lib/raptor/update-helper"
 REBOOT_HELPER  = "/usr/lib/raptor/reboot-helper"
 ANSI_ESCAPE    = re.compile(r"\x1b\[[0-9;]*[mGKHF]|\x1b\][^\x07]*\x07|\r")
