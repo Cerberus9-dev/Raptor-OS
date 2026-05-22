@@ -20,13 +20,6 @@ modules:
         destination: /usr/bin/raptor-browser-choice.sh
       - source: ../files/system_files/zram-generator.conf
         destination: /etc/systemd/zram-generator.conf
-      - source: ../files/usr/share/plasma/plasmoids/org.raptoros.radararc
-        destination: /usr/share/plasma/plasmoids/org.raptoros.radararc
-
-  # ── COPR repos (via bling) ────────────────────────────────────────────────────
-  - type: bling
-    install:
-      - dusansimic/themes
 
   # ── RPM packages ─────────────────────────────────────────────────────────────
   - type: rpm-ostree
@@ -114,7 +107,8 @@ modules:
       - kvantum
       - kvantum-qt5
       - papirus-icon-theme
-      - tela-icon-theme
+      - numix-icon-theme
+      - numix-icon-theme-circle
       - jetbrains-mono-fonts
       - qt5-qtbase
 
@@ -143,6 +137,7 @@ modules:
         - com.feaneron.Boatswain
 
   # ── Custom build scripts ──────────────────────────────────────────────────────
+  # raptor-hud.sh also copies the plasmoid from /tmp/files
   - type: script
     scripts:
       - raptor-hud.sh
