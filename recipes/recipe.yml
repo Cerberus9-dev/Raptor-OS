@@ -5,7 +5,12 @@ base-image: ghcr.io/ublue-os/bazzite
 image-version: stable
 
 modules:
-  # ── Static files ─────────────────────────────────────────────────────────
+  # ── COPR repos ───────────────────────────────────────────────────────────────
+  - type: bling
+    install:
+      - bling-copr: "dusansimic/themes"
+
+  # ── Static files ─────────────────────────────────────────────────────────────
   - type: files
     files:
       # Systemd units
@@ -17,12 +22,6 @@ modules:
         destination: /usr/lib/systemd/system/raptor-cpugovernor.service
       - source: ../files/system_files/raptor-powerprofile.service
         destination: /usr/lib/systemd/system/raptor-powerprofile.service
-      - source: ../files/system_files/raptor-firstboot.service
-        destination: /usr/lib/systemd/system/raptor-firstboot.service
-
-      # Raptor HUD plasmoid
-      - source: ../files/usr/share/plasma/plasmoids/org.raptoros.radararc
-        destination: /usr/share/plasma/plasmoids/org.raptoros.radararc
 
       # Scripts
       - source: ../files/system_files/raptor-browser-choice.sh
@@ -32,7 +31,11 @@ modules:
       - source: ../files/system_files/zram-generator.conf
         destination: /etc/systemd/zram-generator.conf
 
-  # ── RPM packages ─────────────────────────────────────────────────────────
+      # Raptor HUD plasmoid
+      - source: ../files/usr/share/plasma/plasmoids/org.raptoros.radararc
+        destination: /usr/share/plasma/plasmoids/org.raptoros.radararc
+
+  # ── RPM packages ─────────────────────────────────────────────────────────────
   - type: rpm-ostree
     install:
       # Browser
@@ -118,12 +121,14 @@ modules:
       - kvantum
       - kvantum-qt5
       - papirus-icon-theme
+      - tela-icon-theme
       - jetbrains-mono-fonts
+      - qt5-qtbase
 
     remove:
       - tuned-ppd
 
-  # ── Flatpaks ──────────────────────────────────────────────────────────────
+  # ── Flatpaks ──────────────────────────────────────────────────────────────────
   - type: default-flatpaks@v1
     notify: true
     system:
@@ -161,7 +166,7 @@ modules:
         # Hardware control
         - com.feaneron.Boatswain
 
-  # ── Custom build scripts ──────────────────────────────────────────────────
+  # ── Custom build scripts ──────────────────────────────────────────────────────
   - type: script
     scripts:
       - raptor-hud.sh
@@ -170,7 +175,7 @@ modules:
       - raptor-gaming.sh
       - raptor-update.sh
 
-  # ── Systemd units ─────────────────────────────────────────────────────────
+  # ── Systemd units ─────────────────────────────────────────────────────────────
   - type: systemd
     system:
       enabled:
