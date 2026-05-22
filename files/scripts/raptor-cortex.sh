@@ -2,7 +2,7 @@
 set -e
 
 # =============================================================================
-# Raptor Cortex v4 — Unified Memory & Performance Management
+# Raptor Cortex v4.1 — Unified Memory & Performance Management
 # • RAM optimization with page cache management, compaction, zram recompress
 # • Background service trimming/restoring for gaming
 # • Seamless performance mode switching (no login required)
@@ -10,6 +10,7 @@ set -e
 # • CPU boost management (complements GPU Profiler)
 # • Per-mode kernel tuning (power/balanced/performance)
 # • Battery slider passthrough via power-profiles-daemon
+# • PCIe ASPM, NVMe power states, USB autosuspend, runtime PM
 # =============================================================================
 
 # ── Custom icon ───────────────────────────────────────────────────────────────
@@ -26,12 +27,9 @@ cat << 'SVGEOF' > /usr/share/icons/hicolor/scalable/apps/raptor-cortex.svg
       <stop offset="100%" stop-color="#7c3aed"/>
     </radialGradient>
   </defs>
-  <!-- Background circle -->
   <circle cx="32" cy="32" r="30" fill="url(#bg)"/>
-  <!-- Outer ring segments (neural/circuit motif) -->
   <circle cx="32" cy="32" r="24" fill="none" stroke="#a78bfa" stroke-width="1.5"
           stroke-dasharray="12 4" stroke-linecap="round"/>
-  <!-- Inner spokes -->
   <line x1="32" y1="10" x2="32" y2="18" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
   <line x1="32" y1="46" x2="32" y2="54" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
   <line x1="10" y1="32" x2="18" y2="32" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
@@ -40,37 +38,118 @@ cat << 'SVGEOF' > /usr/share/icons/hicolor/scalable/apps/raptor-cortex.svg
   <line x1="41.6" y1="41.6" x2="47.3" y2="47.3" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
   <line x1="47.3" y1="16.7" x2="41.6" y2="22.4" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
   <line x1="22.4" y1="41.6" x2="16.7" y2="47.3" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
-  <!-- Core -->
   <circle cx="32" cy="32" r="9" fill="url(#core)"/>
-  <!-- Raptor silhouette (simplified claw/bolt shape) -->
   <path d="M 29 26 L 35 26 L 33 31 L 36 31 L 29 40 L 31 33 L 28 33 Z"
         fill="white" opacity="0.95"/>
 </svg>
 SVGEOF
 
-# Update icon cache
 gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true
 
-# ── Privileged helper (NOPASSWD via sudoers) ──────────────────────────────────
+# ── Privileged helper ─────────────────────────────────────────────────────────
 mkdir -p /usr/lib/raptor
 
 cat << 'EOF' > /usr/lib/raptor/cortex-helper
 #!/bin/bash
-# Args: CACHE COMPACT ZRAM OOM DEEP SWAP THP CPU | trim-background | restore-background
-#       set-mode <power_saving|balanced|performance>
+# Args: CACHE COMPACT ZRAM OOM DEEP SWAP THP CPU | trim-background |
+#       restore-background | set-mode <power_saving|balanced|performance>
 ACTION="${1:-help}"
+
+# ── Hardware power helpers ────────────────────────────────────────────────────
+
+_apply_pcie_aspm() {
+    # powersave | performance | default
+    local P="$1"
+    [ -f /sys/module/pcie_aspm/parameters/policy ] && \
+        echo "$P" > /sys/module/pcie_aspm/parameters/policy 2>/dev/null || true
+}
+
+_apply_nvme_power() {
+    # min_power | max_performance | auto
+    local S="$1"
+    for f in /sys/class/nvme/nvme*/power/control \
+              /sys/bus/pci/devices/*/nvme/nvme*/power/control; do
+        [ -f "$f" ] && echo "$S" > "$f" 2>/dev/null || true
+    done
+}
+
+_apply_usb_autosuspend() {
+    # 1 = enable (power save), 0 = disable (performance)
+    if [ "$1" = "1" ]; then
+        for d in /sys/bus/usb/devices/*/power/autosuspend_delay_ms; do
+            echo 2000 > "$d" 2>/dev/null || true
+        done
+        for c in /sys/bus/usb/devices/*/power/control; do
+            echo auto > "$c" 2>/dev/null || true
+        done
+    else
+        for c in /sys/bus/usb/devices/*/power/control; do
+            echo on > "$c" 2>/dev/null || true
+        done
+    fi
+}
+
+_apply_runtime_pm() {
+    # auto | on
+    local P="$1"
+    for f in /sys/bus/pci/devices/*/power/control; do
+        echo "$P" > "$f" 2>/dev/null || true
+    done
+}
+
+_apply_sata_link_power() {
+    # min_power | medium_power | max_performance
+    local P="$1"
+    for f in /sys/class/scsi_host/host*/link_power_management_policy; do
+        echo "$P" > "$f" 2>/dev/null || true
+    done
+}
+
+_apply_audio_powersave() {
+    # 1 or 0
+    for f in /sys/module/snd_hda_intel/parameters/power_save \
+              /sys/module/snd_ac97_codec/parameters/power_save; do
+        [ -f "$f" ] && echo "$1" > "$f" 2>/dev/null || true
+    done
+}
+
+# FIX: clear Powerdevil session action so switching to power-saver
+# doesn't trigger a logout/suspend. Patches every user's config and
+# tells the running daemon to reload.
+_clear_powerdevil_session_action() {
+    while IFS=: read -r _ _ uid _ _ home _; do
+        [ "$uid" -lt 1000 ] && continue
+        [ -d "$home" ] || continue
+        PPRC="$home/.config/powermanagementprofilesrc"
+        [ -f "$PPRC" ] || continue
+        [ -f "${PPRC}.raptorbak" ] || cp "$PPRC" "${PPRC}.raptorbak"
+        for grp in "Battery][SuspendSession" "LowBattery][SuspendSession" \
+                   "AC][SuspendSession"; do
+            if grep -q "\[$grp\]" "$PPRC" 2>/dev/null; then
+                sed -i "/\[$grp\]/,/^\[/ s/^idleTime=.*/idleTime=0/"     "$PPRC" 2>/dev/null || true
+                sed -i "/\[$grp\]/,/^\[/ s/^suspendType=.*/suspendType=0/" "$PPRC" 2>/dev/null || true
+            fi
+        done
+        if grep -q "\[Battery\]\[HandleButtonEvents\]" "$PPRC" 2>/dev/null; then
+            sed -i "/\[Battery\]\[HandleButtonEvents\]/,/^\[/ s/^powerButtonAction=.*/powerButtonAction=0/" \
+                "$PPRC" 2>/dev/null || true
+        fi
+    done < /etc/passwd
+    # Tell Powerdevil daemon to reload
+    for uid in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $1}' || true); do
+        runuser -u "#$uid" -- \
+            dbus-send --session --dest=org.kde.Solid.PowerManagement \
+            /org/kde/Solid/PowerManagement \
+            org.kde.Solid.PowerManagement.refreshStatus 2>/dev/null || true
+    done
+}
 
 case "$ACTION" in
     # ── RAM optimization flags ─────────────────────────────────────────────
     0|1|2|3|4|5|6|7|8)
-        DO_CACHE="${1:-0}"
-        DO_COMPACT="${2:-0}"
-        DO_ZRAM="${3:-0}"
-        DO_OOM="${4:-0}"
-        DO_DEEP="${5:-0}"
-        DO_SWAP="${6:-0}"
-        DO_THP="${7:-0}"
-        DO_CPU="${8:-0}"
+        DO_CACHE="${1:-0}";  DO_COMPACT="${2:-0}"; DO_ZRAM="${3:-0}"
+        DO_OOM="${4:-0}";    DO_DEEP="${5:-0}";    DO_SWAP="${6:-0}"
+        DO_THP="${7:-0}";    DO_CPU="${8:-0}"
 
         if [ "$DO_CACHE" = "1" ]; then
             sync || true
@@ -78,9 +157,7 @@ case "$ACTION" in
             echo 2 > /proc/sys/vm/drop_caches 2>/dev/null || true
             echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true
         fi
-        if [ "$DO_COMPACT" = "1" ]; then
-            echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
-        fi
+        [ "$DO_COMPACT" = "1" ] && echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
         if [ "$DO_ZRAM" = "1" ]; then
             echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
             echo recompress > /sys/block/zram0/recompress 2>/dev/null || true
@@ -113,12 +190,10 @@ case "$ACTION" in
             echo "$CURRENT" > /proc/sys/vm/swappiness 2>/dev/null || true
         fi
         if [ "$DO_THP" = "1" ]; then
-            echo madvise > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
-            echo defer+madvise > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
+            echo madvise       > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+            echo defer+madvise > /sys/kernel/mm/transparent_hugepage/defrag  2>/dev/null || true
         fi
-        if [ "$DO_CPU" = "1" ]; then
-            echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
-        fi
+        [ "$DO_CPU" = "1" ] && echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
         for proc in plasmashell kwin_wayland kwin_x11 kded6 baloo_file; do
             for pid in $(pgrep "$proc" 2>/dev/null || true); do
                 kill -USR1 "$pid" 2>/dev/null || true
@@ -127,64 +202,88 @@ case "$ACTION" in
         ;;
 
     # ── Per-mode kernel tuning ─────────────────────────────────────────────
-    # Does NOT touch WiFi, BT, or any network stack.
-    # Battery slider remains functional via power-profiles-daemon passthrough.
     set-mode)
         MODE="${2:-balanced}"
         case "$MODE" in
             power_saving)
-                # Aggressively favour zram/swap to keep RAM free
-                echo 180 > /proc/sys/vm/swappiness              2>/dev/null || true
-                echo 5   > /proc/sys/vm/dirty_ratio             2>/dev/null || true
-                echo 2   > /proc/sys/vm/dirty_background_ratio  2>/dev/null || true
+                # FIX: clear Powerdevil logout action BEFORE switching profile
+                _clear_powerdevil_session_action
+
+                echo 180  > /proc/sys/vm/swappiness                2>/dev/null || true
+                echo 5    > /proc/sys/vm/dirty_ratio               2>/dev/null || true
+                echo 2    > /proc/sys/vm/dirty_background_ratio    2>/dev/null || true
                 echo 6000 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
-                echo 1   > /proc/sys/vm/laptop_mode            2>/dev/null || true
-                # CPU: disable boost, switch to powersave governor
-                echo 0 > /sys/devices/system/cpu/cpufreq/boost  2>/dev/null || true
+                echo 60000 > /proc/sys/vm/dirty_expire_centisecs   2>/dev/null || true
+                echo 1    > /proc/sys/vm/laptop_mode               2>/dev/null || true
+
+                echo 0 > /sys/devices/system/cpu/cpufreq/boost     2>/dev/null || true
                 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
                     echo powersave > "$gov" 2>/dev/null || true
                 done
-                # THP off (saves power, reduces memory pressure spikes)
                 echo never > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
-                # Tell power-profiles-daemon to use power-saver
-                # (preserves battery tray slider — user can still override)
+
+                _apply_pcie_aspm       powersave
+                _apply_nvme_power      min_power
+                _apply_usb_autosuspend 1
+                _apply_runtime_pm      auto
+                _apply_sata_link_power min_power
+                _apply_audio_powersave 1
+
                 powerprofilesctl set power-saver 2>/dev/null || true
                 ;;
 
             balanced)
-                echo 100 > /proc/sys/vm/swappiness              2>/dev/null || true
-                echo 15  > /proc/sys/vm/dirty_ratio             2>/dev/null || true
-                echo 5   > /proc/sys/vm/dirty_background_ratio  2>/dev/null || true
+                echo 100  > /proc/sys/vm/swappiness                2>/dev/null || true
+                echo 15   > /proc/sys/vm/dirty_ratio               2>/dev/null || true
+                echo 5    > /proc/sys/vm/dirty_background_ratio    2>/dev/null || true
                 echo 1500 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
-                echo 0   > /proc/sys/vm/laptop_mode            2>/dev/null || true
-                # CPU: boost off, schedutil (adaptive, battery friendly)
-                echo 0 > /sys/devices/system/cpu/cpufreq/boost  2>/dev/null || true
+                echo 1500 > /proc/sys/vm/dirty_expire_centisecs    2>/dev/null || true
+                echo 0    > /proc/sys/vm/laptop_mode               2>/dev/null || true
+
+                echo 0 > /sys/devices/system/cpu/cpufreq/boost     2>/dev/null || true
                 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
                     echo schedutil > "$gov" 2>/dev/null || true
                 done
-                echo madvise > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
-                echo defer+madvise > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
+                echo madvise       > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+                echo defer+madvise > /sys/kernel/mm/transparent_hugepage/defrag  2>/dev/null || true
+
+                _apply_pcie_aspm       default
+                _apply_nvme_power      auto
+                _apply_usb_autosuspend 1
+                _apply_runtime_pm      auto
+                _apply_sata_link_power medium_power
+                _apply_audio_powersave 1
+
                 powerprofilesctl set balanced 2>/dev/null || true
                 ;;
 
             performance)
-                echo 60  > /proc/sys/vm/swappiness              2>/dev/null || true
-                echo 10  > /proc/sys/vm/dirty_ratio             2>/dev/null || true
-                echo 3   > /proc/sys/vm/dirty_background_ratio  2>/dev/null || true
-                echo 500 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
-                echo 0   > /proc/sys/vm/laptop_mode            2>/dev/null || true
-                # CPU: boost on, performance governor
-                echo 1 > /sys/devices/system/cpu/cpufreq/boost  2>/dev/null || true
+                echo 60  > /proc/sys/vm/swappiness                 2>/dev/null || true
+                echo 10  > /proc/sys/vm/dirty_ratio                2>/dev/null || true
+                echo 3   > /proc/sys/vm/dirty_background_ratio     2>/dev/null || true
+                echo 500 > /proc/sys/vm/dirty_writeback_centisecs  2>/dev/null || true
+                echo 500 > /proc/sys/vm/dirty_expire_centisecs     2>/dev/null || true
+                echo 0   > /proc/sys/vm/laptop_mode                2>/dev/null || true
+
+                echo 1 > /sys/devices/system/cpu/cpufreq/boost     2>/dev/null || true
                 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
                     echo performance > "$gov" 2>/dev/null || true
                 done
-                echo madvise > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
-                echo defer+madvise > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
-                powerprofilesctl set performance 2>/dev/null || true
-                # Trim background, cache drop, OOM tuning
+                echo madvise       > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+                echo defer+madvise > /sys/kernel/mm/transparent_hugepage/defrag  2>/dev/null || true
+
+                _apply_pcie_aspm       performance
+                _apply_nvme_power      max_performance
+                _apply_usb_autosuspend 0
+                _apply_runtime_pm      on
+                _apply_sata_link_power max_performance
+                _apply_audio_powersave 0
+
                 sync || true
-                echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true
+                echo 1 > /proc/sys/vm/drop_caches    2>/dev/null || true
                 echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
+
+                powerprofilesctl set performance 2>/dev/null || true
                 ;;
         esac
         ;;
@@ -192,7 +291,7 @@ case "$ACTION" in
     # ── Background trimming for gaming ─────────────────────────────────────
     trim-background)
         sync || true
-        echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true
+        echo 1 > /proc/sys/vm/drop_caches    2>/dev/null || true
         echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
         BACKGROUND_PROCS=(
             "tracker-miner" "tracker-store" "tracker3"
@@ -211,10 +310,10 @@ case "$ACTION" in
                 renice +15 -p "$pid" 2>/dev/null || true
             done
         done
-        systemctl stop snapd.service 2>/dev/null || true
+        systemctl stop snapd.service   2>/dev/null || true
+        systemctl stop fstrim.service  2>/dev/null || true
         balooctl6 suspend 2>/dev/null || balooctl suspend 2>/dev/null || true
-        kbuildsycoca6 --invalidate 2>/dev/null || true
-        systemctl stop fstrim.service 2>/dev/null || true
+        kbuildsycoca6 --invalidate     2>/dev/null || true
         echo 6000 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
         ;;
 
@@ -230,7 +329,7 @@ case "$ACTION" in
             pkill -CONT "$proc" 2>/dev/null || true
         done
         balooctl6 resume 2>/dev/null || balooctl resume 2>/dev/null || true
-        systemctl start snapd.service 2>/dev/null || true
+        systemctl start snapd.service  2>/dev/null || true
         echo 500 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
         ;;
 
@@ -239,7 +338,6 @@ case "$ACTION" in
         exit 1
         ;;
 esac
-
 exit 0
 EOF
 chmod +x /usr/lib/raptor/cortex-helper
@@ -247,7 +345,6 @@ chmod +x /usr/lib/raptor/cortex-helper
 # ── Sudoers ───────────────────────────────────────────────────────────────────
 mkdir -p /etc/sudoers.d
 cat << 'EOF' > /etc/sudoers.d/raptor-cortex
-# Raptor Cortex: passwordless access to memory & background management
 ALL ALL=(root) NOPASSWD: /usr/lib/raptor/cortex-helper
 EOF
 chmod 440 /etc/sudoers.d/raptor-cortex || true
@@ -323,7 +420,7 @@ EOF
 # ── Python GUI ────────────────────────────────────────────────────────────────
 cat << 'PYEOF' > /usr/bin/raptor-cortex
 #!/usr/bin/env python3
-"""Raptor Cortex v4 — Unified memory & performance management for Raptor OS"""
+"""Raptor Cortex v4.1 — Unified memory & performance management for Raptor OS"""
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -354,25 +451,24 @@ ALL_SERVICES = [
     ("PipeWire media session", "pipewire-media-session"),
 ]
 
-# key → (label, description, icon_name, active_color_hex)
 PERFORMANCE_MODES = {
     "power_saving": (
         "Power Saving",
-        "Reduces CPU governor & dirty writeback. WiFi/BT untouched. Battery slider works normally.",
+        "Reduces CPU governor, dirty writeback, PCIe ASPM on, NVMe min power. Battery slider works normally.",
         "battery-low-symbolic",
-        "#f5c211",  # amber
+        "#f5c211",
     ),
     "balanced": (
         "Balanced",
-        "Moderate tuning with schedutil governor. Best for everyday use.",
+        "Moderate tuning with schedutil governor, USB autosuspend, medium SATA power.",
         "media-playlist-shuffle-symbolic",
-        "#3584e4",  # blue
+        "#3584e4",
     ),
     "performance": (
         "Performance",
-        "CPU boost on, performance governor, background trimmed. Draws more power.",
-        "lightning",  # we use a label fallback below
-        "#2ec27e",  # green
+        "CPU boost on, performance governor, PCIe/NVMe max performance, background trimmed.",
+        "starred-symbolic",
+        "#2ec27e",
     ),
 }
 
@@ -485,7 +581,6 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         GLib.timeout_add_seconds(2, self._refresh_stats)
         self._refresh_stats()
 
-    # ─────────────────────────────────────────────────────────────────────────
     def _build_ui(self):
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_content(root)
@@ -503,14 +598,12 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         content.set_margin_end(20)
         scroll.set_child(content)
 
-        # ── Active mode banner ─────────────────────────────────────────────
         self.mode_banner = Adw.Banner()
         self.mode_banner.set_revealed(True)
         self.mode_banner.set_use_markup(True)
         self._update_mode_banner()
         content.append(self.mode_banner)
 
-        # ── System Memory Stats ────────────────────────────────────────────
         stats_group = Adw.PreferencesGroup(title="System Memory")
         content.append(stats_group)
 
@@ -544,11 +637,10 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self.boost_row.add_suffix(self.boost_label)
         stats_group.add(self.boost_row)
 
-        # ── Performance Mode Switching ─────────────────────────────────────
         mode_group = Adw.PreferencesGroup(title="Performance Mode")
         mode_group.set_description(
-            "Applies kernel tuning instantly. Battery tray slider remains fully functional — "
-            "Cortex sets a default via power-profiles-daemon, which you can override anytime.")
+            "Applies kernel tuning instantly — CPU, PCIe ASPM, NVMe, SATA, USB, audio power. "
+            "Battery tray slider remains functional.")
         content.append(mode_group)
 
         ICON_FALLBACKS = {
@@ -579,32 +671,23 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
 
         self._refresh_mode_buttons()
 
-        # ── Optimization Options ───────────────────────────────────────────
         opts_group = Adw.PreferencesGroup(title="Manual Optimization Options")
-        opts_group.set_description(
-            "Choose what to run when you click Optimize Memory Now.")
+        opts_group.set_description("Choose what to run when you click Optimize Memory Now.")
         content.append(opts_group)
 
-        self.opt_caches  = self._switch_row("Drop page/dentry/inode caches",
-                                             "Immediately frees RAM", True)
+        self.opt_caches  = self._switch_row("Drop page/dentry/inode caches",    "Immediately frees RAM",                          True)
         opts_group.add(self.opt_caches)
-        self.opt_compact = self._switch_row("Memory compaction",
-                                             "Reduces fragmentation", True)
+        self.opt_compact = self._switch_row("Memory compaction",                 "Reduces fragmentation",                          True)
         opts_group.add(self.opt_compact)
-        self.opt_zram    = self._switch_row("zram recompress",
-                                             "Re-squeeze compressed swap pages", True)
+        self.opt_zram    = self._switch_row("zram recompress",                   "Re-squeeze compressed swap pages",               True)
         opts_group.add(self.opt_zram)
-        self.opt_swap    = self._switch_row("Swap pressure flush",
-                                             "Push cold pages to swap temporarily", True)
+        self.opt_swap    = self._switch_row("Swap pressure flush",               "Push cold pages to swap temporarily",            True)
         opts_group.add(self.opt_swap)
-        self.opt_oom     = self._switch_row("Adjust OOM scores",
-                                             "Protect KDE shell; make browsers killable", True)
+        self.opt_oom     = self._switch_row("Adjust OOM scores",                 "Protect KDE shell; make browsers killable",      True)
         opts_group.add(self.opt_oom)
-        self.opt_deep    = self._switch_row("Deep Clean (slow)",
-                                             "Flush hugepages + NUMA + slab caches", False)
+        self.opt_deep    = self._switch_row("Deep Clean (slow)",                 "Flush hugepages + NUMA + slab caches",           False)
         opts_group.add(self.opt_deep)
 
-        # ── Cortex Game Mode Services ──────────────────────────────────────
         cortex_group = Adw.PreferencesGroup(title="Raptor Cortex — Game Mode")
         cortex_group.set_description(
             "Selected services are suspended when any game launches and resumed when it exits.")
@@ -620,7 +703,6 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
             cortex_group.add(row)
             self._service_switches[pattern] = row
 
-        # ── Result display ─────────────────────────────────────────────────
         self.result_group = Adw.PreferencesGroup(title="Last Optimization")
         self.result_group.set_visible(False)
         content.append(self.result_group)
@@ -639,7 +721,6 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self.sus_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.sus_group.add(self.sus_box)
 
-        # ── Action buttons ─────────────────────────────────────────────────
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         btn_box.set_halign(Gtk.Align.CENTER)
         content.append(btn_box)
@@ -659,10 +740,8 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self.spinner = Gtk.Spinner()
         btn_box.append(self.spinner)
 
-    # ── Mode indicator helpers ─────────────────────────────────────────────
     def _update_mode_banner(self):
-        label, desc, css, icon = PERFORMANCE_MODES[self._current_mode]
-        # Adw.Banner supports plain text title
+        label, desc, _, _ = PERFORMANCE_MODES[self._current_mode]
         self.mode_banner.set_title(f"Active mode: {label} — {desc}")
 
     def _refresh_mode_buttons(self):
@@ -696,11 +775,7 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
             self._cortex_patterns.add(pattern)
         else:
             self._cortex_patterns.discard(pattern)
-        threading.Thread(
-            target=save_cortex_config,
-            args=(self._cortex_patterns,),
-            daemon=True
-        ).start()
+        threading.Thread(target=save_cortex_config, args=(self._cortex_patterns,), daemon=True).start()
 
     def _on_mode_switch(self, row, mode_key):
         self._current_mode = mode_key
@@ -709,23 +784,14 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         threading.Thread(target=self._apply_mode, args=(mode_key,), daemon=True).start()
 
     def _apply_mode(self, mode_key):
-        # Apply kernel-level tuning (WiFi/BT never touched)
         subprocess.run(["sudo", HELPER, "set-mode", mode_key], capture_output=True)
-
         if mode_key == "performance":
-            subprocess.run([
-                "sudo", HELPER, "1", "1", "1", "1", "0", "0", "0", "1"
-            ], capture_output=True)
+            subprocess.run(["sudo", HELPER, "1", "1", "1", "1", "0", "0", "0", "1"], capture_output=True)
             subprocess.run(["sudo", HELPER, "trim-background"], capture_output=True)
         elif mode_key == "balanced":
-            subprocess.run([
-                "sudo", HELPER, "1", "1", "0", "1", "0", "0", "0", "0"
-            ], capture_output=True)
+            subprocess.run(["sudo", HELPER, "1", "1", "0", "1", "0", "0", "0", "0"], capture_output=True)
         elif mode_key == "power_saving":
-            subprocess.run([
-                "sudo", HELPER, "1", "0", "0", "0", "0", "0", "0", "0"
-            ], capture_output=True)
-
+            subprocess.run(["sudo", HELPER, "1", "0", "0", "0", "0", "0", "0", "0"], capture_output=True)
         GLib.idle_add(lambda: (self._refresh_stats(), False))
 
     def _refresh_stats(self):
@@ -746,24 +812,20 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
 
         swap_used, swap_total = get_swap_usage()
         self.swap_label.set_text(
-            f"{fmt_mb(swap_used)} / {fmt_mb(swap_total)}"
-            if swap_total > 0 else "No swap")
+            f"{fmt_mb(swap_used)} / {fmt_mb(swap_total)}" if swap_total > 0 else "No swap")
 
         zram_orig, zram_total, zram_active = get_zram_usage()
         if zram_active:
             if zram_orig > 0:
                 ratio = zram_orig / max(zram_total, 1)
-                self.zram_label.set_text(
-                    f"{fmt_mb(zram_orig)} → {fmt_mb(zram_total)} ({ratio:.1f}x)")
+                self.zram_label.set_text(f"{fmt_mb(zram_orig)} → {fmt_mb(zram_total)} ({ratio:.1f}x)")
             else:
                 self.zram_label.set_text(f"{fmt_mb(zram_total)} slot, idle")
         else:
             self.zram_label.set_text("Not active")
 
         boost = get_cpu_boost()
-        self.boost_label.set_text(
-            "Enabled" if boost else "Disabled" if boost is not None else "N/A")
-
+        self.boost_label.set_text("Enabled" if boost else "Disabled" if boost is not None else "N/A")
         return True
 
     def on_optimize(self, btn):
@@ -781,11 +843,7 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
             "swap":    self.opt_swap.get_active(),
         }
         before_used, before_total = mem_used_mb()
-        threading.Thread(
-            target=self._do_optimize,
-            args=(opts, before_used, before_total),
-            daemon=True,
-        ).start()
+        threading.Thread(target=self._do_optimize, args=(opts, before_used, before_total), daemon=True).start()
 
     def _do_optimize(self, opts, before_used, before_total):
         subprocess.run([
@@ -847,9 +905,7 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self.resume_btn.set_sensitive(False)
         self.sus_group.set_visible(False)
         threading.Thread(
-            target=lambda: subprocess.run(
-                ["sudo", HELPER, "restore-background"], capture_output=True
-            ),
+            target=lambda: subprocess.run(["sudo", HELPER, "restore-background"], capture_output=True),
             daemon=True,
         ).start()
 
