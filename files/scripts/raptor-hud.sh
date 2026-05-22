@@ -2,42 +2,78 @@
 set -e
 
 # =============================================================================
-# Raptor HUD — F-22 Themed KDE Plasma Shell
-# • RaptorOS color scheme (gunmetal + electric blue + amber)
-# • Cockpit radar bottom taskbar
-# • Working "Raptor OS" app-launcher category
-# • GPU profiler .desktop that always surfaces
-# • Breeze Dark icon theme (KDE default)
-# • Aurorae window decoration
-# • Applied at first login via systemd user unit
+# Raptor HUD v4.1 — F-22 Themed KDE Plasma Shell
+# FIXES:
+#   • kwriteconfig5 group syntax corrected throughout apply-plasma-panel.sh
+#     (was: --group "Containments][$ID" → now: --group Containments --group $ID)
+#   • Battery icon pinned next to WiFi in system tray
+#   • Nitrogen installed for static wallpaper; raptor-set-wallpaper command added
 # =============================================================================
 
 # ── Palette reference ─────────────────────────────────────────────────────────
-# Base:       #0d0f12  (near-black, stealth fuselage)
-# Surface:    #151a20  (gunmetal dark)
-# Panel:      #1c2330  (panel background)
-# Border:     #2a3444  (subtle edge)
-# Accent:     #1e90ff  (electric blue — HUD glow)
-# Warning:    #f5a623  (amber alert)
-# Success:    #2ec27e  (green go)
-# Text:       #c8d6e8  (cool grey-white)
-# Dim text:   #5a6a7e  (muted)
+# Base:    #0d0f12  Surface: #151a20  Panel:   #1c2330  Border:  #2a3444
+# Accent:  #1e90ff  Warning: #f5a623  Success: #2ec27e  Text:    #c8d6e8
 
 mkdir -p /usr/lib/raptor/hud
 
-# ── Copy plasmoid from build context ─────────────────────────────────────────
-# The files module can't copy directories, so we do it here.
-# /tmp/files mirrors the repo's files/ directory during the script module run.
-PLASMOID_SRC="/tmp/files/usr/share/plasma/plasmoids/org.raptoros.radararc"
-PLASMOID_DST="/usr/share/plasma/plasmoids/org.raptoros.radararc"
-if [ -d "$PLASMOID_SRC" ]; then
-    mkdir -p "$PLASMOID_DST"
-    cp -r "$PLASMOID_SRC/." "$PLASMOID_DST/"
-    echo "[OK] plasmoid copied from build context"
-else
-    echo "[WARN] plasmoid source not found at $PLASMOID_SRC — will be written by script below"
+# ── Install nitrogen for wallpaper ───────────────────────────────────────────
+if ! command -v nitrogen &>/dev/null; then
+    if   command -v apt-get &>/dev/null; then apt-get install -y nitrogen 2>/dev/null || true
+    elif command -v pacman  &>/dev/null; then pacman -S --noconfirm nitrogen 2>/dev/null || true
+    elif command -v dnf     &>/dev/null; then dnf install -y nitrogen 2>/dev/null || true
+    fi
 fi
 
+# ── raptor-set-wallpaper command ──────────────────────────────────────────────
+cat << 'WPEOF' > /usr/bin/raptor-set-wallpaper
+#!/bin/bash
+# Usage: raptor-set-wallpaper /path/to/image.jpg
+#   or:  raptor-set-wallpaper   (opens file picker)
+set_wallpaper() {
+    local IMG="$1"
+    [ -f "$IMG" ] || { echo "File not found: $IMG" >&2; exit 1; }
+    echo "$IMG" > "$HOME/.config/raptor-wallpaper"
+    nitrogen --set-scaled "$IMG"
+    echo "Wallpaper set: $IMG"
+}
+if [ -n "$1" ]; then
+    set_wallpaper "$1"
+elif command -v kdialog &>/dev/null; then
+    FILE=$(kdialog --getopenfilename "$HOME" \
+        "Images (*.png *.jpg *.jpeg *.webp *.bmp)|*.png *.jpg *.jpeg *.webp *.bmp")
+    [ -n "$FILE" ] && set_wallpaper "$FILE"
+elif command -v zenity &>/dev/null; then
+    FILE=$(zenity --file-selection --title="Select Wallpaper" \
+        --file-filter="Images|*.png *.jpg *.jpeg *.webp *.bmp")
+    [ -n "$FILE" ] && set_wallpaper "$FILE"
+else
+    echo "Usage: raptor-set-wallpaper /path/to/image.jpg"; exit 1
+fi
+WPEOF
+chmod +x /usr/bin/raptor-set-wallpaper
+
+cat << 'EOF' > /usr/share/applications/raptor-set-wallpaper.desktop
+[Desktop Entry]
+Type=Application
+Name=Set Wallpaper
+Comment=Set a static wallpaper
+Exec=/usr/bin/raptor-set-wallpaper
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=X-RaptorOS;System;Settings;
+EOF
+
+# Autostart nitrogen at login to restore saved wallpaper
+mkdir -p /etc/xdg/autostart
+cat << 'EOF' > /etc/xdg/autostart/raptor-wallpaper.desktop
+[Desktop Entry]
+Type=Application
+Name=Raptor Wallpaper
+Exec=bash -c '[ -f "$HOME/.config/raptor-wallpaper" ] && nitrogen --set-scaled "$(cat $HOME/.config/raptor-wallpaper)" || true'
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF
 
 # ── RaptorOS KDE Color Scheme ─────────────────────────────────────────────────
 mkdir -p /usr/share/color-schemes
@@ -225,19 +261,16 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
       <stop offset="100%" stop-color="#0d0f12"/>
     </linearGradient>
   </defs>
-
   <g id="decoration">
     <rect width="100" height="30" fill="url(#titlebar-active)"/>
     <rect y="29" width="100" height="1" fill="#1e90ff" opacity="0.7"/>
     <rect width="2" height="30" fill="#1e90ff" opacity="0.5"/>
   </g>
-
   <g id="decoration-inactive">
     <rect width="100" height="30" fill="url(#titlebar-inactive)"/>
     <rect y="29" width="100" height="1" fill="#2a3444"/>
     <rect width="2" height="30" fill="#2a3444"/>
   </g>
-
   <g id="close">
     <rect width="18" height="18" rx="1" fill="#3a1515"/>
     <line x1="5" y1="5" x2="13" y2="13" stroke="#cc3333" stroke-width="1.5" stroke-linecap="square"/>
@@ -248,7 +281,6 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
     <line x1="5" y1="5" x2="13" y2="13" stroke="white" stroke-width="1.5" stroke-linecap="square"/>
     <line x1="13" y1="5" x2="5" y2="13" stroke="white" stroke-width="1.5" stroke-linecap="square"/>
   </g>
-
   <g id="maximize">
     <rect width="18" height="18" rx="1" fill="#1c2330"/>
     <rect x="4" y="4" width="10" height="10" fill="none" stroke="#1e90ff" stroke-width="1.5"/>
@@ -257,7 +289,6 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
     <rect width="18" height="18" rx="1" fill="#1e4a7a"/>
     <rect x="4" y="4" width="10" height="10" fill="none" stroke="#5ab0ff" stroke-width="1.5"/>
   </g>
-
   <g id="minimize">
     <rect width="18" height="18" rx="1" fill="#1c2330"/>
     <line x1="4" y1="13" x2="14" y2="13" stroke="#1e90ff" stroke-width="1.5" stroke-linecap="square"/>
@@ -271,7 +302,6 @@ SVGEOF
 
 # ── Raptor OS App Launcher Category ──────────────────────────────────────────
 mkdir -p /usr/share/desktop-directories
-
 cat << 'EOF' > /usr/share/desktop-directories/raptor-os.directory
 [Desktop Entry]
 Type=Directory
@@ -281,16 +311,13 @@ Icon=preferences-system
 EOF
 
 mkdir -p /etc/xdg/menus
-
 for MENUFILE in /etc/xdg/menus/applications.menu \
                 /etc/xdg/menus/kde-applications.menu; do
   if [ -f "$MENUFILE" ]; then
     if ! grep -q 'X-RaptorOS' "$MENUFILE" 2>/dev/null; then
-      # Try matching with End Applications comment (Fedora/Bazzite style)
       if grep -q '<!-- End Applications -->' "$MENUFILE" 2>/dev/null; then
         sed -i 's|</Menu> <!-- End Applications -->|  <Menu>\n    <Name>Raptor OS</Name>\n    <Directory>raptor-os.directory</Directory>\n    <Include><Category>X-RaptorOS</Category></Include>\n  </Menu>\n</Menu> <!-- End Applications -->|' "$MENUFILE"
       else
-        # Fallback: match bare closing tag
         sed -i 's|</Menu>$|  <Menu>\n    <Name>Raptor OS</Name>\n    <Directory>raptor-os.directory</Directory>\n    <Include><Category>X-RaptorOS</Category></Include>\n  </Menu>\n</Menu>|' "$MENUFILE"
       fi
     fi
@@ -312,24 +339,16 @@ MENUEOF
   fi
 done
 
-# Ensure KDE picks up the category via applications-merged
 mkdir -p /etc/xdg/menus/applications-merged
 cp /etc/xdg/menus/kde-applications.menu \
    /etc/xdg/menus/applications-merged/raptor-os.menu 2>/dev/null || true
 
 # ── GPU Profile Detection, Configuration & Profiler UI ───────────────────────
-mkdir -p /usr/bin \
-         /usr/lib/raptor \
-         /usr/lib/systemd/system \
-         /etc/environment.d \
-         /etc/sysctl.d \
-         /etc/polkit-1/rules.d \
-         /etc/sudoers.d \
-         /etc/raptor
+mkdir -p /usr/bin /usr/lib/raptor /usr/lib/systemd/system \
+         /etc/environment.d /etc/sysctl.d /etc/polkit-1/rules.d \
+         /etc/sudoers.d /etc/raptor
 
 cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
-# Raptor OS: GPU profile — applied at boot by raptor-gpu-profile.service.
-# Safe fallback written at image build time; replaced on first boot.
 MESA_SHADER_CACHE_DISABLE=false
 WINE_LARGE_ADDRESS_AWARE=1
 PROTON_FORCE_LARGE_ADDRESS_AWARE=1
@@ -358,8 +377,7 @@ set -euo pipefail
 LOG_TAG="raptor-gpu"
 log() { echo "$*"; logger -t "$LOG_TAG" "$*" 2>/dev/null || true; }
 
-GPU_VENDOR="unknown"
-GPU_MODEL=""
+GPU_VENDOR="unknown"; GPU_MODEL=""
 LSPCI_OUT=$(lspci 2>/dev/null | grep -iE "VGA|3D controller|Display controller" || true)
 
 if   echo "$LSPCI_OUT" | grep -qi "nvidia";            then GPU_VENDOR="nvidia"
@@ -663,12 +681,10 @@ done
 UIEOF
 chmod +x /usr/bin/raptor-gpu-profile-ui.sh
 
-# ── Launcher entry point ──────────────────────────────────────────────────────
 cat << 'LAUNCHEOF' > /usr/bin/raptor-gpu-profile-launcher
 #!/bin/bash
 TUI="/usr/bin/raptor-gpu-profile-ui.sh"
 TITLE="Raptor GPU Profiler"
-
 if   command -v konsole   &>/dev/null; then konsole --title "$TITLE" --profile RaptorOS --noclose -e bash "$TUI"
 elif command -v alacritty &>/dev/null; then alacritty --title "$TITLE" --config-file /dev/null -e bash "$TUI"
 elif command -v kitty     &>/dev/null; then kitty --title "$TITLE" bash "$TUI"
@@ -678,7 +694,6 @@ fi
 LAUNCHEOF
 chmod +x /usr/bin/raptor-gpu-profile-launcher
 
-# ── systemd boot service ──────────────────────────────────────────────────────
 cat << 'SVCEOF' > /usr/lib/systemd/system/raptor-gpu-profile.service
 [Unit]
 Description=Raptor OS — GPU Profile Detection & Configuration
@@ -696,7 +711,6 @@ WantedBy=multi-user.target
 SVCEOF
 systemctl enable raptor-gpu-profile.service 2>/dev/null || true
 
-# ── polkit rule ───────────────────────────────────────────────────────────────
 cat << 'POLKIT' > /etc/polkit-1/rules.d/49-raptor-gpu.rules
 polkit.addRule(function(action, subject) {
     var allowedActions = ["org.freedesktop.policykit.exec"];
@@ -710,7 +724,6 @@ polkit.addRule(function(action, subject) {
 });
 POLKIT
 
-# ── sudoers drop-in ───────────────────────────────────────────────────────────
 cat << 'SUDOERS' > /etc/sudoers.d/raptor-gpu
 ALL ALL=(root) NOPASSWD: /usr/lib/raptor/gpu-detect.sh
 ALL ALL=(root) NOPASSWD: /usr/bin/touch /etc/raptor-force-extreme
@@ -727,7 +740,6 @@ chmod 440 /etc/sudoers.d/raptor-gpu
 command -v visudo &>/dev/null && visudo -c -f /etc/sudoers.d/raptor-gpu \
     && echo "[OK] sudoers valid" || echo "[WARN] check /etc/sudoers.d/raptor-gpu"
 
-# ── GPU profiler .desktop ─────────────────────────────────────────────────────
 mkdir -p /usr/share/applications
 cat << 'EOF' > /usr/share/applications/raptor-gpu-profile.desktop
 [Desktop Entry]
@@ -744,10 +756,6 @@ Categories=X-RaptorOS;System;Monitor;
 Keywords=gpu;profile;performance;raptor;monitor;nvidia;amd;intel;
 StartupNotify=true
 EOF
-command -v desktop-file-validate &>/dev/null && \
-    desktop-file-validate /usr/share/applications/raptor-gpu-profile.desktop \
-    && echo "[OK] raptor-gpu-profile.desktop valid" \
-    || echo "[WARN] .desktop validation warnings — entry will still show"
 
 # ── Plasma desktop theme ──────────────────────────────────────────────────────
 mkdir -p /usr/share/plasma/desktoptheme/RaptorOS/widgets
@@ -777,18 +785,9 @@ cat << 'SVGEOF' > /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-backgrou
       <stop offset="60%" stop-color="#00ff41" stop-opacity="0.02"/>
       <stop offset="100%" stop-color="#00ff41" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="amber-edge" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#f5a623" stop-opacity="0"/>
-      <stop offset="30%"  stop-color="#f5a623" stop-opacity="0.6"/>
-      <stop offset="50%"  stop-color="#f5a623" stop-opacity="0.9"/>
-      <stop offset="70%"  stop-color="#f5a623" stop-opacity="0.6"/>
-      <stop offset="100%" stop-color="#f5a623" stop-opacity="0"/>
-    </linearGradient>
   </defs>
-
   <rect id="hint-stretch-borders" x="0" y="0" width="1" height="1" fill="none"/>
   <rect id="hint-tile-center"     x="0" y="0" width="1" height="1" fill="none"/>
-
   <g id="topleft">
     <rect x="0" y="0" width="24" height="48" fill="#0d0f12"/>
     <polygon points="0,0 24,0 0,24" fill="#1c2330"/>
@@ -801,21 +800,14 @@ cat << 'SVGEOF' > /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-backgrou
     <line x1="0" y1="0" x2="24" y2="0"  stroke="#1e90ff" stroke-width="1"   opacity="0.8"/>
     <line x1="24" y1="0" x2="24" y2="48" stroke="#1e90ff" stroke-width="0.5" opacity="0.4"/>
   </g>
-  <g id="bottomleft">
-    <rect x="0" y="0" width="24" height="4" fill="#0d0f12"/>
-  </g>
-  <g id="bottomright">
-    <rect x="0" y="0" width="24" height="4" fill="#0d0f12"/>
-  </g>
+  <g id="bottomleft"><rect x="0" y="0" width="24" height="4" fill="#0d0f12"/></g>
+  <g id="bottomright"><rect x="0" y="0" width="24" height="4" fill="#0d0f12"/></g>
   <g id="top">
     <rect x="0" y="0" width="1" height="48" fill="#0d0f12"/>
     <rect x="0" y="0" width="1" height="48" fill="url(#topglow)"/>
     <line x1="0" y1="0" x2="1" y2="0" stroke="#1e90ff" stroke-width="1.5" opacity="0.85"/>
-    <line x1="0" y1="2" x2="1" y2="2" stroke="#1e90ff" stroke-width="0.5" opacity="0.25"/>
   </g>
-  <g id="bottom">
-    <rect x="0" y="0" width="1" height="4" fill="#080a0c"/>
-  </g>
+  <g id="bottom"><rect x="0" y="0" width="1" height="4" fill="#080a0c"/></g>
   <g id="left">
     <rect x="0" y="0" width="24" height="1" fill="#0d0f12"/>
     <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
@@ -827,12 +819,6 @@ cat << 'SVGEOF' > /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-backgrou
   <g id="center">
     <rect x="0" y="0" width="1" height="48" fill="#0d0f12"/>
     <rect x="0" y="0" width="1" height="48" fill="url(#radar-sweep)"/>
-    <line x1="0" y1="8"  x2="1" y2="8"  stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
-    <line x1="0" y1="16" x2="1" y2="16" stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
-    <line x1="0" y1="24" x2="1" y2="24" stroke="#1e90ff" stroke-width="0.3" opacity="0.04"/>
-    <line x1="0" y1="32" x2="1" y2="32" stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
-    <line x1="0" y1="40" x2="1" y2="40" stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
-    <line x1="0" y1="14" x2="1" y2="14" stroke="#f5a623" stroke-width="0.5" opacity="0.18"/>
   </g>
 </svg>
 SVGEOF
@@ -841,9 +827,6 @@ cp /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg \
    /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets/panel-background.svg
 
 # ── Radar arc plasmoid ────────────────────────────────────────────────────────
-# Note: the plasmoid directory is copied from files/ by the files module.
-# We only write the metadata and QML here — main.xml is already in place.
-
 cat << 'EOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/metadata.json
 {
     "KPackageStructure": "Plasma/Applet",
@@ -870,15 +853,12 @@ Item {
     id: root
     implicitWidth: 120
     implicitHeight: PlasmaCore.Units.gridUnit * 2
-
     property string side: plasmoid.configuration.side || "left"
     property real sweepAngle: 0
-
     SequentialAnimation on sweepAngle {
         loops: Animation.Infinite
         NumberAnimation { to: 360; duration: 4000; easing.type: Easing.Linear }
     }
-
     Canvas {
         id: canvas
         anchors.fill: parent
@@ -888,79 +868,33 @@ Item {
             var cx = side === "left" ? width - 10 : 10;
             var cy = height;
             var maxR = width * 1.1;
-
             ctx.strokeStyle = "rgba(30,144,255,0.22)";
             ctx.lineWidth = 0.5;
             for (var r = 20; r <= maxR; r += 20) {
-                ctx.beginPath();
-                ctx.arc(cx, cy, r, Math.PI, 2 * Math.PI);
-                ctx.stroke();
+                ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 2 * Math.PI); ctx.stroke();
             }
-
-            ctx.strokeStyle = "rgba(30,144,255,0.10)";
-            ctx.lineWidth = 0.5;
-            var angles = [200,210,220,230,240,250,260,270,280,290,300,310,320,330,340];
-            for (var i = 0; i < angles.length; i++) {
-                var rad = angles[i] * Math.PI / 180;
-                ctx.beginPath();
-                ctx.moveTo(cx, cy);
-                ctx.lineTo(cx + maxR * Math.cos(rad), cy + maxR * Math.sin(rad));
-                ctx.stroke();
-            }
-
             var sweepRad = sweepAngle * Math.PI / 180 + Math.PI;
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.rotate(sweepRad);
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.arc(0, 0, maxR, -0.55, 0);
-            ctx.closePath();
+            ctx.save(); ctx.translate(cx, cy); ctx.rotate(sweepRad);
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, maxR, -0.55, 0); ctx.closePath();
             var sweepGrad = ctx.createLinearGradient(-maxR, 0, 0, 0);
             sweepGrad.addColorStop(0, "rgba(0,255,65,0)");
-            sweepGrad.addColorStop(0.6, "rgba(0,255,65,0.04)");
             sweepGrad.addColorStop(1, "rgba(0,255,65,0.18)");
-            ctx.fillStyle = sweepGrad;
-            ctx.fill();
-            ctx.restore();
-
-            ctx.save();
-            ctx.strokeStyle = "rgba(0,255,65,0.5)";
-            ctx.lineWidth = 1;
-            ctx.translate(cx, cy);
-            ctx.rotate(sweepRad);
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(maxR, 0);
-            ctx.stroke();
-            ctx.restore();
-
-            var blips = [
-                {a:210,r:35},{a:255,r:55},{a:290,r:28},{a:238,r:70},{a:222,r:48}
-            ];
+            ctx.fillStyle = sweepGrad; ctx.fill(); ctx.restore();
+            ctx.save(); ctx.strokeStyle = "rgba(0,255,65,0.5)"; ctx.lineWidth = 1;
+            ctx.translate(cx, cy); ctx.rotate(sweepRad);
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(maxR, 0); ctx.stroke(); ctx.restore();
+            var blips = [{a:210,r:35},{a:255,r:55},{a:290,r:28},{a:238,r:70},{a:222,r:48}];
             blips.forEach(function(b) {
                 var br = b.a * Math.PI / 180;
-                var bx = cx + b.r * Math.cos(br);
-                var by = cy + b.r * Math.sin(br);
-                ctx.beginPath();
-                ctx.arc(bx, by, 1.5, 0, 2 * Math.PI);
-                ctx.fillStyle = "rgba(30,144,255,0.7)";
-                ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + b.r * Math.cos(br), cy + b.r * Math.sin(br), 1.5, 0, 2 * Math.PI);
+                ctx.fillStyle = "rgba(30,144,255,0.7)"; ctx.fill();
             });
         }
     }
-
     onSweepAngleChanged: canvas.requestPaint()
-
     Column {
-        anchors {
-            left:   side === "left"  ? parent.left  : undefined
-            right:  side === "right" ? parent.right : undefined
-            verticalCenter: parent.verticalCenter
-        }
-        width: 48
-        spacing: 1
-
+        anchors { left: side === "left" ? parent.left : undefined; right: side === "right" ? parent.right : undefined; verticalCenter: parent.verticalCenter }
+        width: 48; spacing: 1
         Text { text: "HDG"; color: "#5a6a7e"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1 }
         Text { text: "270°"; color: "#1e90ff"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
         Text { text: "ALT"; color: "#5a6a7e"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1 }
@@ -969,151 +903,106 @@ Item {
 }
 QMLEOF
 
-# ── apply-plasma-panel.sh — run as user on first login ────────────────────────
+# ── apply-plasma-panel.sh — FIXED: correct kwriteconfig5 group syntax ─────────
 cat << 'EOF' > /usr/lib/raptor/hud/apply-plasma-panel.sh
 #!/bin/bash
 # Raptor HUD — Plasma panel config (run as USER on first login)
+# v4.1: FIXED kwriteconfig5 group syntax; FIXED battery tray order; nitrogen wallpaper
 
 CFG="$HOME/.config"
+APPFILE="$CFG/plasma-org.kde.plasma.desktop-appletsrc"
+SHELLFILE="$CFG/plasmashellrc"
 
-# ── 0. Wipe existing panel config for a clean slate ───────────────────────────
-rm -f "$CFG/plasma-org.kde.plasma.desktop-appletsrc"
-rm -f "$CFG/plasmashellrc"
+# ── 0. Clean slate ────────────────────────────────────────────────────────────
+rm -f "$APPFILE" "$SHELLFILE"
 rm -f "$HOME/.local/share/plasma/layout-templates/"*.layout.js 2>/dev/null || true
 
-# ── 1. Apply color scheme ─────────────────────────────────────────────────────
+# ── 1. Color scheme ───────────────────────────────────────────────────────────
 plasma-apply-colorscheme /usr/share/color-schemes/RaptorOS.colors 2>/dev/null || true
 kwriteconfig5 --file kdeglobals --group General --key ColorScheme RaptorOS
 kwriteconfig5 --file kdeglobals --group General --key Name        RaptorOS
 
-# ── 2. Apply window decoration ────────────────────────────────────────────────
-kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 \
-    --key library org.kde.kwin.aurorae
-kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 \
-    --key theme "__aurorae__svg__RaptorOS"
+# ── 2. Window decoration ──────────────────────────────────────────────────────
+kwriteconfig5 --file kwinrc --group "org.kde.kdecoration2" --key library org.kde.kwin.aurorae
+kwriteconfig5 --file kwinrc --group "org.kde.kdecoration2" --key theme "__aurorae__svg__RaptorOS"
 
-# ── 3. Icon theme ─────────────────────────────────────────────────────────────
+# ── 3. Icons ──────────────────────────────────────────────────────────────────
 ICON_THEME="breeze-dark"
 kwriteconfig5 --file kdeglobals --group Icons --key Theme "$ICON_THEME"
-kwriteconfig5 --file kdeglobals --group KDE   --key LookAndFeelPackage \
-    org.kde.breezedark.desktop
+kwriteconfig5 --file kdeglobals --group KDE   --key LookAndFeelPackage org.kde.breezedark.desktop
 
-# ── 4. Kvantum widget style ───────────────────────────────────────────────────
+# ── 4. Kvantum ────────────────────────────────────────────────────────────────
 mkdir -p "$HOME/.config/Kvantum"
 printf '[General]\ntheme=RaptorOS\n' > "$HOME/.config/Kvantum/kvantum.kvconfig"
 kwriteconfig5 --file kdeglobals --group KDE --key widgetStyle kvantum
 
-# ── 5. Apply Plasma theme ─────────────────────────────────────────────────────
+# ── 5. Plasma theme ───────────────────────────────────────────────────────────
 kwriteconfig5 --file plasmarc --group Theme --key name RaptorOS
 
-# ── 6. Bottom cockpit dock — 48px, full width ─────────────────────────────────
+# ── 6. Panel — FIXED: each nested group gets its own --group flag ─────────────
 PANEL_ID=128
+ID_LAUNCHER=1; ID_RADAR_L=2; ID_SPACER_L=3; ID_TASKS=4
+ID_SPACER_R=5; ID_RADAR_R=6; ID_TRAY=7;     ID_CLOCK=8; ID_SHOWDESKTOP=9
 
-kwriteconfig5 --file plasmashellrc \
-    --group "PlasmaViews" --group "Panel $PANEL_ID" --key location     1
-kwriteconfig5 --file plasmashellrc \
-    --group "PlasmaViews" --group "Panel $PANEL_ID" --key thickness    48
-kwriteconfig5 --file plasmashellrc \
-    --group "PlasmaViews" --group "Panel $PANEL_ID" --key maximumLength 100
-kwriteconfig5 --file plasmashellrc \
-    --group "PlasmaViews" --group "Panel $PANEL_ID" --key minimumLength 100
-kwriteconfig5 --file plasmashellrc \
-    --group "PlasmaViews" --group "Panel $PANEL_ID" --key alignment    0
-kwriteconfig5 --file plasmashellrc \
-    --group "PlasmaViews" --group "Panel $PANEL_ID" --key panelOpacity 1
+# Panel containment
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --key plugin   "org.kde.panel"
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --key location 1
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group General \
+    --key AppletOrder "${ID_LAUNCHER};${ID_RADAR_L};${ID_SPACER_L};${ID_TASKS};${ID_SPACER_R};${ID_RADAR_R};${ID_TRAY};${ID_CLOCK};${ID_SHOWDESKTOP}"
 
-# ── 7. Panel applet layout ────────────────────────────────────────────────────
-ID_LAUNCHER=1
-ID_RADAR_L=2
-ID_SPACER_L=3
-ID_TASKS=4
-ID_SPACER_R=5
-ID_RADAR_R=6
-ID_TRAY=7
-ID_CLOCK=8
-ID_SHOWDESKTOP=9
+# Panel geometry
+kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key location      1
+kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key thickness     48
+kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key maximumLength 100
+kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key minimumLength 100
+kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key alignment     0
+kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key panelOpacity  1
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID" --key plugin   "org.kde.panel"
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID" --key location 1
+# Applets
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_LAUNCHER --key plugin "org.kde.plasma.kickoff"
 
-for ID in $ID_LAUNCHER $ID_RADAR_L $ID_SPACER_L $ID_TASKS \
-          $ID_SPACER_R $ID_RADAR_R $ID_TRAY $ID_CLOCK $ID_SHOWDESKTOP; do
-    kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-        --group "Containments][$PANEL_ID][Applets][$ID" --key immutability 1
-done
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_RADAR_L --key plugin "org.raptoros.radararc"
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_RADAR_L --group Configuration --group General --key side "left"
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_LAUNCHER" \
-    --key plugin "org.kde.plasma.kickoff"
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_SPACER_L --key plugin "org.kde.plasma.panelspacer"
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_RADAR_L" \
-    --key plugin "org.raptoros.radararc"
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_RADAR_L][Configuration][General" \
-    --key side "left"
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_TASKS --key plugin "org.kde.plasma.icontasks"
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_TASKS --group Configuration --group General --key showLabels false
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_TASKS --group Configuration --group General --key maxStripes 1
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_SPACER_L" \
-    --key plugin "org.kde.plasma.panelspacer"
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_SPACER_R --key plugin "org.kde.plasma.panelspacer"
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_TASKS" \
-    --key plugin "org.kde.plasma.icontasks"
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_TASKS][Configuration][General" \
-    --key showLabels false
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_TASKS][Configuration][General" \
-    --key maxStripes 1
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_RADAR_R --key plugin "org.raptoros.radararc"
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_RADAR_R --group Configuration --group General --key side "right"
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_SPACER_R" \
-    --key plugin "org.kde.plasma.panelspacer"
+# System tray
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_TRAY --key plugin "org.kde.plasma.systemtray"
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_RADAR_R" \
-    --key plugin "org.raptoros.radararc"
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_RADAR_R][Configuration][General" \
-    --key side "right"
+# FIX: Battery next to WiFi — pin both as always-visible in order: network, battery
+kwriteconfig5 --file "$APPFILE" \
+    --group Containments --group $PANEL_ID \
+    --group Applets --group $ID_TRAY \
+    --group Configuration --group General \
+    --key shownItems "org.kde.plasma.networkmanagement,org.kde.plasma.battery"
+kwriteconfig5 --file "$APPFILE" \
+    --group Containments --group $PANEL_ID \
+    --group Applets --group $ID_TRAY \
+    --group Configuration --group General \
+    --key extraItems "org.kde.plasma.battery,org.kde.plasma.networkmanagement,org.kde.plasma.volume,org.kde.plasma.bluetooth"
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_TRAY" \
-    --key plugin "org.kde.plasma.systemtray"
+# Clock
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --key plugin "org.kde.plasma.digitalclock"
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key use24hFormat    2
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key showSeconds     true
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key showDate        false
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key fontFamily      "JetBrains Mono"
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key customFontSize  11
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK" \
-    --key plugin "org.kde.plasma.digitalclock"
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
-    --key use24hFormat 2
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
-    --key showSeconds true
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
-    --key showDate false
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
-    --key fontFamily "JetBrains Mono"
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
-    --key customFontSize 11
+kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_SHOWDESKTOP --key plugin "org.kde.plasma.showdesktop"
 
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID][Applets][$ID_SHOWDESKTOP" \
-    --key plugin "org.kde.plasma.showdesktop"
-
-kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
-    --group "Containments][$PANEL_ID" \
-    --key applets "$ID_LAUNCHER,$ID_RADAR_L,$ID_SPACER_L,$ID_TASKS,$ID_SPACER_R,$ID_RADAR_R,$ID_TRAY,$ID_CLOCK,$ID_SHOWDESKTOP"
-
-# ── 8. GTK settings ───────────────────────────────────────────────────────────
+# ── 7. GTK settings ───────────────────────────────────────────────────────────
 mkdir -p "$HOME/.config/gtk-3.0"
-cat << GTKEOF > "$HOME/.config/gtk-3.0/settings.ini"
+cat > "$HOME/.config/gtk-3.0/settings.ini" << GTKEOF
 [Settings]
 gtk-theme-name=RaptorOS-GTK
 gtk-icon-theme-name=${ICON_THEME}
@@ -1122,16 +1011,22 @@ gtk-font-name=JetBrains Mono 10
 gtk-application-prefer-dark-theme=1
 GTKEOF
 
-# ── 9. Rebuild menu DB at login time ──────────────────────────────────────────
+# ── 8. Rebuild menu DB ────────────────────────────────────────────────────────
 XDG_RUNTIME_DIR="/run/user/$(id -u)" kbuildsycoca6 --noincremental 2>/dev/null || \
 XDG_RUNTIME_DIR="/run/user/$(id -u)" kbuildsycoca5 --noincremental 2>/dev/null || true
 
-# ── 10. Force icon theme to apply ────────────────────────────────────────────
 plasma-changeicons "$ICON_THEME" 2>/dev/null || true
 dbus-send --session --dest=org.kde.KIconLoader --type=signal \
     /KIconLoader org.kde.KIconLoader.iconChanged int32:0 2>/dev/null || true
 
-# ── 11. Reload KWin + restart Plasma shell with clean config ──────────────────
+# ── 9. Restore nitrogen wallpaper if one has been set ────────────────────────
+WP_FILE="$HOME/.config/raptor-wallpaper"
+if [ -f "$WP_FILE" ]; then
+    WP=$(cat "$WP_FILE")
+    [ -f "$WP" ] && nitrogen --set-scaled "$WP" 2>/dev/null || true
+fi
+
+# ── 10. Restart Plasma ───────────────────────────────────────────────────────
 qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
 kquitapp6 plasmashell 2>/dev/null || kquitapp5 plasmashell 2>/dev/null || true
 sleep 2
@@ -1161,78 +1056,28 @@ cat << 'EOF' > /usr/share/themes/RaptorOS-GTK/gtk-3.0/gtk.css
 @define-color accent #1e90ff;
 
 * { -gtk-icon-style: symbolic; }
-
 window, .background { background-color: @bg_color; color: @fg_color; }
-
-headerbar {
-    background: linear-gradient(to bottom, #1c2330, #151a20);
-    border-bottom: 1px solid #1e90ff;
-    padding: 4px 8px;
-    min-height: 36px;
-}
+headerbar { background: linear-gradient(to bottom, #1c2330, #151a20); border-bottom: 1px solid #1e90ff; padding: 4px 8px; min-height: 36px; }
 headerbar .title { font-weight: 600; color: @fg_color; letter-spacing: 0.04em; }
-
-button {
-    background: #1c2330;
-    border: 1px solid @borders;
-    color: @fg_color;
-    border-radius: 2px;
-    padding: 4px 12px;
-    transition: all 120ms ease;
-}
+button { background: #1c2330; border: 1px solid @borders; color: @fg_color; border-radius: 2px; padding: 4px 12px; transition: all 120ms ease; }
 button:hover { background: #1e4a7a; border-color: @accent; color: white; }
-button.suggested-action   { background: @accent;  border-color: @accent;  color: white; }
-button.destructive-action { background: #8b1a1a; border-color: #cc3333;  color: white; }
-
-entry {
-    background: @base_color;
-    border: 1px solid @borders;
-    color: @fg_color;
-    border-radius: 2px;
-    padding: 4px 8px;
-    caret-color: @accent;
-}
+button.suggested-action   { background: @accent; border-color: @accent; color: white; }
+button.destructive-action { background: #8b1a1a; border-color: #cc3333; color: white; }
+entry { background: @base_color; border: 1px solid @borders; color: @fg_color; border-radius: 2px; padding: 4px 8px; caret-color: @accent; }
 entry:focus { border-color: @accent; box-shadow: 0 0 0 1px @accent; }
-
-treeview.view:selected, row:selected {
-    background-color: @selected_bg_color;
-    color: @selected_fg_color;
-}
-
-scrollbar slider {
-    background-color: #2a3444;
-    border-radius: 2px;
-    min-width: 6px;
-    min-height: 6px;
-}
+treeview.view:selected, row:selected { background-color: @selected_bg_color; color: @selected_fg_color; }
+scrollbar slider { background-color: #2a3444; border-radius: 2px; min-width: 6px; min-height: 6px; }
 scrollbar slider:hover { background-color: @accent; }
-
-tooltip {
-    background-color: @tooltip_bg_color;
-    border: 1px solid @borders;
-    color: @tooltip_fg_color;
-    border-radius: 2px;
-}
-
+tooltip { background-color: @tooltip_bg_color; border: 1px solid @borders; color: @tooltip_fg_color; border-radius: 2px; }
 menubar, .menubar { background-color: #1c2330; border-bottom: 1px solid @borders; }
-menu, .menu       { background-color: #151a20; border: 1px solid @borders; }
+menu, .menu { background-color: #151a20; border: 1px solid @borders; }
 menu menuitem:hover { background-color: @accent; color: white; }
-
 notebook header { background-color: #1c2330; border-bottom: 1px solid @borders; }
 notebook header tab:checked { background-color: @base_color; border-bottom: 2px solid @accent; }
-
 progressbar progress { background-color: @accent; border-radius: 2px; }
-
-checkbutton check, radiobutton radio {
-    background: @base_color;
-    border: 1px solid @borders;
-}
-checkbutton check:checked, radiobutton radio:checked {
-    background-color: @accent;
-    border-color: @accent;
-}
-
-scale trough    { background-color: #2a3444; border-radius: 2px; min-height: 4px; }
+checkbutton check, radiobutton radio { background: @base_color; border: 1px solid @borders; }
+checkbutton check:checked, radiobutton radio:checked { background-color: @accent; border-color: @accent; }
+scale trough { background-color: #2a3444; border-radius: 2px; min-height: 4px; }
 scale highlight { background-color: @accent; border-radius: 2px; }
 EOF
 
@@ -1268,9 +1113,6 @@ composite=true
 menu_shadow_depth=6
 tooltip_shadow_depth=4
 popup_blurring=true
-contrast=1.0
-intensity=1.0
-saturation=1.0
 
 [GeneralColors]
 window.color=#1c2330
@@ -1307,7 +1149,6 @@ EOF
 
 # ── Konsole profile ───────────────────────────────────────────────────────────
 mkdir -p /usr/share/konsole
-
 cat << 'EOF' > /usr/share/konsole/RaptorOS.profile
 [Appearance]
 ColorScheme=RaptorOS
@@ -1419,10 +1260,8 @@ RemainAfterExit=yes
 [Install]
 WantedBy=default.target
 EOF
-
 systemctl --global enable raptor-hud-apply.service 2>/dev/null || true
 
-# ── Post-install sycoca rebuild (best-effort at build time) ───────────────────
 if command -v kbuildsycoca6 &>/dev/null; then
     kbuildsycoca6 --noincremental 2>/dev/null || true
 elif command -v kbuildsycoca5 &>/dev/null; then
@@ -1430,3 +1269,7 @@ elif command -v kbuildsycoca5 &>/dev/null; then
 fi
 
 echo "RAPTOR_HUD_READY"
+echo ""
+echo "To set your wallpaper (persists across logins):"
+echo "  raptor-set-wallpaper /path/to/image.jpg"
+echo "  — or search 'Set Wallpaper' in the app menu"
