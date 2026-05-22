@@ -7,7 +7,7 @@ set -e
 # • Cockpit radar bottom taskbar
 # • Working "Raptor OS" app-launcher category
 # • GPU profiler .desktop that always surfaces
-# • Tela-dark icon theme
+# • Numix Circle icon theme
 # • Aurorae window decoration
 # • Applied at first login via systemd user unit
 # =============================================================================
@@ -24,6 +24,20 @@ set -e
 # Dim text:   #5a6a7e  (muted)
 
 mkdir -p /usr/lib/raptor/hud
+
+# ── Copy plasmoid from build context ─────────────────────────────────────────
+# The files module can't copy directories, so we do it here.
+# /tmp/files mirrors the repo's files/ directory during the script module run.
+PLASMOID_SRC="/tmp/files/usr/share/plasma/plasmoids/org.raptoros.radararc"
+PLASMOID_DST="/usr/share/plasma/plasmoids/org.raptoros.radararc"
+if [ -d "$PLASMOID_SRC" ]; then
+    mkdir -p "$PLASMOID_DST"
+    cp -r "$PLASMOID_SRC/." "$PLASMOID_DST/"
+    echo "[OK] plasmoid copied from build context"
+else
+    echo "[WARN] plasmoid source not found at $PLASMOID_SRC — will be written by script below"
+fi
+
 
 # ── RaptorOS KDE Color Scheme ─────────────────────────────────────────────────
 mkdir -p /usr/share/color-schemes
@@ -968,7 +982,14 @@ kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 \
     --key theme "__aurorae__svg__RaptorOS"
 
 # ── 3. Icon theme ─────────────────────────────────────────────────────────────
-kwriteconfig5 --file kdeglobals --group Icons --key Theme Tela-dark
+if [ -d "/usr/share/icons/Numix-Circle" ]; then
+    ICON_THEME="Numix-Circle"
+elif [ -d "/usr/share/icons/Papirus-Dark" ]; then
+    ICON_THEME="Papirus-Dark"
+else
+    ICON_THEME="breeze-dark"
+fi
+kwriteconfig5 --file kdeglobals --group Icons --key Theme "$ICON_THEME"
 kwriteconfig5 --file kdeglobals --group KDE   --key LookAndFeelPackage \
     org.kde.breezedark.desktop
 
@@ -1087,10 +1108,10 @@ kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
 
 # ── 8. GTK settings ───────────────────────────────────────────────────────────
 mkdir -p "$HOME/.config/gtk-3.0"
-cat << 'GTKEOF' > "$HOME/.config/gtk-3.0/settings.ini"
+cat << GTKEOF > "$HOME/.config/gtk-3.0/settings.ini"
 [Settings]
 gtk-theme-name=RaptorOS-GTK
-gtk-icon-theme-name=Tela-dark
+gtk-icon-theme-name=${ICON_THEME}
 gtk-cursor-theme-name=Adwaita
 gtk-font-name=JetBrains Mono 10
 gtk-application-prefer-dark-theme=1
@@ -1101,7 +1122,7 @@ XDG_RUNTIME_DIR="/run/user/$(id -u)" kbuildsycoca6 --noincremental 2>/dev/null |
 XDG_RUNTIME_DIR="/run/user/$(id -u)" kbuildsycoca5 --noincremental 2>/dev/null || true
 
 # ── 10. Force icon theme to apply ────────────────────────────────────────────
-plasma-changeicons Tela-dark 2>/dev/null || true
+plasma-changeicons "$ICON_THEME" 2>/dev/null || true
 dbus-send --session --dest=org.kde.KIconLoader --type=signal \
     /KIconLoader org.kde.KIconLoader.iconChanged int32:0 2>/dev/null || true
 
@@ -1223,7 +1244,7 @@ Encoding=UTF-8
 [X11 Properties]
 GtkTheme=RaptorOS-GTK
 MetacityTheme=RaptorOS-GTK
-IconTheme=Tela-dark
+IconTheme=Numix-Circle
 CursorTheme=Adwaita
 ButtonLayout=close,minimize,maximize:
 
