@@ -107,8 +107,6 @@ modules:
       - kvantum
       - kvantum-qt5
       - papirus-icon-theme
-      - numix-icon-theme
-      - numix-icon-theme-circle
       - jetbrains-mono-fonts
       - qt5-qtbase
 
