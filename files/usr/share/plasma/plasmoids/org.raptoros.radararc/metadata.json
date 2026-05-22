@@ -1,0 +1,14 @@
+{
+    "KPlugin": {
+        "Id": "org.raptoros.radararc",
+        "Name": "Radar Arc",
+        "Description": "Cockpit-style radar arc taskbar for Raptor OS",
+        "Icon": "view-grid",
+        "Category": "Windows and Tasks",
+        "Authors": [{"Email": "", "Name": "Raptor OS"}],
+        "License": "GPL-2.0-or-later",
+        "Version": "0.1",
+        "Website": ""
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
