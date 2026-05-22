@@ -1,18 +1,12 @@
 #!/bin/bash
-set -oue pipefail
+set -e
 
 # =============================================================================
-# Raptor OS — Update Manager v2
-# Fixes:
-#   • Changelog fetch uses ssl.create_default_context() + fallback to HTTP
-#   • rpm-ostree update runs via pkexec (no silent root failure)
-#   • pkexec policy installed so no password dialog appears for raptor-update
-#   • systemctl reboot via pkexec
-#   • script -q -c replaced with direct Popen (reliable exit code)
-#   • Log auto-scroll fixed (use GLib.idle_add on adjustment)
+# Raptor OS — Update Manager
+# GTK4/Adwaita GUI: check for updates, show changelog, update + reboot
 # =============================================================================
 
-# ── Polkit policy — allows raptor-update to run rpm-ostree + reboot ──────────
+# ── Polkit policy ─────────────────────────────────────────────────────────────
 mkdir -p /usr/share/polkit-1/actions
 cat << 'EOF' > /usr/share/polkit-1/actions/io.github.cerberus9dev.raptorupdate.policy
 <?xml version="1.0" encoding="UTF-8"?>
@@ -48,27 +42,24 @@ cat << 'EOF' > /usr/share/polkit-1/actions/io.github.cerberus9dev.raptorupdate.p
 </policyconfig>
 EOF
 
-# ── Privileged helpers (called via pkexec) ────────────────────────────────────
+# ── Privileged helpers ────────────────────────────────────────────────────────
 mkdir -p /usr/lib/raptor
 
-# update-helper: streams rpm-ostree output to stdout, exits with rpm-ostree's code
 cat << 'EOF' > /usr/lib/raptor/update-helper
 #!/bin/bash
 exec rpm-ostree update 2>&1
 EOF
 chmod +x /usr/lib/raptor/update-helper
 
-# reboot-helper: just reboots
 cat << 'EOF' > /usr/lib/raptor/reboot-helper
 #!/bin/bash
 exec systemctl reboot
 EOF
 chmod +x /usr/lib/raptor/reboot-helper
 
-# ── Sudoers fallback (if polkit is unavailable) ───────────────────────────────
+# ── Sudoers fallback ──────────────────────────────────────────────────────────
 mkdir -p /etc/sudoers.d
 cat << 'EOF' > /etc/sudoers.d/raptor-update
-# Raptor Update Manager: passwordless update + reboot
 ALL ALL=(root) NOPASSWD: /usr/lib/raptor/update-helper
 ALL ALL=(root) NOPASSWD: /usr/lib/raptor/reboot-helper
 EOF
@@ -78,7 +69,7 @@ visudo -cf /etc/sudoers.d/raptor-update || true
 # ── Python GUI ────────────────────────────────────────────────────────────────
 cat << 'PYEOF' > /usr/bin/raptor-update
 #!/usr/bin/env python3
-"""Raptor OS Update Manager v2"""
+"""Raptor OS Update Manager"""
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -90,28 +81,23 @@ import threading
 import ssl
 import urllib.request
 import sys
-import os
 import re
 
 CHANGELOG_URL = "https://raw.githubusercontent.com/Cerberus9-dev/Raptor-OS/main/CHANGELOG.md"
 UPDATE_HELPER  = "/usr/lib/raptor/update-helper"
 REBOOT_HELPER  = "/usr/lib/raptor/reboot-helper"
+ANSI_ESCAPE    = re.compile(r"\x1b\[[0-9;]*[mGKHF]|\x1b\][^\x07]*\x07|\r")
 
-ANSI_ESCAPE = re.compile(
-    r"\x1b\[[0-9;]*[mGKHF]|\x1b\][^\x07]*\x07|\r"
-)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def fetch_changelog():
-    """Fetch changelog over HTTPS with a permissive SSL context, fall back to
-    an unverified request if the system cert store rejects the cert."""
     for verify in (True, False):
         try:
             ctx = ssl.create_default_context()
             if not verify:
                 ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
+                ctx.verify_mode    = ssl.CERT_NONE
             req = urllib.request.Request(
                 CHANGELOG_URL,
                 headers={"User-Agent": "RaptorOS-UpdateManager/2"}
@@ -123,21 +109,19 @@ def fetch_changelog():
         except Exception:
             continue
     return (
-        "⚠  Could not load changelog.\n\n"
+        "Could not load changelog.\n\n"
         "Check your internet connection or visit:\n"
         "https://github.com/Cerberus9-dev/Raptor-OS/blob/main/CHANGELOG.md"
     )
 
 
 def check_for_updates():
-    """Returns (has_update: bool, message: str)."""
     try:
         result = subprocess.run(
             ["rpm-ostree", "update", "--check"],
             capture_output=True, text=True, timeout=60
         )
         output = result.stdout + result.stderr
-        # rc=77 means "nothing to do" in rpm-ostree
         if result.returncode == 77 or "No updates available" in output:
             return False, "Your system is up to date."
         if "AvailableUpdate" in output:
@@ -154,8 +138,6 @@ def check_for_updates():
 
 
 def run_privileged(helper_path):
-    """Run a helper via pkexec, fall back to sudo if pkexec is missing.
-    Returns a subprocess.Popen object whose stdout streams the output."""
     for launcher in (["pkexec"], ["sudo"]):
         try:
             return subprocess.Popen(
@@ -187,32 +169,31 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         super().__init__(**kwargs)
         self.set_title("Raptor Update Manager")
         self.set_default_size(700, 640)
-        self._update_running  = False
-        self._has_update      = False
+        self._update_running   = False
+        self._has_update       = False
         self._reboot_cancelled = False
         self._build_ui()
-        # Kick off background tasks immediately
-        threading.Thread(target=self._do_check,        daemon=True).start()
-        threading.Thread(target=self._load_changelog,  daemon=True).start()
+        threading.Thread(target=self._do_check,       daemon=True).start()
+        threading.Thread(target=self._load_changelog, daemon=True).start()
 
-    # ── UI construction ───────────────────────────────────────────────────────
+    # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_content(root)
         root.append(Adw.HeaderBar())
 
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_vexpand(True)
-        root.append(scroll)
+        outer_scroll = Gtk.ScrolledWindow()
+        outer_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        outer_scroll.set_vexpand(True)
+        root.append(outer_scroll)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         content.set_margin_top(24)
         content.set_margin_bottom(24)
         content.set_margin_start(24)
         content.set_margin_end(24)
-        scroll.set_child(content)
+        outer_scroll.set_child(content)
 
         # Banner
         banner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -248,7 +229,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.status_row.add_suffix(self.check_spinner)
         status_group.add(self.status_row)
 
-        # ── Changelog ─────────────────────────────────────────────────────────
+        # Changelog
         cl_group = Adw.PreferencesGroup(title="Changelog")
         content.append(cl_group)
 
@@ -266,16 +247,13 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.cl_view.set_margin_bottom(12)
         self.cl_view.set_margin_start(12)
         self.cl_view.set_margin_end(12)
-        # Monospace so Markdown headings / bullet lists render neatly
         self.cl_view.add_css_class("monospace")
-
         self.cl_buffer = self.cl_view.get_buffer()
         self.cl_buffer.set_text("Loading changelog…")
-
         cl_scroll.set_child(self.cl_view)
         cl_group.add(cl_scroll)
 
-        # ── Update log (hidden until update starts) ────────────────────────────
+        # Update log (hidden until update starts)
         self.log_group = Adw.PreferencesGroup(title="Update Log")
         self.log_group.set_visible(False)
         content.append(self.log_group)
@@ -296,11 +274,10 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.log_view.set_margin_end(8)
         self.log_view.add_css_class("monospace")
         self.log_buffer = self.log_view.get_buffer()
-
         self._log_scroll.set_child(self.log_view)
         self.log_group.add(self._log_scroll)
 
-        # ── Buttons ────────────────────────────────────────────────────────────
+        # Buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         btn_box.set_halign(Gtk.Align.CENTER)
         content.append(btn_box)
@@ -327,7 +304,7 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self.update_spinner = Gtk.Spinner()
         btn_box.append(self.update_spinner)
 
-    # ── Changelog fetch ───────────────────────────────────────────────────────
+    # ── Changelog ─────────────────────────────────────────────────────────────
 
     def _load_changelog(self):
         text = fetch_changelog()
@@ -335,7 +312,6 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
 
     def _set_changelog(self, text):
         self.cl_buffer.set_text(text)
-        # Scroll changelog to top after setting text
         self.cl_view.scroll_to_iter(self.cl_buffer.get_start_iter(), 0, False, 0, 0)
 
     # ── Update check ──────────────────────────────────────────────────────────
@@ -356,7 +332,6 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         self._has_update = has_update
         self.check_spinner.stop()
         self.check_btn.set_sensitive(True)
-
         if has_update:
             self._set_status(msg, "software-update-available-symbolic", "accent")
             self.subtitle.set_text("An update is ready to install.")
@@ -408,11 +383,8 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         threading.Thread(target=self._run_update, daemon=True).start()
 
     def _append_log(self, text):
-        """Append text to the log buffer and auto-scroll. Must be called from
-        the GTK main thread (use GLib.idle_add from worker threads)."""
         end_iter = self.log_buffer.get_end_iter()
         self.log_buffer.insert(end_iter, text)
-        # Scroll to bottom — do it after the insert is processed
         def _scroll():
             adj = self._log_scroll.get_vadjustment()
             adj.set_value(adj.get_upper() - adj.get_page_size())
@@ -420,14 +392,12 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         GLib.idle_add(_scroll)
 
     def _run_update(self):
-        """Worker thread: runs update-helper via pkexec/sudo, streams output."""
         try:
             proc = run_privileged(UPDATE_HELPER)
         except RuntimeError as e:
             GLib.idle_add(self._append_log, f"\nERROR: {e}\n")
             GLib.idle_add(self._on_update_error, -1)
             return
-
         try:
             for line in proc.stdout:
                 clean = ANSI_ESCAPE.sub("", line)
@@ -439,7 +409,6 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
             GLib.idle_add(self._append_log, f"\nERROR reading output: {e}\n")
             GLib.idle_add(self._on_update_error, -1)
             return
-
         if rc == 0:
             GLib.idle_add(self._on_update_success)
         else:
@@ -469,7 +438,6 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         GLib.timeout_add_seconds(1, lambda: (self._countdown(secs - 1), False)[1])
 
     def _do_reboot(self):
-        """Reboot via the privileged helper so no extra auth dialog appears."""
         try:
             run_privileged(REBOOT_HELPER)
         except Exception as e:
@@ -503,7 +471,7 @@ if __name__ == "__main__":
 PYEOF
 chmod +x /usr/bin/raptor-update
 
-# ── Launcher wrapper ───────────────────────────────────────────────────────────
+# ── Launcher wrapper ──────────────────────────────────────────────────────────
 cat << 'EOF' > /usr/bin/raptor-update-launcher
 #!/bin/bash
 export ADW_DISABLE_PORTAL=1
@@ -512,7 +480,7 @@ exec /usr/bin/raptor-update "$@"
 EOF
 chmod +x /usr/bin/raptor-update-launcher
 
-# ── Custom icon ────────────────────────────────────────────────────────────────
+# ── Custom icon ───────────────────────────────────────────────────────────────
 mkdir -p /usr/share/icons/hicolor/scalable/apps
 cat << 'SVGEOF' > /usr/share/icons/hicolor/scalable/apps/raptor-update.svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
@@ -523,85 +491,19 @@ cat << 'SVGEOF' > /usr/share/icons/hicolor/scalable/apps/raptor-update.svg
     </radialGradient>
   </defs>
   <circle cx="32" cy="32" r="30" fill="url(#bg)" stroke="#2ec27e" stroke-width="1.5"/>
-  <!-- Down arrow shaft -->
   <line x1="32" y1="13" x2="32" y2="40" stroke="#2ec27e" stroke-width="5"
         stroke-linecap="round"/>
-  <!-- Arrow head -->
   <polyline points="20,30 32,44 44,30" stroke="#2ec27e" stroke-width="5"
             stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <!-- Install tray bar -->
   <rect x="18" y="49" width="28" height="4" rx="2" fill="#2ec27e"/>
-  <!-- Circular update ring (top arc) -->
   <path d="M 14 22 A 20 20 0 0 1 50 22" fill="none" stroke="#1e90ff"
         stroke-width="2" stroke-linecap="round" opacity="0.6"/>
 </svg>
 SVGEOF
-#!/bin/bash
-set -oue pipefail
-
-# =============================================================================
-# Raptor OS — Update Manager
-# Windows-style GUI: check for updates, show changelog, update + reboot
-# =============================================================================
-
-cat << 'PYEOF' > /usr/bin/raptor-update
-#!/usr/bin/env python3
-"""Raptor OS Update Manager"""
-
-import gi
-gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, GLib
-import subprocess
-import threading
-import sys
-import os
-import re
-import urllib.request
-
-CHANGELOG_URL = "https://raw.githubusercontent.com/Cerberus9-dev/Raptor-OS/main/CHANGELOG.md"
-
-
-def fetch_changelog():
-    try:
-        with urllib.request.urlopen(CHANGELOG_URL, timeout=8) as r:
-            return r.read().decode("utf-8")
-    except Exception as e:
-        return f"Could not load changelog: {e}"
-
-
-def check_for_updates():
-    try:
-        result = subprocess.run(
-            ["rpm-ostree", "update", "--check"],
-            capture_output=True, text=True, timeout=60
-        )
-        output = result.stdout + result.stderr
-        # rc=77 (ENOTSUP) is rpm-ostree's "nothing to do" exit code.
-        # "AvailableUpdate" in output is the only reliable signal that an
-        # update exists — rc=0 alone just means the command ran without error,
-        # which happens whether or not updates are actually available.
-        if result.returncode == 77 or "No updates available" in output:
-            return False, "Your system is up to date."
-        elif "AvailableUpdate" in output:
-            return True, "A system update is available."
-        elif result.returncode == 0:
-            # Ran cleanly but no AvailableUpdate string — nothing to do.
-            return False, "Your system is up to date."
-        else:
-            return False, "Could not determine update status."
-    except subprocess.TimeoutExpired:
-        return False, "Update check timed out."
-    except FileNotFoundError:
-        return False, "rpm-ostree not found."
-    except Exception as e:
-        return False, f"Error: {e}"
-
-
 
 gtk-update-icon-cache -f /usr/share/icons/hicolor/ 2>/dev/null || true
 
-# ── .desktop entry ─────────────────────────────────────────────────────────────
+# ── .desktop entry ────────────────────────────────────────────────────────────
 mkdir -p /usr/share/applications
 cat << 'EOF' > /usr/share/applications/raptor-update.desktop
 [Desktop Entry]
