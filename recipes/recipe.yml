@@ -5,11 +5,6 @@ base-image: ghcr.io/ublue-os/bazzite
 image-version: stable
 
 modules:
-  # ── COPR repos ───────────────────────────────────────────────────────────────
-  - type: bling
-    install:
-      - bling-copr: "dusansimic/themes"
-
   # ── Static files ─────────────────────────────────────────────────────────────
   - type: files
     files:
@@ -34,6 +29,11 @@ modules:
       # Raptor HUD plasmoid
       - source: ../files/usr/share/plasma/plasmoids/org.raptoros.radararc
         destination: /usr/share/plasma/plasmoids/org.raptoros.radararc
+
+  # ── COPR repos ────────────────────────────────────────────────────────────────
+  - type: copr
+    repos:
+      - dusansimic/themes
 
   # ── RPM packages ─────────────────────────────────────────────────────────────
   - type: rpm-ostree
