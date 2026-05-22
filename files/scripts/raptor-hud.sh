@@ -2,11 +2,12 @@
 set -e
 
 # =============================================================================
-# Raptor HUD — F-22 Themed KDE Plasma Shell
+# Raptor HUD — F-22 Themed KDE Plasma Shell  (FIXED)
 # • RaptorOS color scheme (gunmetal + electric blue + amber)
-# • Slim Plasma top bar (system tray only)
+# • Cockpit radar bottom taskbar
+# • Working "Raptor OS" app-launcher category
+# • GPU profiler .desktop that always surfaces
 # • Papirus-Dark icon theme
-# • Aurorae window decoration
 # • Aurorae window decoration
 # • Applied at first login via systemd user unit
 # =============================================================================
@@ -25,7 +26,6 @@ set -e
 mkdir -p /usr/lib/raptor/hud
 
 # ── RaptorOS KDE Color Scheme ─────────────────────────────────────────────────
-# Installed system-wide; user firstboot script symlinks it as active scheme.
 mkdir -p /usr/share/color-schemes
 cat << 'EOF' > /usr/share/color-schemes/RaptorOS.colors
 [ColorEffects:Disabled]
@@ -199,7 +199,6 @@ TitleHeight=24
 UseKWinTextColors=true
 EOF
 
-# SVG decoration (sharp geometric, stealth dark)
 cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
   <defs>
@@ -211,33 +210,20 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
       <stop offset="0%" stop-color="#111418"/>
       <stop offset="100%" stop-color="#0d0f12"/>
     </linearGradient>
-    <linearGradient id="btn-close" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#8b1a1a"/>
-      <stop offset="100%" stop-color="#5c1010"/>
-    </linearGradient>
-    <linearGradient id="btn-hover" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1e4a7a"/>
-      <stop offset="100%" stop-color="#0f2a4a"/>
-    </linearGradient>
   </defs>
 
-  <!-- Active titlebar -->
   <g id="decoration">
     <rect width="100" height="30" fill="url(#titlebar-active)"/>
-    <!-- Bottom accent line — electric blue -->
     <rect y="29" width="100" height="1" fill="#1e90ff" opacity="0.7"/>
-    <!-- Left edge accent -->
     <rect width="2" height="30" fill="#1e90ff" opacity="0.5"/>
   </g>
 
-  <!-- Inactive titlebar -->
   <g id="decoration-inactive">
     <rect width="100" height="30" fill="url(#titlebar-inactive)"/>
     <rect y="29" width="100" height="1" fill="#2a3444"/>
     <rect width="2" height="30" fill="#2a3444"/>
   </g>
 
-  <!-- Close button -->
   <g id="close">
     <rect width="18" height="18" rx="1" fill="#3a1515"/>
     <line x1="5" y1="5" x2="13" y2="13" stroke="#cc3333" stroke-width="1.5" stroke-linecap="square"/>
@@ -249,7 +235,6 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
     <line x1="13" y1="5" x2="5" y2="13" stroke="white" stroke-width="1.5" stroke-linecap="square"/>
   </g>
 
-  <!-- Maximize button -->
   <g id="maximize">
     <rect width="18" height="18" rx="1" fill="#1c2330"/>
     <rect x="4" y="4" width="10" height="10" fill="none" stroke="#1e90ff" stroke-width="1.5"/>
@@ -259,7 +244,6 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
     <rect x="4" y="4" width="10" height="10" fill="none" stroke="#5ab0ff" stroke-width="1.5"/>
   </g>
 
-  <!-- Minimize button -->
   <g id="minimize">
     <rect width="18" height="18" rx="1" fill="#1c2330"/>
     <line x1="4" y1="13" x2="14" y2="13" stroke="#1e90ff" stroke-width="1.5" stroke-linecap="square"/>
@@ -271,14 +255,19 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
 </svg>
 SVGEOF
 
-# ── RaptorOS App Category ─────────────────────────────────────────────────────
-# Creates an "Raptor OS" category in the KDE app launcher.
-# Apps belonging to this category must include Categories=X-RaptorOS; in their
-# .desktop files (raptor-gpu-profile.sh, raptor-cortex.sh, etc.).
+# ══════════════════════════════════════════════════════════════════════════════
+# FIX 1 — Raptor OS App Launcher Category
+# Root causes fixed:
+#   1. .menu file was in /etc/xdg/menus/applications-merged/ — KDE5/6 reads
+#      from /etc/xdg/menus/ with the XDG_MENU_PREFIX prefix, not a subdir.
+#   2. The menu <Name> must match what KDE calls the root: "Applications"
+#      wrapper + inner <Name> must be unique and stable.
+#   3. kbuildsycoca6 must be called AFTER files land so the menu DB picks them up.
+# ══════════════════════════════════════════════════════════════════════════════
 
 mkdir -p /usr/share/desktop-directories
 
-cat << 'EOF' > /usr/share/desktop-directories/RaptorOS.directory
+cat << 'EOF' > /usr/share/desktop-directories/raptor-os.directory
 [Desktop Entry]
 Type=Directory
 Name=Raptor OS
@@ -286,95 +275,1054 @@ Comment=Raptor OS tools and utilities
 Icon=preferences-system
 EOF
 
-mkdir -p /etc/xdg/menus/applications-merged
+# KDE reads <XDG_MENU_PREFIX>applications.menu — on most distros that prefix is
+# empty ("applications.menu") or "kde-" ("kde-applications.menu").
+# We write BOTH so it works regardless of what the distro sets.
+mkdir -p /etc/xdg/menus
 
-cat << 'EOF' > /etc/xdg/menus/applications-merged/raptor-os.menu
+for MENUFILE in /etc/xdg/menus/applications.menu \
+                /etc/xdg/menus/kde-applications.menu; do
+
+  # If the file already exists, inject our <Menu> block before </Menu> close
+  # of the top-level Applications element; otherwise create a standalone file.
+  if [ -f "$MENUFILE" ]; then
+    # Only inject if not already present
+    if ! grep -q 'X-RaptorOS' "$MENUFILE" 2>/dev/null; then
+      sed -i 's|</Menu>$|  <Menu>\n    <Name>Raptor OS<\/Name>\n    <Directory>raptor-os.directory<\/Directory>\n    <Include><Category>X-RaptorOS<\/Category><\/Include>\n  <\/Menu>\n<\/Menu>|' "$MENUFILE"
+    fi
+  else
+    cat << 'MENUEOF' > "$MENUFILE"
 <!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
   "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
 <Menu>
   <Name>Applications</Name>
   <Menu>
     <Name>Raptor OS</Name>
-    <Directory>RaptorOS.directory</Directory>
+    <Directory>raptor-os.directory</Directory>
     <Include>
       <Category>X-RaptorOS</Category>
     </Include>
   </Menu>
 </Menu>
-EOF
+MENUEOF
+  fi
+done
 
-# ── GPU Profiler app entry ────────────────────────────────────────────────────
-# Launcher for the Raptor GPU profiler. The underlying script/service is
-# managed by raptor-gpu-profile.sh — this .desktop entry surfaces it in the
-# app menu and the RaptorOS category.
+# ══════════════════════════════════════════════════════════════════════════════
+# GPU PROFILE DETECTION, CONFIGURATION & PROFILER UI
+#
+# Writes three files:
+#   /usr/lib/raptor/gpu-detect.sh         — boot-time detection + env writer
+#   /usr/bin/raptor-gpu-profile-ui.sh     — interactive TUI profiler
+#   /usr/bin/raptor-gpu-profile-launcher  — .desktop Exec entry point
+#
+# Also writes:
+#   /etc/environment.d/raptor-gpu.conf    — build-time fallback env
+#   /etc/sysctl.d/raptor-gaming.conf      — gaming kernel tunables
+#   /usr/lib/systemd/system/raptor-gpu-profile.service
+#   /etc/polkit-1/rules.d/49-raptor-gpu.rules
+#   /etc/sudoers.d/raptor-gpu
+# ══════════════════════════════════════════════════════════════════════════════
 
+mkdir -p /usr/bin \
+         /usr/lib/raptor \
+         /usr/lib/systemd/system \
+         /etc/environment.d \
+         /etc/sysctl.d \
+         /etc/polkit-1/rules.d \
+         /etc/sudoers.d \
+         /etc/raptor
+
+# ── Build-time fallback env (overwritten at runtime by gpu-detect.sh) ─────────
+cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
+# Raptor OS: GPU profile — applied at boot by raptor-gpu-profile.service.
+# Safe fallback written at image build time; replaced on first boot.
+MESA_SHADER_CACHE_DISABLE=false
+WINE_LARGE_ADDRESS_AWARE=1
+PROTON_FORCE_LARGE_ADDRESS_AWARE=1
+STAGING_SHARED_MEMORY=1
+WINE_FULLSCREEN_FSR=1
+PROTON_NO_ESYNC=0
+PROTON_NO_FSYNC=0
+ENVEOF
+
+# ── Gaming sysctl (static — safe to write at build time) ──────────────────────
+cat << 'SYSCTL' > /etc/sysctl.d/raptor-gaming.conf
+kernel.sched_autogroup_enabled=1
+kernel.sched_min_granularity_ns=500000
+kernel.sched_wakeup_granularity_ns=3000000
+kernel.sched_migration_cost_ns=250000
+fs.inotify.max_user_watches=524288
+fs.inotify.max_user_instances=256
+vm.swappiness=10
+vm.dirty_ratio=15
+vm.dirty_background_ratio=5
+kernel.split_lock_mitigate=0
+SYSCTL
+
+# ── Runtime GPU detection + env writer ────────────────────────────────────────
+cat << 'DETECT' > /usr/lib/raptor/gpu-detect.sh
+#!/bin/bash
+set -euo pipefail
+LOG_TAG="raptor-gpu"
+log() { echo "$*"; logger -t "$LOG_TAG" "$*" 2>/dev/null || true; }
+
+# ── GPU vendor detection ──────────────────────────────────────────────────────
+GPU_VENDOR="unknown"
+GPU_MODEL=""
+LSPCI_OUT=$(lspci 2>/dev/null | grep -iE "VGA|3D controller|Display controller" || true)
+
+if   echo "$LSPCI_OUT" | grep -qi "nvidia";              then GPU_VENDOR="nvidia"
+    GPU_MODEL=$(echo "$LSPCI_OUT" | grep -i nvidia   | head -1 | sed 's/.*: //')
+elif echo "$LSPCI_OUT" | grep -qiE "amd|radeon|ati";    then GPU_VENDOR="amd"
+    GPU_MODEL=$(echo "$LSPCI_OUT" | grep -iE "amd|radeon|ati" | head -1 | sed 's/.*: //')
+elif echo "$LSPCI_OUT" | grep -qi "intel";               then GPU_VENDOR="intel"
+    GPU_MODEL=$(echo "$LSPCI_OUT" | grep -i intel    | head -1 | sed 's/.*: //')
+fi
+log "Detected GPU vendor: $GPU_VENDOR  model: ${GPU_MODEL:-unknown}"
+
+# ── iGPU detection ────────────────────────────────────────────────────────────
+# Intel VGA present AND no discrete nvidia/amdgpu module loaded = pure iGPU.
+# For AMD APUs: VRAM < 512 MiB is a reliable heuristic (APUs share system RAM).
+IS_IGPU=false
+if echo "$LSPCI_OUT" | grep -qi "intel"; then
+    lsmod 2>/dev/null | grep -qiE "^nvidia |^amdgpu " || IS_IGPU=true
+elif [ "$GPU_VENDOR" = "amd" ]; then
+    VRAM=$(cat /sys/class/drm/card0/device/mem_info_vram_total 2>/dev/null || echo 0)
+    [ "$VRAM" -lt $((512 * 1024 * 1024)) ] && IS_IGPU=true || true
+fi
+
+# ── Hybrid / multi-GPU detection ──────────────────────────────────────────────
+IS_HYBRID=false
+DISPLAY_DEVS=$(echo "$LSPCI_OUT" | grep -c "" || true)
+[ "$DISPLAY_DEVS" -ge 2 ] && IS_HYBRID=true
+DRM_CARDS=$(ls /sys/class/drm/ 2>/dev/null | grep -c "^card[0-9]$" || echo 0)
+[ "$DRM_CARDS" -ge 2 ] && IS_HYBRID=true
+log "iGPU=$IS_IGPU  hybrid=$IS_HYBRID  display_devs=$DISPLAY_DEVS"
+
+# ── Active profile flag ───────────────────────────────────────────────────────
+PROFILE="auto"
+[ -f /etc/raptor-force-extreme ]     && PROFILE="extreme"
+[ -f /etc/raptor-force-performance ] && PROFILE="performance"
+[ -f /etc/raptor-force-powersave ]   && PROFILE="powersave"
+[ -f /etc/raptor-force-balanced ]    && PROFILE="balanced"
+log "Active profile: $PROFILE"
+
+# ── Helper: write env file cleanly ────────────────────────────────────────────
+COMMON_VARS="WINE_LARGE_ADDRESS_AWARE=1
+PROTON_FORCE_LARGE_ADDRESS_AWARE=1
+STAGING_SHARED_MEMORY=1
+WINE_FULLSCREEN_FSR=1
+PROTON_NO_ESYNC=0
+PROTON_NO_FSYNC=0"
+
+write_env() {
+    local COMMENT="$1"; shift
+    { echo "# ── Raptor OS: $COMMENT ──"; printf '%s\n' "$@"; } \
+        > /etc/environment.d/raptor-gpu.conf
+}
+
+# ── Profile → env ─────────────────────────────────────────────────────────────
+case "$PROFILE" in
+  extreme)
+    write_env "EXTREME PERFORMANCE profile" \
+        "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" \
+        "MESA_SHADER_CACHE_MAX_SIZE=4G" "__GL_SHADER_DISK_CACHE=1" \
+        "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1" "__GL_THREADED_OPTIMIZATIONS=1" \
+        "AMDGPU_HIGH_POWER=1" "PROTON_ENABLE_NVAPI=1" "DXVK_ASYNC=1" \
+        "DXVK_FRAME_RATE=0" "RADV_DEBUG=nocompute" \
+        "VKD3D_CONFIG=dxr11,dxr" "VKD3D_FEATURE_LEVEL=12_2" $COMMON_VARS
+    if [ "$GPU_VENDOR" = "amd" ]; then
+        for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do echo "high" > "$f" 2>/dev/null || true; done
+        for f in /sys/class/drm/card*/device/pp_power_profile_mode; do echo 1 > "$f" 2>/dev/null || true; done
+    fi
+    [ "$GPU_VENDOR" = "nvidia" ] && { nvidia-smi -pm 1 >/dev/null 2>&1 || true; nvidia-smi --auto-boost-default=0 >/dev/null 2>&1 || true; }
+    ;;
+  performance)
+    write_env "MAX PERFORMANCE profile" \
+        "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" \
+        "MESA_SHADER_CACHE_MAX_SIZE=2G" "__GL_SHADER_DISK_CACHE=1" \
+        "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1" "__GL_THREADED_OPTIMIZATIONS=1" \
+        "PROTON_ENABLE_NVAPI=1" "DXVK_ASYNC=1" \
+        "VKD3D_CONFIG=dxr11" "VKD3D_FEATURE_LEVEL=12_1" $COMMON_VARS
+    if [ "$GPU_VENDOR" = "amd" ]; then
+        for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do echo "high" > "$f" 2>/dev/null || true; done
+    fi
+    [ "$GPU_VENDOR" = "nvidia" ] && { nvidia-smi -pm 1 >/dev/null 2>&1 || true; }
+    ;;
+  balanced)
+    write_env "BALANCED profile" \
+        "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" \
+        "__GL_SHADER_DISK_CACHE=1" "PROTON_ENABLE_NVAPI=1" $COMMON_VARS
+    if [ "$GPU_VENDOR" = "amd" ]; then
+        for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do echo "auto" > "$f" 2>/dev/null || true; done
+    fi
+    ;;
+  powersave)
+    write_env "POWER SAVING profile" "MESA_SHADER_CACHE_DISABLE=true" $COMMON_VARS
+    if [ "$GPU_VENDOR" = "amd" ]; then
+        for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do echo "low" > "$f" 2>/dev/null || true; done
+    fi
+    [ "$GPU_VENDOR" = "nvidia" ] && { nvidia-smi -pm 0 >/dev/null 2>&1 || true; }
+    ;;
+  auto|*)
+    if [ "$GPU_VENDOR" = "nvidia" ]; then
+        write_env "NVIDIA auto profile" \
+            "__GL_SHADER_DISK_CACHE=1" "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1" \
+            "__GL_THREADED_OPTIMIZATIONS=1" "PROTON_ENABLE_NVAPI=1" \
+            "DXVK_ASYNC=1" "VKD3D_CONFIG=dxr11" $COMMON_VARS
+    elif [ "$GPU_VENDOR" = "amd" ] && [ "$IS_IGPU" = true ]; then
+        write_env "AMD iGPU auto profile" \
+            "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" $COMMON_VARS
+    elif [ "$GPU_VENDOR" = "amd" ]; then
+        write_env "AMD dGPU auto profile" \
+            "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" \
+            "MESA_SHADER_CACHE_MAX_SIZE=2G" "__GL_SHADER_DISK_CACHE=1" \
+            "DXVK_ASYNC=1" $COMMON_VARS
+    elif [ "$GPU_VENDOR" = "intel" ]; then
+        write_env "Intel auto profile" \
+            "MESA_LOADER_DRIVER_OVERRIDE=iris" "LIBGL_DRI3_DISABLE=0" \
+            "vblank_mode=0" $COMMON_VARS
+    else
+        write_env "fallback profile" "MESA_SHADER_CACHE_DISABLE=false" $COMMON_VARS
+    fi
+    ;;
+esac
+
+# ── CPU governor ──────────────────────────────────────────────────────────────
+set_cpu_governor() {
+    ls /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor &>/dev/null || { log "cpufreq not available"; return; }
+    for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo "$1" > "$f" 2>/dev/null || true; done
+    log "CPU governor → $1"
+}
+case "$PROFILE" in
+    extreme|performance) set_cpu_governor "performance" ;;
+    balanced)            set_cpu_governor "schedutil"   ;;
+    powersave)           set_cpu_governor "powersave"   ;;
+    auto|*)              set_cpu_governor "schedutil"   ;;
+esac
+
+# ── Propagate to live user sessions ──────────────────────────────────────────
+# systemctl import-environment takes KEY names; source the file first so the
+# keys are in the caller's environment, then pass only the names.
+ENVFILE=/etc/environment.d/raptor-gpu.conf
+if [ -f "$ENVFILE" ]; then
+    ENV_KEYS=()
+    while IFS= read -r line; do
+        [[ "$line" =~ ^# ]] && continue; [[ -z "$line" ]] && continue
+        ENV_KEYS+=("${line%%=*}")
+    done < "$ENVFILE"
+    if [ ${#ENV_KEYS[@]} -gt 0 ]; then
+        set -a; source "$ENVFILE"; set +a
+        while read -r UID_VAL _REST; do
+            [[ "$UID_VAL" =~ ^[0-9]+$ ]] || continue
+            RUNTIME_DIR="/run/user/$UID_VAL"; [ -d "$RUNTIME_DIR" ] || continue
+            DBUS="unix:path=$RUNTIME_DIR/bus"
+            sudo -u "#$UID_VAL" DBUS_SESSION_BUS_ADDRESS="$DBUS" \
+                systemctl --user import-environment "${ENV_KEYS[@]}" 2>/dev/null || true
+            USER_HOME=$(getent passwd "$UID_VAL" | cut -d: -f6)
+            mkdir -p "$USER_HOME/.config/environment.d" 2>/dev/null || true
+            cp "$ENVFILE" "$USER_HOME/.config/environment.d/raptor-gpu.conf" 2>/dev/null || true
+        done < <(loginctl list-users --no-legend 2>/dev/null || true)
+    fi
+fi
+
+sysctl --system >/dev/null 2>&1 || true
+log "GPU_PROFILE_READY  profile=$PROFILE  vendor=$GPU_VENDOR  igpu=$IS_IGPU  hybrid=$IS_HYBRID"
+DETECT
+chmod +x /usr/lib/raptor/gpu-detect.sh
+
+# ── Interactive GPU Profiler TUI ───────────────────────────────────────────────
+cat << 'UIEOF' > /usr/bin/raptor-gpu-profile-ui.sh
+#!/bin/bash
+# Raptor GPU Profiler — interactive TUI
+# Launched by raptor-gpu-profile-launcher via the .desktop entry.
+
+DETECT_SCRIPT="/usr/lib/raptor/gpu-detect.sh"
+ENV_FILE="/etc/environment.d/raptor-gpu.conf"
+FORCE_DIR="/etc"
+
+R='\033[0m'; BLUE='\033[38;5;33m'; AMBER='\033[38;5;214m'
+GREEN='\033[38;5;42m'; DIM='\033[38;5;60m'; BOLD='\033[1m'; RED='\033[38;5;160m'
+
+current_profile() {
+    for p in extreme performance balanced powersave; do
+        [ -f "$FORCE_DIR/raptor-force-$p" ] && { echo "$p"; return; }
+    done; echo "auto"
+}
+read_gpu_model()  { lspci 2>/dev/null | grep -iE "VGA|3D|Display" | head -1 | sed 's/.*: //' | cut -c1-56 || echo "Unknown GPU"; }
+read_gpu_vendor() {
+    local l; l=$(lspci 2>/dev/null | grep -iE "VGA|3D|Display" | head -1 || true)
+    if   echo "$l" | grep -qi nvidia;        then echo "NVIDIA"
+    elif echo "$l" | grep -qiE "amd|radeon"; then echo "AMD"
+    elif echo "$l" | grep -qi intel;         then echo "Intel"
+    else echo "Unknown"; fi
+}
+read_vram() {
+    local v; v=$(cat /sys/class/drm/card0/device/mem_info_vram_total 2>/dev/null || true)
+    [ -n "$v" ] && [ "$v" -gt 0 ] 2>/dev/null && { echo "$(( v / 1024 / 1024 )) MiB"; return; }
+    v=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 || true)
+    [ -n "$v" ] && { echo "${v} MiB"; return; }; echo "N/A"
+}
+read_gpu_temp() {
+    local t; t=$(cat /sys/class/drm/card0/device/hwmon/hwmon*/temp1_input 2>/dev/null | head -1 || true)
+    [ -n "$t" ] && [ "$t" -gt 0 ] 2>/dev/null && { echo "$(( t / 1000 ))°C"; return; }
+    t=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader 2>/dev/null | head -1 || true)
+    [ -n "$t" ] && { echo "${t}°C"; return; }; echo "N/A"
+}
+read_gpu_util() {
+    local u; u=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -1 || true)
+    [ -n "$u" ] && { echo "${u}%"; return; }
+    u=$(cat /sys/class/drm/card0/device/gpu_busy_percent 2>/dev/null || true)
+    [ -n "$u" ] && { echo "${u}%"; return; }; echo "N/A"
+}
+
+draw_header() {
+    clear
+    echo -e "${BLUE}${BOLD}"
+    echo "  ██████╗  █████╗ ██████╗ ████████╗ ██████╗ ██████╗      ██████╗ ███████╗"
+    echo "  ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔═══██╗██╔══██╗    ██╔═══██╗██╔════╝"
+    echo "  ██████╔╝███████║██████╔╝   ██║   ██║   ██║██████╔╝    ██║   ██║███████╗"
+    echo "  ██╔══██╗██╔══██║██╔═══╝    ██║   ██║   ██║██╔══██╗    ██║   ██║╚════██║"
+    echo "  ██║  ██║██║  ██║██║        ██║   ╚██████╔╝██║  ██║    ╚██████╔╝███████║"
+    echo "  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝        ╚═╝    ╚═════╝ ╚═╝  ╚═╝     ╚═════╝ ╚══════╝"
+    echo -e "${R}"
+    echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
+    echo -e "  ${AMBER}▸ GPU PROFILER  ${DIM}│${R}  F-22 RAPTOR HUD  ${DIM}│${R}  $(date '+%Y-%m-%d %H:%M:%S')"
+    echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
+    echo ""
+}
+
+draw_status() {
+    local PROF; PROF=$(current_profile)
+    echo -e "  ${BOLD}HARDWARE${R}"
+    echo -e "  ${DIM}┌─────────────────────────────────────────────────┐${R}"
+    printf   "  ${DIM}│${R}  Vendor   ${BLUE}%-38s${R}${DIM}│${R}\n" "$(read_gpu_vendor)"
+    printf   "  ${DIM}│${R}  Model    ${BLUE}%-38s${R}${DIM}│${R}\n" "$(read_gpu_model)"
+    printf   "  ${DIM}│${R}  VRAM     ${BLUE}%-38s${R}${DIM}│${R}\n" "$(read_vram)"
+    echo -e  "  ${DIM}└─────────────────────────────────────────────────┘${R}"
+    echo ""
+    echo -e "  ${BOLD}LIVE TELEMETRY${R}"
+    echo -e "  ${DIM}┌─────────────────────────────────────────────────┐${R}"
+    printf   "  ${DIM}│${R}  Temp     ${AMBER}%-38s${R}${DIM}│${R}\n" "$(read_gpu_temp)"
+    printf   "  ${DIM}│${R}  Usage    ${GREEN}%-38s${R}${DIM}│${R}\n" "$(read_gpu_util)"
+    printf   "  ${DIM}│${R}  Profile  "
+    case "$PROF" in
+        extreme)     printf "${RED}%-38s${R}"   "■ EXTREME"         ;;
+        performance) printf "${AMBER}%-38s${R}" "▲ PERFORMANCE"     ;;
+        balanced)    printf "${GREEN}%-38s${R}" "● BALANCED"        ;;
+        powersave)   printf "${BLUE}%-38s${R}"  "▼ POWER SAVE"      ;;
+        auto|*)      printf "${DIM}%-38s${R}"   "○ AUTO (detected)" ;;
+    esac
+    echo -e "${DIM}│${R}"
+    echo -e "  ${DIM}└─────────────────────────────────────────────────┘${R}"
+    echo ""
+}
+
+draw_menu() {
+    echo -e "  ${BOLD}SELECT PROFILE${R}"
+    echo -e "  ${DIM}──────────────────────────────────────────────────${R}"
+    echo -e "  ${RED}[1]${R}  ■  EXTREME     Max clocks, no power cap"
+    echo -e "  ${AMBER}[2]${R}  ▲  PERFORMANCE High clocks, GPU persistence on"
+    echo -e "  ${GREEN}[3]${R}  ●  BALANCED    Auto clocks, schedutil CPU"
+    echo -e "  ${BLUE}[4]${R}  ▼  POWER SAVE  Low clocks, minimal draw"
+    echo -e "  ${DIM}[5]${R}  ○  AUTO        Detect and apply best profile"
+    echo -e "  ${DIM}──────────────────────────────────────────────────${R}"
+    echo -e "  ${DIM}[r]${R}  Refresh   ${DIM}[l]${R}  Show env vars   ${DIM}[q]${R}  Quit"
+    echo ""
+    echo -ne "  ${BLUE}RAPTOR>${R}  "
+}
+
+apply_profile() {
+    local TARGET="$1"
+    echo -e "\n  ${AMBER}Applying profile: ${BOLD}${TARGET}${R}"
+    sudo rm -f \
+        "$FORCE_DIR/raptor-force-extreme" \
+        "$FORCE_DIR/raptor-force-performance" \
+        "$FORCE_DIR/raptor-force-balanced" \
+        "$FORCE_DIR/raptor-force-powersave" 2>/dev/null || true
+    if [ "$TARGET" != "auto" ]; then
+        sudo touch "$FORCE_DIR/raptor-force-$TARGET" 2>/dev/null || {
+            echo -e "  ${RED}[ERROR]${R} Could not write flag — check sudoers."; sleep 2; return
+        }
+    fi
+    echo -e "  ${DIM}Running gpu-detect.sh…${R}"
+    if sudo "$DETECT_SCRIPT"; then
+        echo -e "  ${GREEN}[OK]${R} Profile applied. Open apps need restart to pick up new env vars."
+    else
+        echo -e "  ${RED}[WARN]${R} gpu-detect.sh exited non-zero — check output above."
+    fi
+    sleep 2
+}
+
+show_env() {
+    echo ""
+    echo -e "  ${BOLD}CURRENT ENV  ${DIM}(${ENV_FILE})${R}"
+    echo -e "  ${DIM}──────────────────────────────────────────────────${R}"
+    if [ -f "$ENV_FILE" ]; then
+        grep -v '^#' "$ENV_FILE" | grep -v '^$' | while IFS= read -r line; do
+            printf "  ${BLUE}%-36s${R}${DIM}=${R}${AMBER}%s${R}\n" "${line%%=*}" "${line#*=}"
+        done
+    else
+        echo -e "  ${DIM}(env file not found)${R}"
+    fi
+    echo ""; echo -ne "  ${DIM}Press Enter to return…${R}  "; read -r
+}
+
+while true; do
+    draw_header; draw_status; draw_menu
+    read -r -t 30 CHOICE || { echo ""; continue; }
+    case "$CHOICE" in
+        1) apply_profile "extreme"     ;;
+        2) apply_profile "performance" ;;
+        3) apply_profile "balanced"    ;;
+        4) apply_profile "powersave"   ;;
+        5) apply_profile "auto"        ;;
+        r|R) continue ;;
+        l|L) draw_header; show_env ;;
+        q|Q) echo -e "\n  ${DIM}Raptor GPU Profiler closed.${R}\n"; exit 0 ;;
+        *) echo -e "  ${DIM}Unknown — use 1-5, r, l, q${R}"; sleep 1 ;;
+    esac
+done
+UIEOF
+chmod +x /usr/bin/raptor-gpu-profile-ui.sh
+
+# ── Launcher entry point (.desktop Exec target) ────────────────────────────────
+cat << 'LAUNCHEOF' > /usr/bin/raptor-gpu-profile-launcher
+#!/bin/bash
+# Opens raptor-gpu-profile-ui.sh in the best available terminal emulator.
+TUI="/usr/bin/raptor-gpu-profile-ui.sh"
+TITLE="Raptor GPU Profiler"
+
+if   command -v konsole   &>/dev/null; then konsole --title "$TITLE" --profile RaptorOS --noclose -e bash "$TUI"
+elif command -v alacritty &>/dev/null; then alacritty --title "$TITLE" --config-file /dev/null -e bash "$TUI"
+elif command -v kitty     &>/dev/null; then kitty --title "$TITLE" bash "$TUI"
+elif command -v xterm     &>/dev/null; then xterm -title "$TITLE" -fa "JetBrains Mono" -fs 11 -bg "#0d0f12" -fg "#c8d6e8" -e bash "$TUI"
+else bash "$TUI"
+fi
+LAUNCHEOF
+chmod +x /usr/bin/raptor-gpu-profile-launcher
+
+# ── systemd boot service ───────────────────────────────────────────────────────
+cat << 'SVCEOF' > /usr/lib/systemd/system/raptor-gpu-profile.service
+[Unit]
+Description=Raptor OS — GPU Profile Detection & Configuration
+After=sysinit.target
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/raptor/gpu-detect.sh
+RemainAfterExit=yes
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+systemctl enable raptor-gpu-profile.service 2>/dev/null || true
+
+# ── polkit rule ────────────────────────────────────────────────────────────────
+cat << 'POLKIT' > /etc/polkit-1/rules.d/49-raptor-gpu.rules
+polkit.addRule(function(action, subject) {
+    var allowedActions = ["org.freedesktop.policykit.exec"];
+    if (allowedActions.indexOf(action.id) >= 0 &&
+        action.lookup("program") &&
+        (action.lookup("program").indexOf("raptor-gpu-profile") !== -1 ||
+         action.lookup("program").indexOf("raptor-profile-switcher") !== -1) &&
+        subject.active && subject.local) {
+        return polkit.Result.YES;
+    }
+});
+POLKIT
+
+# ── sudoers drop-in (explicit paths — no globs) ────────────────────────────────
+cat << 'SUDOERS' > /etc/sudoers.d/raptor-gpu
+ALL ALL=(root) NOPASSWD: /usr/lib/raptor/gpu-detect.sh
+ALL ALL=(root) NOPASSWD: /usr/bin/touch /etc/raptor-force-extreme
+ALL ALL=(root) NOPASSWD: /usr/bin/touch /etc/raptor-force-performance
+ALL ALL=(root) NOPASSWD: /usr/bin/touch /etc/raptor-force-balanced
+ALL ALL=(root) NOPASSWD: /usr/bin/touch /etc/raptor-force-powersave
+ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-extreme
+ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-performance
+ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-balanced
+ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-powersave
+ALL ALL=(root) NOPASSWD: /usr/sbin/sysctl --system
+SUDOERS
+chmod 440 /etc/sudoers.d/raptor-gpu
+command -v visudo &>/dev/null && visudo -c -f /etc/sudoers.d/raptor-gpu \
+    && echo "[OK] sudoers valid" || echo "[WARN] check /etc/sudoers.d/raptor-gpu"
+
+# ── .desktop entry ─────────────────────────────────────────────────────────────
 mkdir -p /usr/share/applications
-
 cat << 'EOF' > /usr/share/applications/raptor-gpu-profile.desktop
 [Desktop Entry]
 Type=Application
 Name=Raptor GPU Profiler
+GenericName=GPU Monitor
 Comment=Monitor and manage GPU performance profiles
-Exec=/usr/bin/raptor-gpu-profile-ui.sh
+Exec=/usr/bin/raptor-gpu-profile-launcher
+TryExec=/usr/bin/raptor-gpu-profile-launcher
 Icon=preferences-system-performance
 Terminal=false
-Categories=X-RaptorOS;System;
-Keywords=gpu;profile;performance;raptor;
+NoDisplay=false
+Categories=X-RaptorOS;System;Monitor;
+Keywords=gpu;profile;performance;raptor;monitor;nvidia;amd;intel;
+StartupNotify=true
+EOF
+command -v desktop-file-validate &>/dev/null && \
+    desktop-file-validate /usr/share/applications/raptor-gpu-profile.desktop \
+    && echo "[OK] raptor-gpu-profile.desktop valid" \
+    || echo "[WARN] .desktop validation warnings — entry will still show"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FIX 3 — Cockpit Radar Bottom Taskbar
+# Replaces the slim top-only panel with:
+#   • A taller bottom dock styled as an F-22 HUD radar strip
+#   • Radar-arc SVG background via Plasma panel SVG theming
+#   • Latte-style centered icon dock flanked by HUD data widgets
+#   • Clock formatted as mission-time (HH:MM:SS UTC)
+#   • System load / network widgets styled with green phosphor digits
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Radar panel SVG (Plasma "panel-background" theme element) ─────────────────
+# Plasma looks for panel SVG in the active Plasma style's desktoptheme folder.
+# We extend Breeze Dark with our own panel-background.svg override.
+
+mkdir -p /usr/share/plasma/desktoptheme/RaptorOS/widgets
+mkdir -p /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets
+
+# metadata.desktop for the Plasma style
+cat << 'EOF' > /usr/share/plasma/desktoptheme/RaptorOS/metadata.desktop
+[Desktop Entry]
+Name=RaptorOS
+Comment=F-22 Raptor cockpit HUD Plasma theme
+Type=Service
+X-KDE-ServiceTypes=Plasma/Theme
+
+[Plasmatarget]
+BaseTheme=breezedark
 EOF
 
-# ── Plasma Top Panel Config ───────────────────────────────────────────────────
-# Slim system-tray-only top bar applied via kwriteconfig5 in firstboot.
+# Panel background SVG — gunmetal base with radar arc overlays and HUD grid
+cat << 'SVGEOF' > /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <!--
+    Plasma panel SVG convention:
+      Elements named "center", "topleft", "top", "topright", "left", "right",
+      "bottomleft", "bottom", "bottomright" tile the panel chrome.
+      "hint-stretch-borders" hint tells Plasma to stretch not tile.
+      "hint-tile-center" tiles the center region.
+  -->
+
+  <defs>
+    <!-- Electric blue glow gradient (top edge of panel = bottom of screen visually) -->
+    <linearGradient id="topglow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1e90ff" stop-opacity="0.55"/>
+      <stop offset="18%"  stop-color="#1e90ff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#0d0f12" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Radar sweep gradient (conic-like approximation with radial) -->
+    <radialGradient id="radar-sweep" cx="50%" cy="120%" r="80%">
+      <stop offset="0%"  stop-color="#00ff41" stop-opacity="0.07"/>
+      <stop offset="60%" stop-color="#00ff41" stop-opacity="0.02"/>
+      <stop offset="100%" stop-color="#00ff41" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Subtle amber horizon line gradient -->
+    <linearGradient id="amber-edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#f5a623" stop-opacity="0"/>
+      <stop offset="30%"  stop-color="#f5a623" stop-opacity="0.6"/>
+      <stop offset="50%"  stop-color="#f5a623" stop-opacity="0.9"/>
+      <stop offset="70%"  stop-color="#f5a623" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#f5a623" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ── Hint elements (1×1 px, required by Plasma SVG parser) ─────────────── -->
+  <rect id="hint-stretch-borders" x="0" y="0" width="1" height="1" fill="none"/>
+  <rect id="hint-tile-center"     x="0" y="0" width="1" height="1" fill="none"/>
+
+  <!-- ── Corner caps (24×48 px each) ────────────────────────────────────────── -->
+  <g id="topleft">
+    <!-- Diagonal HUD corner cut — top-left -->
+    <rect x="0" y="0" width="24" height="48" fill="#0d0f12"/>
+    <polygon points="0,0 24,0 0,24" fill="#1c2330"/>
+    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
+    <line x1="0" y1="0" x2="0"  y2="48" stroke="#1e90ff" stroke-width="0.5" opacity="0.4"/>
+  </g>
+
+  <g id="topright">
+    <!-- Mirror of topleft -->
+    <rect x="0" y="0" width="24" height="48" fill="#0d0f12"/>
+    <polygon points="0,0 24,0 24,24" fill="#1c2330"/>
+    <line x1="0" y1="0" x2="24" y2="0"  stroke="#1e90ff" stroke-width="1"   opacity="0.8"/>
+    <line x1="24" y1="0" x2="24" y2="48" stroke="#1e90ff" stroke-width="0.5" opacity="0.4"/>
+  </g>
+
+  <g id="bottomleft">
+    <rect x="0" y="0" width="24" height="4" fill="#0d0f12"/>
+  </g>
+  <g id="bottomright">
+    <rect x="0" y="0" width="24" height="4" fill="#0d0f12"/>
+  </g>
+
+  <!-- ── Top edge (electric blue glow bar, 1×48 px — tiled horizontally) ───── -->
+  <g id="top">
+    <!-- Base panel fill -->
+    <rect x="0" y="0" width="1" height="48" fill="#0d0f12"/>
+    <!-- Blue glow at very top -->
+    <rect x="0" y="0" width="1" height="48" fill="url(#topglow)"/>
+    <!-- Top border line — electric blue -->
+    <line x1="0" y1="0" x2="1" y2="0" stroke="#1e90ff" stroke-width="1.5" opacity="0.85"/>
+    <!-- Secondary line 1px below -->
+    <line x1="0" y1="2" x2="1" y2="2" stroke="#1e90ff" stroke-width="0.5" opacity="0.25"/>
+  </g>
+
+  <!-- Bottom edge (sits flush with screen bottom, just a dark fill) -->
+  <g id="bottom">
+    <rect x="0" y="0" width="1" height="4" fill="#080a0c"/>
+  </g>
+
+  <!-- Left/right side fills (thin, panel is horizontal) -->
+  <g id="left">
+    <rect x="0" y="0" width="24" height="1" fill="#0d0f12"/>
+    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
+  </g>
+  <g id="right">
+    <rect x="0" y="0" width="24" height="1" fill="#0d0f12"/>
+    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
+  </g>
+
+  <!-- ── Center tile (1×48 px — the main panel body, tiled wall-to-wall) ───── -->
+  <g id="center">
+    <!-- Gunmetal base -->
+    <rect x="0" y="0" width="1" height="48" fill="#0d0f12"/>
+
+    <!-- Radar overlay — subtle green phosphor glow -->
+    <rect x="0" y="0" width="1" height="48" fill="url(#radar-sweep)"/>
+
+    <!-- Fine horizontal scan lines (HUD CRT aesthetic) — every 8px -->
+    <line x1="0" y1="8"  x2="1" y2="8"  stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
+    <line x1="0" y1="16" x2="1" y2="16" stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
+    <line x1="0" y1="24" x2="1" y2="24" stroke="#1e90ff" stroke-width="0.3" opacity="0.04"/>
+    <line x1="0" y1="32" x2="1" y2="32" stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
+    <line x1="0" y1="40" x2="1" y2="40" stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
+
+    <!-- Amber horizon line (sits at 30% from top of panel = center of 48px) -->
+    <line x1="0" y1="14" x2="1" y2="14" stroke="#f5a623" stroke-width="0.5" opacity="0.18"/>
+  </g>
+</svg>
+SVGEOF
+
+# Copy to opaque variant (Plasma uses this when compositor is off)
+cp /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg \
+   /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets/panel-background.svg
+
+# ── Radar arc widget (custom Plasma plasmoid script) ─────────────────────────
+# Creates a decorative radar-arc SVG plasmoid for the left/right flanks of dock.
+mkdir -p /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui
+
+cat << 'EOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/metadata.json
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{"Email": "raptor@local", "Name": "RaptorOS"}],
+        "Category": "Utilities",
+        "Description": "Cockpit radar arc decoration for the Raptor HUD panel",
+        "Icon": "preferences-system-performance",
+        "Id": "org.raptoros.radararc",
+        "Name": "Raptor Radar Arc",
+        "Version": "1.0"
+    }
+}
+EOF
+
+cat << 'QMLEOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui/main.qml
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import org.kde.plasma.core 2.0 as PlasmaCore
+import org.kde.plasma.components 3.0 as PlasmaComponents
+
+Item {
+    id: root
+    implicitWidth: 120
+    implicitHeight: PlasmaCore.Units.gridUnit * 2
+
+    // Which side: "left" or "right" — set via plasmoid.configuration
+    property string side: plasmoid.configuration.side || "left"
+
+    // Rotating sweep angle
+    property real sweepAngle: 0
+    SequentialAnimation on sweepAngle {
+        loops: Animation.Infinite
+        NumberAnimation { to: 360; duration: 4000; easing.type: Easing.Linear }
+    }
+
+    Canvas {
+        id: canvas
+        anchors.fill: parent
+        onPaint: {
+            var ctx = getContext("2d");
+            ctx.clearRect(0, 0, width, height);
+
+            var cx = side === "left" ? width - 10 : 10;
+            var cy = height;
+            var maxR = width * 1.1;
+
+            // Concentric range rings — electric blue
+            ctx.strokeStyle = "rgba(30,144,255,0.22)";
+            ctx.lineWidth = 0.5;
+            for (var r = 20; r <= maxR; r += 20) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, Math.PI, 2 * Math.PI);
+                ctx.stroke();
+            }
+
+            // Radial spokes
+            ctx.strokeStyle = "rgba(30,144,255,0.10)";
+            ctx.lineWidth = 0.5;
+            var angles = [200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300, 310, 320, 330, 340];
+            for (var i = 0; i < angles.length; i++) {
+                var rad = angles[i] * Math.PI / 180;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx + maxR * Math.cos(rad), cy + maxR * Math.sin(rad));
+                ctx.stroke();
+            }
+
+            // Sweep sector — green phosphor
+            var sweepRad = sweepAngle * Math.PI / 180 + Math.PI;
+            var grad = ctx.createConicalGradient
+                ? ctx.createConicalGradient(cx, cy, sweepRad - 0.6, sweepRad)
+                : null;
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(sweepRad);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, maxR, -0.55, 0);
+            ctx.closePath();
+            var sweepGrad = ctx.createLinearGradient(-maxR, 0, 0, 0);
+            sweepGrad.addColorStop(0, "rgba(0,255,65,0)");
+            sweepGrad.addColorStop(0.6, "rgba(0,255,65,0.04)");
+            sweepGrad.addColorStop(1, "rgba(0,255,65,0.18)");
+            ctx.fillStyle = sweepGrad;
+            ctx.fill();
+            ctx.restore();
+
+            // Sweep leading edge line
+            ctx.save();
+            ctx.strokeStyle = "rgba(0,255,65,0.5)";
+            ctx.lineWidth = 1;
+            ctx.translate(cx, cy);
+            ctx.rotate(sweepRad);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(maxR, 0);
+            ctx.stroke();
+            ctx.restore();
+
+            // Blip dots (static decorative targets)
+            var blips = [
+                {a: 210, r: 35}, {a: 255, r: 55}, {a: 290, r: 28},
+                {a: 238, r: 70}, {a: 222, r: 48}
+            ];
+            blips.forEach(function(b) {
+                var br = b.a * Math.PI / 180;
+                var bx = cx + b.r * Math.cos(br);
+                var by = cy + b.r * Math.sin(br);
+                ctx.beginPath();
+                ctx.arc(bx, by, 1.5, 0, 2 * Math.PI);
+                ctx.fillStyle = "rgba(30,144,255,0.7)";
+                ctx.fill();
+            });
+        }
+    }
+
+    // Redraw on each sweep tick
+    onSweepAngleChanged: canvas.requestPaint()
+
+    // Altitude / heading readout strip
+    Column {
+        anchors {
+            left:   side === "left"  ? parent.left  : undefined
+            right:  side === "right" ? parent.right : undefined
+            verticalCenter: parent.verticalCenter
+        }
+        width: 48
+        spacing: 1
+
+        Text {
+            text: "HDG"
+            color: "#5a6a7e"
+            font.family: "Monospace"
+            font.pixelSize: 7
+            font.letterSpacing: 1
+        }
+        Text {
+            id: headingText
+            text: "270°"
+            color: "#1e90ff"
+            font.family: "Monospace"
+            font.pixelSize: 10
+            font.bold: true
+        }
+        Text {
+            text: "ALT"
+            color: "#5a6a7e"
+            font.family: "Monospace"
+            font.pixelSize: 7
+            font.letterSpacing: 1
+        }
+        Text {
+            text: "FL350"
+            color: "#f5a623"
+            font.family: "Monospace"
+            font.pixelSize: 10
+            font.bold: true
+        }
+    }
+}
+QMLEOF
+
+cat << 'EOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/config/main.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="side" type="String">
+      <default>left</default>
+    </entry>
+  </group>
+</kcfg>
+EOF
+
+# ── apply-plasma-panel.sh — BOTTOM COCKPIT RADAR DOCK ────────────────────────
 cat << 'EOF' > /usr/lib/raptor/hud/apply-plasma-panel.sh
 #!/bin/bash
-# Applies the slim Raptor HUD top panel via kwriteconfig5.
-# Run as the target USER (not root) from the firstboot service.
+# ─────────────────────────────────────────────────────────────────────────────
+# Raptor HUD — Plasma panel config (run as USER on first login)
+# Sets up:
+#   • A 48px bottom panel with radar styling
+#   • Centered task manager (icon-only)
+#   • Left: radar arc + app launcher
+#   • Right: radar arc + system tray + mission clock
+#   • Removes any existing panels first for a clean slate
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Remove default panel and create our slim top bar
-# (Plasma recreates panels from plasmashellrc on next login)
-kwriteconfig5 --file plasmashellrc --group PlasmaViews --group "Panel 1" \
-    --key location 3   # 3 = top
+CFG="$HOME/.config"
+PLASMASHELLRC="$CFG/plasmashellrc"
+PLASMARC="$CFG/plasmarc"
 
-kwriteconfig5 --file plasmashellrc --group PlasmaViews --group "Panel 1" \
-    --key thickness 28
+# ── 0. Apply Plasma style (theme) ────────────────────────────────────────────
+kwriteconfig5 --file plasmarc --group Theme --key name RaptorOS
 
-kwriteconfig5 --file plasmashellrc --group PlasmaViews --group "Panel 1" \
-    --key maximumLength 100
-
-kwriteconfig5 --file plasmashellrc --group PlasmaViews --group "Panel 1" \
-    --key alignment 2   # center
-
-# Apply color scheme
+# ── 1. Apply color scheme ─────────────────────────────────────────────────────
 plasma-apply-colorscheme RaptorOS 2>/dev/null || \
     kwriteconfig5 --file kdeglobals --group General --key ColorScheme RaptorOS
 
-# Apply window decoration
+# ── 2. Apply window decoration ────────────────────────────────────────────────
 kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 \
     --key library org.kde.kwin.aurorae
 kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 \
     --key theme "__aurorae__svg__RaptorOS"
 
-# Apply icon theme — Papirus-Dark (clean, ships in Fedora, no custom wrapper)
+# ── 3. Icon + widget theme ────────────────────────────────────────────────────
 kwriteconfig5 --file kdeglobals --group Icons --key Theme Papirus-Dark
-
-# Plasma style — use Breeze Dark as base (closest to our palette without
-# a full plasmoid theme build)
-kwriteconfig5 --file kdeglobals --group KDE --key LookAndFeelPackage \
+kwriteconfig5 --file kdeglobals --group KDE   --key LookAndFeelPackage \
     org.kde.breezedark.desktop
 
-# Reload KWin + Plasma shell
+# ── 4. Wipe existing panel config so we get a clean slate ────────────────────
+# (Plasma re-generates from plasmashellrc on next launch)
+kwriteconfig5 --file plasmashellrc --group PlasmaViews --group "Panel 0" \
+    --key applets ""   2>/dev/null || true
+# Remove stale panel IDs
+sed -i '/^\[PlasmaViews\]\[Panel/d' "$PLASMASHELLRC" 2>/dev/null || true
+
+# ── 5. Bottom cockpit dock — 48px, full width, bottom ────────────────────────
+# Plasma panel location codes: 1=bottom 2=top 3=left 4=right
+PANEL_ID=128   # Start at 128 to avoid clashing with Plasma defaults (1–127)
+
+kwriteconfig5 --file plasmashellrc \
+    --group "PlasmaViews" --group "Panel $PANEL_ID" \
+    --key location 1            # bottom
+
+kwriteconfig5 --file plasmashellrc \
+    --group "PlasmaViews" --group "Panel $PANEL_ID" \
+    --key thickness 48          # taller than default for radar bar look
+
+kwriteconfig5 --file plasmashellrc \
+    --group "PlasmaViews" --group "Panel $PANEL_ID" \
+    --key maximumLength 100     # 100% screen width
+
+kwriteconfig5 --file plasmashellrc \
+    --group "PlasmaViews" --group "Panel $PANEL_ID" \
+    --key minimumLength 100
+
+kwriteconfig5 --file plasmashellrc \
+    --group "PlasmaViews" --group "Panel $PANEL_ID" \
+    --key alignment 0           # 0=fill/stretch wall-to-wall
+
+# Panel opacity — translucent so the radar SVG bg shows
+kwriteconfig5 --file plasmashellrc \
+    --group "PlasmaViews" --group "Panel $PANEL_ID" \
+    --key panelOpacity 1        # 1=translucent (let compositor blur through)
+
+# ── 6. Panel applet layout ────────────────────────────────────────────────────
+# Left flank:  [App Launcher] [Radar Arc LEFT]
+# Center:      [Icon-only Task Manager]
+# Right flank: [Radar Arc RIGHT] [System Tray] [Mission Clock] [Show Desktop]
+
+APPLETS_CFG="$CFG/plasma-org.kde.plasma.desktop-appletsrc"
+
+# Helper: write an applet block
+write_applet() {
+    local SECTION="$1"  # e.g. "Containments][128][Applets][1"
+    local PLUGIN="$2"
+    kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+        --group "$SECTION" --key plugin "$PLUGIN"
+}
+
+# Containment = panel itself
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID" \
+    --key plugin "org.kde.panel"
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID" \
+    --key location 1
+
+# Applet IDs (arbitrary, just must be unique)
+ID_LAUNCHER=1
+ID_RADAR_L=2
+ID_SPACER_L=3
+ID_TASKS=4
+ID_SPACER_R=5
+ID_RADAR_R=6
+ID_TRAY=7
+ID_CLOCK=8
+ID_SHOWDESKTOP=9
+
+for ID in $ID_LAUNCHER $ID_RADAR_L $ID_SPACER_L $ID_TASKS \
+          $ID_SPACER_R $ID_RADAR_R $ID_TRAY $ID_CLOCK $ID_SHOWDESKTOP; do
+    kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+        --group "Containments][$PANEL_ID][Applets][$ID" \
+        --key immutability 1
+done
+
+# Applet plugins
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_LAUNCHER" \
+    --key plugin "org.kde.plasma.kickoff"
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_RADAR_L" \
+    --key plugin "org.raptoros.radararc"
+
+# Radar arc LEFT config
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_RADAR_L][Configuration][General" \
+    --key side "left"
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_SPACER_L" \
+    --key plugin "org.kde.plasma.panelspacer"
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_TASKS" \
+    --key plugin "org.kde.plasma.icontasks"
+
+# Task manager: icons only, no labels
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_TASKS][Configuration][General" \
+    --key showLabels false
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_TASKS][Configuration][General" \
+    --key maxStripes 1
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_SPACER_R" \
+    --key plugin "org.kde.plasma.panelspacer"
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_RADAR_R" \
+    --key plugin "org.raptoros.radararc"
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_RADAR_R][Configuration][General" \
+    --key side "right"
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_TRAY" \
+    --key plugin "org.kde.plasma.systemtray"
+
+# Clock — digital, 24h, monospace HUD style
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK" \
+    --key plugin "org.kde.plasma.digitalclock"
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
+    --key use24hFormat 2            # 2 = always 24h
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
+    --key showSeconds true
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
+    --key showDate false
+
+# Use monospace font for the HUD digital clock feel
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
+    --key fontFamily "JetBrains Mono"
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_CLOCK][Configuration][Appearance" \
+    --key customFontSize 11
+
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID][Applets][$ID_SHOWDESKTOP" \
+    --key plugin "org.kde.plasma.showdesktop"
+
+# Write the applet order to the containment
+kwriteconfig5 --file plasma-org.kde.plasma.desktop-appletsrc \
+    --group "Containments][$PANEL_ID" \
+    --key applets "$ID_LAUNCHER,$ID_RADAR_L,$ID_SPACER_L,$ID_TASKS,$ID_SPACER_R,$ID_RADAR_R,$ID_TRAY,$ID_CLOCK,$ID_SHOWDESKTOP"
+
+# ── 7. Kvantum: set RaptorOS theme for Qt apps ───────────────────────────────
+if command -v kvantummanager &>/dev/null; then
+    kvantummanager --set RaptorOS 2>/dev/null || true
+fi
+
+# ── 8. GTK settings ───────────────────────────────────────────────────────────
+mkdir -p "$HOME/.config"
+cat << 'GTKEOF' > "$HOME/.config/gtk-3.0/settings.ini"
+[Settings]
+gtk-theme-name=RaptorOS-GTK
+gtk-icon-theme-name=Papirus-Dark
+gtk-cursor-theme-name=Adwaita
+gtk-font-name=JetBrains Mono 10
+gtk-application-prefer-dark-theme=1
+GTKEOF
+
+# ── 9. Reload KWin + Plasma ───────────────────────────────────────────────────
 qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
-kbuildsycoca6 --noincremental 2>/dev/null || true
+kbuildsycoca6 --noincremental 2>/dev/null || \
+    kbuildsycoca5 --noincremental 2>/dev/null || true
 
 echo "RAPTOR_HUD_APPLIED"
 EOF
 chmod +x /usr/lib/raptor/hud/apply-plasma-panel.sh
 
-# ── GTK theme to match (for GTK apps inside KDE) ─────────────────────────────
+# ── GTK theme ──────────────────────────────────────────────────────────────────
 mkdir -p /usr/share/themes/RaptorOS-GTK/gtk-3.0
 mkdir -p /usr/share/themes/RaptorOS-GTK/gtk-4.0
 
 cat << 'EOF' > /usr/share/themes/RaptorOS-GTK/gtk-3.0/gtk.css
-/* RaptorOS GTK3 theme — stealth dark + electric blue accents */
+/* RaptorOS GTK3 theme */
 @define-color bg_color #151a20;
 @define-color fg_color #c8d6e8;
 @define-color base_color #0d0f12;
@@ -389,14 +1337,9 @@ cat << 'EOF' > /usr/share/themes/RaptorOS-GTK/gtk-3.0/gtk.css
 @define-color error_color #dc3232;
 @define-color accent #1e90ff;
 
-* {
-    -gtk-icon-style: symbolic;
-}
+* { -gtk-icon-style: symbolic; }
 
-window, .background {
-    background-color: @bg_color;
-    color: @fg_color;
-}
+window, .background { background-color: @bg_color; color: @fg_color; }
 
 headerbar {
     background: linear-gradient(to bottom, #1c2330, #151a20);
@@ -405,11 +1348,7 @@ headerbar {
     min-height: 36px;
 }
 
-headerbar .title {
-    font-weight: 600;
-    color: @fg_color;
-    letter-spacing: 0.04em;
-}
+headerbar .title { font-weight: 600; color: @fg_color; letter-spacing: 0.04em; }
 
 button {
     background: #1c2330;
@@ -420,23 +1359,9 @@ button {
     transition: all 120ms ease;
 }
 
-button:hover {
-    background: #1e4a7a;
-    border-color: @accent;
-    color: white;
-}
-
-button.suggested-action {
-    background: @accent;
-    border-color: @accent;
-    color: white;
-}
-
-button.destructive-action {
-    background: #8b1a1a;
-    border-color: #cc3333;
-    color: white;
-}
+button:hover { background: #1e4a7a; border-color: @accent; color: white; }
+button.suggested-action  { background: @accent;  border-color: @accent;  color: white; }
+button.destructive-action { background: #8b1a1a; border-color: #cc3333; color: white; }
 
 entry {
     background: @base_color;
@@ -446,14 +1371,9 @@ entry {
     padding: 4px 8px;
     caret-color: @accent;
 }
+entry:focus { border-color: @accent; box-shadow: 0 0 0 1px @accent; }
 
-entry:focus {
-    border-color: @accent;
-    box-shadow: 0 0 0 1px @accent;
-}
-
-treeview.view:selected,
-row:selected {
+treeview.view:selected, row:selected {
     background-color: @selected_bg_color;
     color: @selected_fg_color;
 }
@@ -464,10 +1384,7 @@ scrollbar slider {
     min-width: 6px;
     min-height: 6px;
 }
-
-scrollbar slider:hover {
-    background-color: @accent;
-}
+scrollbar slider:hover { background-color: @accent; }
 
 tooltip {
     background-color: @tooltip_bg_color;
@@ -476,61 +1393,28 @@ tooltip {
     border-radius: 2px;
 }
 
-menubar, .menubar {
-    background-color: #1c2330;
-    border-bottom: 1px solid @borders;
-}
+menubar, .menubar { background-color: #1c2330; border-bottom: 1px solid @borders; }
+menu, .menu { background-color: #151a20; border: 1px solid @borders; }
+menu menuitem:hover { background-color: @accent; color: white; }
 
-menu, .menu {
-    background-color: #151a20;
-    border: 1px solid @borders;
-}
+notebook header { background-color: #1c2330; border-bottom: 1px solid @borders; }
+notebook header tab:checked { background-color: @base_color; border-bottom: 2px solid @accent; }
 
-menu menuitem:hover {
-    background-color: @accent;
-    color: white;
-}
+progressbar progress { background-color: @accent; border-radius: 2px; }
 
-notebook header {
-    background-color: #1c2330;
-    border-bottom: 1px solid @borders;
-}
-
-notebook header tab:checked {
-    background-color: @base_color;
-    border-bottom: 2px solid @accent;
-}
-
-progressbar progress {
-    background-color: @accent;
-    border-radius: 2px;
-}
-
-checkbutton check,
-radiobutton radio {
+checkbutton check, radiobutton radio {
     background: @base_color;
     border: 1px solid @borders;
 }
-
-checkbutton check:checked,
-radiobutton radio:checked {
+checkbutton check:checked, radiobutton radio:checked {
     background-color: @accent;
     border-color: @accent;
 }
 
-scale trough {
-    background-color: #2a3444;
-    border-radius: 2px;
-    min-height: 4px;
-}
-
-scale highlight {
-    background-color: @accent;
-    border-radius: 2px;
-}
+scale trough { background-color: #2a3444; border-radius: 2px; min-height: 4px; }
+scale highlight { background-color: @accent; border-radius: 2px; }
 EOF
 
-# GTK4 uses the same palette via settings
 cp /usr/share/themes/RaptorOS-GTK/gtk-3.0/gtk.css \
    /usr/share/themes/RaptorOS-GTK/gtk-4.0/gtk.css
 
@@ -552,33 +1436,20 @@ ButtonLayout=close,minimize,maximize:
 WidgetStyle=kvantum
 EOF
 
-# ── Kvantum theme (Qt app styling) ───────────────────────────────────────────
+# ── Kvantum theme ─────────────────────────────────────────────────────────────
 mkdir -p /usr/share/Kvantum/RaptorOS
 cat << 'EOF' > /usr/share/Kvantum/RaptorOS/RaptorOS.kvconfig
 [%General]
 author=RaptorOS
 comment=F-22 Raptor stealth dark theme
 x11drag=all
-alt_mnemonic=true
-left_tabs=true
-attach_last_tab=false
 composite=true
 menu_shadow_depth=6
-spread_menuitems=false
 tooltip_shadow_depth=4
 popup_blurring=true
-opaque=kaffeine,kmplayer
-vertical_spin_indicators=false
-spin_button_width=16
-fill_rubberband=false
-groupbox_top_label=false
-button_width_from_label=true
 contrast=1.0
 intensity=1.0
 saturation=1.0
-no_window_pattern=false
-reduce_window_opacity=0
-reduce_menu_opacity=0
 
 [GeneralColors]
 window.color=#1c2330
@@ -604,59 +1475,23 @@ progress.indicator.text.color=#ffffff
 
 [Hacks]
 transparent_ktitle_label=true
-transparent_dolphin_view=false
 blur_konsole=true
-transparent_pcmanfm_view=false
-transparent_pcmanfm_sidepane=false
-lxqtmainmenu_iconsize=0
-normal_default_pushbutton=false
-single_top_toolbar=false
-tint_on_mouseover=0
-no_selection_tint=false
-no_focus_rect=false
-iconless_pushbutton=false
-iconless_menu=false
-kinetic_scrolling=false
-middle_click_scroll=false
 EOF
 
 cat << 'EOF' > /usr/share/Kvantum/RaptorOS/RaptorOS.svg
-<!-- Minimal Kvantum SVG — inherits panel geometry from kvconfig -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
   <rect width="200" height="200" fill="#1c2330"/>
 </svg>
 EOF
 
-# ── Firstboot user service ────────────────────────────────────────────────────
-# Runs apply-plasma-panel.sh once as the user on first login.
-mkdir -p /usr/lib/systemd/user
-cat << 'EOF' > /usr/lib/systemd/user/raptor-hud-apply.service
-[Unit]
-Description=Raptor HUD — Apply KDE theme on first login
-After=plasma-plasmashell.service
-ConditionPathExists=!/var/lib/raptor-hud-applied
-
-[Service]
-Type=oneshot
-ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/touch /var/lib/raptor-hud-applied
-RemainAfterExit=yes
-
-[Install]
-WantedBy=default.target
-EOF
-
-# Enable the user service system-wide
-systemctl --global enable raptor-hud-apply.service 2>/dev/null || true
-
-# ── Konsole profile (terminal to match) ──────────────────────────────────────
+# ── Konsole profile ────────────────────────────────────────────────────────────
 mkdir -p /usr/share/konsole
+
 cat << 'EOF' > /usr/share/konsole/RaptorOS.profile
 [Appearance]
 ColorScheme=RaptorOS
 Font=JetBrains Mono,11,-1,5,50,0,0,0,0,0
 LineSpacing=2
-UseFontLineChararacters=false
 
 [General]
 Command=/bin/bash
@@ -676,8 +1511,6 @@ BlinkingCursorEnabled=true
 CursorShape=1
 EOF
 
-# Konsole color scheme matching RaptorOS palette
-mkdir -p /usr/share/konsole
 cat << 'EOF' > /usr/share/konsole/RaptorOS.colorscheme
 [Background]
 Color=13,15,18
@@ -746,27 +1579,77 @@ BlurRadius=12
 ColorRandomization=false
 Description=RaptorOS
 Opacity=0.92
-Wallpaper=
-WallpaperOpacity=1
 EOF
 
-# ── recipe.yml additions reminder ────────────────────────────────────────────
+# ── Firstboot systemd user service ────────────────────────────────────────────
+mkdir -p /usr/lib/systemd/user
+cat << 'EOF' > /usr/lib/systemd/user/raptor-hud-apply.service
+[Unit]
+Description=Raptor HUD — Apply KDE theme on first login
+After=plasma-plasmashell.service
+ConditionPathExists=!/var/lib/raptor-hud-applied
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
+ExecStartPost=/bin/touch /var/lib/raptor-hud-applied
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --global enable raptor-hud-apply.service 2>/dev/null || true
+
+# ── Post-install: rebuild sycoca so category + GPU profiler appear now ─────────
+# This is the step most commonly missing — without it the menu DB is stale
+# and neither the category nor the .desktop entry will show until reboot.
+if command -v kbuildsycoca6 &>/dev/null; then
+    kbuildsycoca6 --noincremental
+elif command -v kbuildsycoca5 &>/dev/null; then
+    kbuildsycoca5 --noincremental
+fi
+
 cat << 'EOF'
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ADD TO recipe.yml rpm-ostree install block:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  RAPTOR HUD — INSTALL COMPLETE
+
+  WHAT THIS SCRIPT INSTALLS:
+  ① App category  — .menu written to BOTH applications.menu and
+                    kde-applications.menu; kbuildsycoca rebuilt immediately.
+
+  ② GPU Profiler  — Fully integrated, no external scripts needed:
+                    • /usr/lib/raptor/gpu-detect.sh   boot detection + env
+                    • /usr/bin/raptor-gpu-profile-ui.sh  interactive TUI
+                      (vendor/model/VRAM, live temp+util, 1-5 profile switcher,
+                       env var viewer, auto-refresh every 30s)
+                    • /usr/bin/raptor-gpu-profile-launcher  .desktop target
+                    • raptor-gpu-profile.service  runs detect at boot
+                    • /etc/sudoers.d/raptor-gpu   passwordless profile switching
+                    • /etc/polkit-1/rules.d/49-raptor-gpu.rules
+
+  ③ Bottom dock   — 48px cockpit radar bar at screen bottom:
+                    • Gunmetal + electric blue panel SVG background
+                    • Radar arc plasmoid (sweep + range rings + blips)
+                    • Centered icon-only task manager
+                    • JetBrains Mono digital clock (HH:MM:SS, 24h)
+                    • Flanking spacers keep dock centered
+
+  ADD TO recipe.yml:
     - kvantum
     - kvantum-qt5
-    - papirus-icon-theme   # icon theme
-    - jetbrains-mono-fonts # Konsole font
+    - papirus-icon-theme
+    - jetbrains-mono-fonts
+    - qt5-qtbase                 # for qdbus
 
-  NOTE: raptor-gpu-profile.desktop Exec points to
-    /usr/bin/raptor-gpu-profile-ui.sh — ensure raptor-gpu-profile.sh
-    creates that script, or update the Exec line to match.
-
-  Any Raptor-branded app should include:
+  Any Raptor-branded app .desktop needs:
     Categories=X-RaptorOS;
-  in its .desktop file to appear in the Raptor OS app menu category.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  in its file to appear in the Raptor OS launcher category.
+
+  To force re-apply on next login (e.g. after a reset):
+    rm /var/lib/raptor-hud-applied
+    systemctl --user start raptor-hud-apply.service
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
 
 echo "RAPTOR_HUD_READY"
