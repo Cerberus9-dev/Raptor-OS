@@ -7,7 +7,7 @@ set -e
 # • Cockpit radar bottom taskbar
 # • Working "Raptor OS" app-launcher category
 # • GPU profiler .desktop that always surfaces
-# • Numix Circle icon theme
+# • Breeze Dark icon theme (KDE default)
 # • Aurorae window decoration
 # • Applied at first login via systemd user unit
 # =============================================================================
@@ -982,13 +982,7 @@ kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 \
     --key theme "__aurorae__svg__RaptorOS"
 
 # ── 3. Icon theme ─────────────────────────────────────────────────────────────
-if [ -d "/usr/share/icons/Numix-Circle" ]; then
-    ICON_THEME="Numix-Circle"
-elif [ -d "/usr/share/icons/Papirus-Dark" ]; then
-    ICON_THEME="Papirus-Dark"
-else
-    ICON_THEME="breeze-dark"
-fi
+ICON_THEME="breeze-dark"
 kwriteconfig5 --file kdeglobals --group Icons --key Theme "$ICON_THEME"
 kwriteconfig5 --file kdeglobals --group KDE   --key LookAndFeelPackage \
     org.kde.breezedark.desktop
@@ -1244,7 +1238,7 @@ Encoding=UTF-8
 [X11 Properties]
 GtkTheme=RaptorOS-GTK
 MetacityTheme=RaptorOS-GTK
-IconTheme=Numix-Circle
+IconTheme=breeze-dark
 CursorTheme=Adwaita
 ButtonLayout=close,minimize,maximize:
 
@@ -1403,12 +1397,12 @@ cat << 'EOF' > /usr/lib/systemd/user/raptor-hud-apply.service
 [Unit]
 Description=Raptor HUD — Apply KDE theme on first login
 After=plasma-plasmashell.service
-ConditionPathExists=!/var/lib/raptor-hud-applied
+ConditionPathExists=!%h/.local/share/raptor-hud-applied
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/touch /var/lib/raptor-hud-applied
+ExecStartPost=/bin/touch %h/.local/share/raptor-hud-applied
 RemainAfterExit=yes
 
 [Install]
