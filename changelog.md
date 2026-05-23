@@ -12,10 +12,6 @@
 - **KDE Theme FINALLY fixed!**
 
 ### Added
-- `org.raptoros.radararc` Plasma plasmoid — cockpit radar arc widget with rotating sweep
-  line, fade trail, concentric range rings, crosshair grid, and monospace clock overlay;
-  configurable arc colour, sweep colour, sweep speed, opacity, and ring count via
-  Plasma widget settings
 - **Custom Radar HUD taskbar** — fully custom KDE Plasma panel replacing the default taskbar
   with an F-22 cockpit-inspired radar theme; features phosphor-green sweep line with
   persistence trail, randomised contact blips that light up as the sweep passes and decay
