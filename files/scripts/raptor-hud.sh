@@ -917,58 +917,115 @@ EOF
 cat << 'QMLEOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui/main.qml
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import org.kde.plasma.core 2.0 as PlasmaCore
-import org.kde.plasma.components 3.0 as PlasmaComponents
 
 Item {
     id: root
     implicitWidth: 120
-    implicitHeight: PlasmaCore.Units.gridUnit * 2
+    implicitHeight: 48
     property string side: plasmoid.configuration.side || "left"
     property real sweepAngle: 0
+
+    // Static blip definitions: angle (degrees from top), dist (0-1 of maxR)
+    readonly property var blipDefs: [
+        { a: 210, r: 0.38 }, { a: 255, r: 0.58 },
+        { a: 290, r: 0.29 }, { a: 238, r: 0.72 }, { a: 222, r: 0.50 }
+    ]
+    property var blipBrightness: [0.6, 0.3, 0.8, 0.2, 0.5]
+
     SequentialAnimation on sweepAngle {
         loops: Animation.Infinite
         NumberAnimation { to: 360; duration: 4000; easing.type: Easing.Linear }
     }
+
+    onSweepAngleChanged: {
+        var bb = blipBrightness.slice()
+        for (var i = 0; i < blipDefs.length; i++) {
+            var diff = (sweepAngle - blipDefs[i].a + 360) % 360
+            if (diff >= 0 && diff < 4) {
+                bb[i] = 0.9 + Math.random() * 0.1
+            } else {
+                bb[i] = Math.max(0, bb[i] - 0.001)
+            }
+        }
+        blipBrightness = bb
+        canvas.requestPaint()
+    }
+
     Canvas {
         id: canvas
         anchors.fill: parent
         onPaint: {
-            var ctx = getContext("2d");
-            ctx.clearRect(0, 0, width, height);
-            var cx = side === "left" ? width - 10 : 10;
-            var cy = height;
-            var maxR = width * 1.1;
-            ctx.strokeStyle = "rgba(30,144,255,0.22)";
-            ctx.lineWidth = 0.5;
-            for (var r = 20; r <= maxR; r += 20) {
-                ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 2 * Math.PI); ctx.stroke();
+            var ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+
+            // Corner anchor: left widget anchors at bottom-left, right at bottom-right
+            var cx = side === "left" ? 0 : width
+            var cy = height
+            var maxR = width * 1.4
+
+            // Grid arcs from corner
+            ctx.strokeStyle = "rgba(0,255,65,0.18)"
+            ctx.lineWidth = 0.5
+            for (var rr = maxR * 0.3; rr <= maxR; rr += maxR * 0.25) {
+                ctx.beginPath(); ctx.arc(cx, cy, rr, -Math.PI, 0); ctx.stroke()
             }
-            var sweepRad = sweepAngle * Math.PI / 180 + Math.PI;
-            ctx.save(); ctx.translate(cx, cy); ctx.rotate(sweepRad);
-            ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, maxR, -0.55, 0); ctx.closePath();
-            var sweepGrad = ctx.createLinearGradient(-maxR, 0, 0, 0);
-            sweepGrad.addColorStop(0, "rgba(0,255,65,0)");
-            sweepGrad.addColorStop(1, "rgba(0,255,65,0.18)");
-            ctx.fillStyle = sweepGrad; ctx.fill(); ctx.restore();
-            ctx.save(); ctx.strokeStyle = "rgba(0,255,65,0.5)"; ctx.lineWidth = 1;
-            ctx.translate(cx, cy); ctx.rotate(sweepRad);
-            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(maxR, 0); ctx.stroke(); ctx.restore();
-            var blips = [{a:210,r:35},{a:255,r:55},{a:290,r:28},{a:238,r:70},{a:222,r:48}];
-            blips.forEach(function(b) {
-                var br = b.a * Math.PI / 180;
-                ctx.beginPath(); ctx.arc(cx + b.r * Math.cos(br), cy + b.r * Math.sin(br), 1.5, 0, 2 * Math.PI);
-                ctx.fillStyle = "rgba(30,144,255,0.7)"; ctx.fill();
-            });
+
+            // Sweep trail
+            var sweepRad = (sweepAngle - 90) * Math.PI / 180
+            var trailLen = Math.PI / 3
+            for (var s = 0; s < 32; s++) {
+                var frac   = s / 32
+                var startA = sweepRad - trailLen * frac
+                var endA   = sweepRad - trailLen * (frac + 1 / 32)
+                ctx.beginPath(); ctx.moveTo(cx, cy)
+                ctx.arc(cx, cy, maxR, startA, endA, true); ctx.closePath()
+                ctx.fillStyle = "rgba(0,255,65," + ((1 - frac) * 0.15) + ")"
+                ctx.fill()
+            }
+
+            // Sweep line
+            ctx.strokeStyle = "rgba(0,255,65,0.55)"
+            ctx.lineWidth = 1
+            ctx.beginPath(); ctx.moveTo(cx, cy)
+            ctx.lineTo(cx + maxR * Math.cos(sweepRad), cy + maxR * Math.sin(sweepRad))
+            ctx.stroke()
+
+            // Blips with brightness persistence
+            var bb = root.blipBrightness
+            for (var bi = 0; bi < root.blipDefs.length; bi++) {
+                if (bb[bi] < 0.02) continue
+                var blip = root.blipDefs[bi]
+                var ba = (blip.a - 90) * Math.PI / 180
+                var bx = cx + blip.r * maxR * Math.cos(ba)
+                var by = cy + blip.r * maxR * Math.sin(ba)
+                if (side === "left"  && bx < -4) continue
+                if (side === "right" && bx > width + 4) continue
+                if (by < -4) continue
+
+                var grad = ctx.createRadialGradient(bx, by, 0, bx, by, 6)
+                grad.addColorStop(0, "rgba(0,255,65," + (bb[bi] * 0.6) + ")")
+                grad.addColorStop(1, "rgba(0,0,0,0)")
+                ctx.fillStyle = grad
+                ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2); ctx.fill()
+
+                ctx.fillStyle   = "rgba(30,144,255," + bb[bi] + ")"
+                ctx.beginPath(); ctx.arc(bx, by, 1.5, 0, Math.PI * 2); ctx.fill()
+            }
         }
     }
-    onSweepAngleChanged: canvas.requestPaint()
+
     Column {
-        anchors { left: side === "left" ? parent.left : undefined; right: side === "right" ? parent.right : undefined; verticalCenter: parent.verticalCenter }
-        width: 48; spacing: 1
-        Text { text: "HDG"; color: "#5a6a7e"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1 }
+        anchors {
+            left:           side === "left"  ? parent.left  : undefined
+            right:          side === "right" ? parent.right : undefined
+            verticalCenter: parent.verticalCenter
+            leftMargin:     side === "left"  ? 4 : 0
+            rightMargin:    side === "right" ? 4 : 0
+        }
+        spacing: 1
+        Text { text: "HDG"; color: "#3a5060"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1.5 }
         Text { text: "270°"; color: "#1e90ff"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
-        Text { text: "ALT"; color: "#5a6a7e"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1 }
+        Text { text: "ALT"; color: "#3a5060"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1.5 }
         Text { text: "FL350"; color: "#f5a623"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
     }
 }
