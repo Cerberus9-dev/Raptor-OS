@@ -2,13 +2,13 @@
 set -e
 
 # =============================================================================
-# Raptor HUD v4.1 — F-22 Themed KDE Plasma Shell
+# Raptor HUD v4.2 — F-22 Themed KDE Plasma Shell
 # FIXES:
-#   • kwriteconfig5 group syntax corrected throughout apply-plasma-panel.sh
-#     (was: --group "Containments][$ID" → now: --group Containments --group $ID)
-#   • Battery icon pinned next to WiFi in system tray
-#   • Nitrogen installed for static wallpaper; raptor-set-wallpaper command added
-#   • mkdir -p added before metadata.json heredoc to ensure parent dir exists
+#   • Removed nitrogen entirely — wallpaper now uses plasma-apply-wallpaperimage
+#     with qdbus fallback (works natively in KDE Wayland + X11)
+#   • Panel layout switched from kwriteconfig5 piecemeal writes to a proper
+#     plasma-layout-template layout.js — reliable on first boot
+#   • mkdir -p before metadata.json heredoc
 # =============================================================================
 
 # ── Palette reference ─────────────────────────────────────────────────────────
@@ -17,38 +17,67 @@ set -e
 
 mkdir -p /usr/lib/raptor/hud
 
-# ── Install nitrogen for wallpaper ───────────────────────────────────────────
-if ! command -v nitrogen &>/dev/null; then
-    if   command -v apt-get &>/dev/null; then apt-get install -y nitrogen 2>/dev/null || true
-    elif command -v pacman  &>/dev/null; then pacman -S --noconfirm nitrogen 2>/dev/null || true
-    elif command -v dnf     &>/dev/null; then dnf install -y nitrogen 2>/dev/null || true
-    fi
-fi
-
 # ── raptor-set-wallpaper command ──────────────────────────────────────────────
 cat << 'WPEOF' > /usr/bin/raptor-set-wallpaper
 #!/bin/bash
 # Usage: raptor-set-wallpaper /path/to/image.jpg
-#   or:  raptor-set-wallpaper   (opens file picker)
+#   or:  raptor-set-wallpaper   (opens KDE file picker)
+#
+# Uses plasma-apply-wallpaperimage (Plasma 5.26+) with a qdbus fallback.
+# No nitrogen required.
+
+WALLPAPER_CACHE="$HOME/.config/raptor-wallpaper"
+
+_apply_kde_wallpaper() {
+    local IMG="$1"
+
+    # Method 1: plasma-apply-wallpaperimage (Plasma 5.26+, works Wayland + X11)
+    if command -v plasma-apply-wallpaperimage &>/dev/null; then
+        plasma-apply-wallpaperimage "$IMG" && return 0
+    fi
+
+    # Method 2: qdbus / qdbus6 script to every desktop containment
+    local QDBUS=""
+    command -v qdbus6  &>/dev/null && QDBUS="qdbus6"
+    command -v qdbus   &>/dev/null && QDBUS="qdbus"
+
+    if [ -n "$QDBUS" ]; then
+        local SCRIPT
+        SCRIPT=$(cat << JEOF
+var allDesktops = desktops();
+for (var i = 0; i < allDesktops.length; i++) {
+    var d = allDesktops[i];
+    d.wallpaperPlugin = "org.kde.image";
+    d.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
+    d.writeConfig("Image", "file://$IMG");
+}
+JEOF
+)
+        $QDBUS org.kde.plasmashell /PlasmaShell \
+            org.kde.PlasmaShell.evaluateScript "$SCRIPT" 2>/dev/null && return 0
+    fi
+
+    echo "[raptor-wallpaper] Could not set wallpaper — Plasma not running?" >&2
+    return 1
+}
+
 set_wallpaper() {
     local IMG="$1"
     [ -f "$IMG" ] || { echo "File not found: $IMG" >&2; exit 1; }
-    echo "$IMG" > "$HOME/.config/raptor-wallpaper"
-    nitrogen --set-scaled "$IMG"
+    _apply_kde_wallpaper "$IMG" || exit 1
+    echo "$IMG" > "$WALLPAPER_CACHE"
     echo "Wallpaper set: $IMG"
 }
+
 if [ -n "$1" ]; then
     set_wallpaper "$1"
 elif command -v kdialog &>/dev/null; then
     FILE=$(kdialog --getopenfilename "$HOME" \
-        "Images (*.png *.jpg *.jpeg *.webp *.bmp)|*.png *.jpg *.jpeg *.webp *.bmp")
-    [ -n "$FILE" ] && set_wallpaper "$FILE"
-elif command -v zenity &>/dev/null; then
-    FILE=$(zenity --file-selection --title="Select Wallpaper" \
-        --file-filter="Images|*.png *.jpg *.jpeg *.webp *.bmp")
+        "Images (*.png *.jpg *.jpeg *.webp *.bmp *.svg)|*.png *.jpg *.jpeg *.webp *.bmp *.svg")
     [ -n "$FILE" ] && set_wallpaper "$FILE"
 else
-    echo "Usage: raptor-set-wallpaper /path/to/image.jpg"; exit 1
+    echo "Usage: raptor-set-wallpaper /path/to/image.jpg"
+    exit 1
 fi
 WPEOF
 chmod +x /usr/bin/raptor-set-wallpaper
@@ -57,20 +86,21 @@ cat << 'EOF' > /usr/share/applications/raptor-set-wallpaper.desktop
 [Desktop Entry]
 Type=Application
 Name=Set Wallpaper
-Comment=Set a static wallpaper
+Comment=Set the desktop wallpaper using the KDE image plugin
 Exec=/usr/bin/raptor-set-wallpaper
 Icon=preferences-desktop-wallpaper
 Terminal=false
 Categories=X-RaptorOS;System;Settings;
 EOF
 
-# Autostart nitrogen at login to restore saved wallpaper
+# ── Autostart: restore wallpaper on login via KDE method ─────────────────────
 mkdir -p /etc/xdg/autostart
 cat << 'EOF' > /etc/xdg/autostart/raptor-wallpaper.desktop
 [Desktop Entry]
 Type=Application
-Name=Raptor Wallpaper
-Exec=bash -c '[ -f "$HOME/.config/raptor-wallpaper" ] && nitrogen --set-scaled "$(cat $HOME/.config/raptor-wallpaper)" || true'
+Name=Raptor Wallpaper Restore
+Comment=Restores saved wallpaper on login
+Exec=bash -c 'WP="$HOME/.config/raptor-wallpaper"; [ -f "$WP" ] && IMG="$(cat "$WP")" && [ -f "$IMG" ] && raptor-set-wallpaper "$IMG" || true'
 Hidden=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
@@ -423,6 +453,10 @@ write_env() {
     local COMMENT="$1"; shift
     { echo "# ── Raptor OS: $COMMENT ──"; printf '%s\n' "$@"; } \
         > /etc/environment.d/raptor-gpu.conf
+    # Re-apply any manual VRAM override if one has been set
+    if [ -f /etc/raptor/vram-override.conf ]; then
+        cat /etc/raptor/vram-override.conf >> /etc/environment.d/raptor-gpu.conf
+    fi
 }
 
 case "$PROFILE" in
@@ -571,6 +605,10 @@ read_gpu_util() {
     u=$(cat /sys/class/drm/card0/device/gpu_busy_percent 2>/dev/null || true)
     [ -n "$u" ] && { echo "${u}%"; return; }; echo "N/A"
 }
+read_vram_override() {
+    grep -E "^MESA_VRAM_LIMIT=|^__GL_VRAM_LIMIT=" /etc/raptor/vram-override.conf 2>/dev/null \
+        | head -1 | sed 's/.*=//' || echo "none"
+}
 
 draw_header() {
     clear
@@ -595,6 +633,7 @@ draw_status() {
     printf   "  ${DIM}│${R}  Vendor   ${BLUE}%-38s${R}${DIM}│${R}\n" "$(read_gpu_vendor)"
     printf   "  ${DIM}│${R}  Model    ${BLUE}%-38s${R}${DIM}│${R}\n" "$(read_gpu_model)"
     printf   "  ${DIM}│${R}  VRAM     ${BLUE}%-38s${R}${DIM}│${R}\n" "$(read_vram)"
+    printf   "  ${DIM}│${R}  Override ${AMBER}%-38s${R}${DIM}│${R}\n" "$(read_vram_override)"
     echo -e  "  ${DIM}└─────────────────────────────────────────────────┘${R}"
     echo ""
     echo -e "  ${BOLD}LIVE TELEMETRY${R}"
@@ -623,6 +662,7 @@ draw_menu() {
     echo -e "  ${BLUE}[4]${R}  ▼  POWER SAVE  Low clocks, minimal draw"
     echo -e "  ${DIM}[5]${R}  ○  AUTO        Detect and apply best profile"
     echo -e "  ${DIM}──────────────────────────────────────────────────${R}"
+    echo -e "  ${DIM}[v]${R}  Set VRAM override   ${DIM}[V]${R}  Clear VRAM override"
     echo -e "  ${DIM}[r]${R}  Refresh   ${DIM}[l]${R}  Show env vars   ${DIM}[q]${R}  Quit"
     echo ""
     echo -ne "  ${BLUE}RAPTOR>${R}  "
@@ -650,6 +690,30 @@ apply_profile() {
     sleep 2
 }
 
+set_vram_override() {
+    echo ""
+    echo -e "  ${BOLD}SET VRAM OVERRIDE${R}"
+    echo -e "  ${DIM}Enter VRAM limit in MiB (e.g. 4096 for 4 GB), or 0 to cancel:${R}"
+    echo -ne "  ${BLUE}MiB>${R}  "
+    read -r MB
+    [[ "$MB" =~ ^[0-9]+$ ]] || { echo -e "  ${RED}Invalid — numbers only.${R}"; sleep 2; return; }
+    [ "$MB" -eq 0 ] && { echo -e "  ${DIM}Cancelled.${R}"; sleep 1; return; }
+    sudo mkdir -p /etc/raptor
+    # Write both vars so it works on Mesa (AMD/Intel) and NVIDIA
+    printf '# Raptor VRAM override — written by raptor-gpu-profile-ui\nMESA_VRAM_LIMIT=%s\n__GL_VRAM_LIMIT=%s\n' \
+        "$MB" "$MB" | sudo tee /etc/raptor/vram-override.conf > /dev/null
+    echo -e "  ${GREEN}[OK]${R} VRAM override set to ${MB} MiB. Re-applying current profile…"
+    sudo "$DETECT_SCRIPT" 2>/dev/null || true
+    sleep 2
+}
+
+clear_vram_override() {
+    sudo rm -f /etc/raptor/vram-override.conf 2>/dev/null || true
+    echo -e "\n  ${GREEN}[OK]${R} VRAM override cleared. Re-applying current profile…"
+    sudo "$DETECT_SCRIPT" 2>/dev/null || true
+    sleep 2
+}
+
 show_env() {
     echo ""
     echo -e "  ${BOLD}CURRENT ENV  ${DIM}(${ENV_FILE})${R}"
@@ -673,10 +737,12 @@ while true; do
         3) apply_profile "balanced"    ;;
         4) apply_profile "powersave"   ;;
         5) apply_profile "auto"        ;;
+        v) set_vram_override           ;;
+        V) clear_vram_override         ;;
         r|R) continue ;;
         l|L) draw_header; show_env ;;
         q|Q) echo -e "\n  ${DIM}Raptor GPU Profiler closed.${R}\n"; exit 0 ;;
-        *) echo -e "  ${DIM}Unknown — use 1-5, r, l, q${R}"; sleep 1 ;;
+        *) echo -e "  ${DIM}Unknown — use 1-5, v, V, r, l, q${R}"; sleep 1 ;;
     esac
 done
 UIEOF
@@ -736,6 +802,9 @@ ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-performance
 ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-balanced
 ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-powersave
 ALL ALL=(root) NOPASSWD: /usr/sbin/sysctl --system
+ALL ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/raptor
+ALL ALL=(root) NOPASSWD: /usr/bin/tee /etc/raptor/vram-override.conf
+ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor/vram-override.conf
 SUDOERS
 chmod 440 /etc/sudoers.d/raptor-gpu
 command -v visudo &>/dev/null && visudo -c -f /etc/sudoers.d/raptor-gpu \
@@ -828,7 +897,6 @@ cp /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg \
    /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets/panel-background.svg
 
 # ── Radar arc plasmoid ────────────────────────────────────────────────────────
-# FIX: mkdir -p must come BEFORE the metadata.json heredoc redirect
 mkdir -p /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui
 
 cat << 'EOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/metadata.json
@@ -906,19 +974,24 @@ Item {
 }
 QMLEOF
 
-# ── apply-plasma-panel.sh — FIXED: correct kwriteconfig5 group syntax ─────────
+# ── apply-plasma-panel.sh ─────────────────────────────────────────────────────
+# Panel layout is applied via a Plasma layout script (layout.js) which is the
+# correct, reliable mechanism for first-boot panel configuration. kwriteconfig5
+# alone is not sufficient when Plasma has never run for that user because the
+# appletsrc file doesn't exist yet and Plasma ignores partial writes on first run.
 cat << 'EOF' > /usr/lib/raptor/hud/apply-plasma-panel.sh
 #!/bin/bash
-# Raptor HUD — Plasma panel config (run as USER on first login)
-# v4.1: FIXED kwriteconfig5 group syntax; FIXED battery tray order; nitrogen wallpaper
+# Raptor HUD — Plasma panel + theme config (run as USER on first login)
+# v4.2: panel via layout.js; wallpaper via plasma-apply-wallpaperimage; no nitrogen
 
 CFG="$HOME/.config"
-APPFILE="$CFG/plasma-org.kde.plasma.desktop-appletsrc"
-SHELLFILE="$CFG/plasmashellrc"
+LOCAL_SHARE="$HOME/.local/share"
 
 # ── 0. Clean slate ────────────────────────────────────────────────────────────
-rm -f "$APPFILE" "$SHELLFILE"
-rm -f "$HOME/.local/share/plasma/layout-templates/"*.layout.js 2>/dev/null || true
+rm -f "$CFG/plasma-org.kde.plasma.desktop-appletsrc"
+rm -f "$CFG/plasmashellrc"
+rm -f "$LOCAL_SHARE/plasma/layout-templates/"*.layout.js 2>/dev/null || true
+mkdir -p "$LOCAL_SHARE/plasma/layout-templates"
 
 # ── 1. Color scheme ───────────────────────────────────────────────────────────
 plasma-apply-colorscheme /usr/share/color-schemes/RaptorOS.colors 2>/dev/null || true
@@ -942,66 +1015,78 @@ kwriteconfig5 --file kdeglobals --group KDE --key widgetStyle kvantum
 # ── 5. Plasma theme ───────────────────────────────────────────────────────────
 kwriteconfig5 --file plasmarc --group Theme --key name RaptorOS
 
-# ── 6. Panel — FIXED: each nested group gets its own --group flag ─────────────
-PANEL_ID=128
-ID_LAUNCHER=1; ID_RADAR_L=2; ID_SPACER_L=3; ID_TASKS=4
-ID_SPACER_R=5; ID_RADAR_R=6; ID_TRAY=7;     ID_CLOCK=8; ID_SHOWDESKTOP=9
+# ── 6. Panel layout via layout.js ─────────────────────────────────────────────
+# Plasma loads ~/.local/share/plasma/layout-templates/raptor-hud.layout.js
+# when no existing panel config is found (first boot / clean slate above).
+# This is the correct API — it runs inside Plasma's JS engine with full access
+# to panels(), desktops(), and createWidget().
+cat > "$LOCAL_SHARE/plasma/layout-templates/raptor-hud.layout.js" << 'LAYOUTEOF'
+// Raptor HUD panel layout — loaded by plasmashell on first run
+// Removes default panel and creates a fresh one with the Raptor applet order.
 
-# Panel containment
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --key plugin   "org.kde.panel"
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --key location 1
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group General \
-    --key AppletOrder "${ID_LAUNCHER};${ID_RADAR_L};${ID_SPACER_L};${ID_TASKS};${ID_SPACER_R};${ID_RADAR_R};${ID_TRAY};${ID_CLOCK};${ID_SHOWDESKTOP}"
+var panels = Array.prototype.slice.call(panels());
+for (var i = 0; i < panels.length; i++) {
+    panels[i].remove();
+}
 
-# Panel geometry
-kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key location      1
-kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key thickness     48
-kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key maximumLength 100
-kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key minimumLength 100
-kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key alignment     0
-kwriteconfig5 --file "$SHELLFILE" --group PlasmaViews --group "Panel $PANEL_ID" --key panelOpacity  1
+var p = new Panel();
+p.location        = "bottom";
+p.height          = 48;
+p.lengthMode      = "fill";
+p.alignment       = "center";
+p.hiding          = "none";
+p.floating        = false;
 
-# Applets
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_LAUNCHER --key plugin "org.kde.plasma.kickoff"
+// App launcher
+var launcher = p.addWidget("org.kde.plasma.kickoff");
 
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_RADAR_L --key plugin "org.raptoros.radararc"
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_RADAR_L --group Configuration --group General --key side "left"
+// Left radar arc
+var radarL = p.addWidget("org.raptoros.radararc");
+radarL.currentConfigGroup = ["General"];
+radarL.writeConfig("side", "left");
 
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_SPACER_L --key plugin "org.kde.plasma.panelspacer"
+// Left spacer
+p.addWidget("org.kde.plasma.panelspacer");
 
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_TASKS --key plugin "org.kde.plasma.icontasks"
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_TASKS --group Configuration --group General --key showLabels false
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_TASKS --group Configuration --group General --key maxStripes 1
+// Task manager (icon-only)
+var tasks = p.addWidget("org.kde.plasma.icontasks");
+tasks.currentConfigGroup = ["General"];
+tasks.writeConfig("showLabels", false);
+tasks.writeConfig("maxStripes", 1);
 
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_SPACER_R --key plugin "org.kde.plasma.panelspacer"
+// Right spacer
+p.addWidget("org.kde.plasma.panelspacer");
 
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_RADAR_R --key plugin "org.raptoros.radararc"
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_RADAR_R --group Configuration --group General --key side "right"
+// Right radar arc
+var radarR = p.addWidget("org.raptoros.radararc");
+radarR.currentConfigGroup = ["General"];
+radarR.writeConfig("side", "right");
 
-# System tray
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_TRAY --key plugin "org.kde.plasma.systemtray"
+// System tray
+var tray = p.addWidget("org.kde.plasma.systemtray");
+tray.currentConfigGroup = ["Configuration", "General"];
+tray.writeConfig("shownItems",  "org.kde.plasma.networkmanagement,org.kde.plasma.battery");
+tray.writeConfig("extraItems",  "org.kde.plasma.battery,org.kde.plasma.networkmanagement,org.kde.plasma.volume,org.kde.plasma.bluetooth");
 
-# FIX: Battery next to WiFi — pin both as always-visible in order: network, battery
-kwriteconfig5 --file "$APPFILE" \
-    --group Containments --group $PANEL_ID \
-    --group Applets --group $ID_TRAY \
-    --group Configuration --group General \
-    --key shownItems "org.kde.plasma.networkmanagement,org.kde.plasma.battery"
-kwriteconfig5 --file "$APPFILE" \
-    --group Containments --group $PANEL_ID \
-    --group Applets --group $ID_TRAY \
-    --group Configuration --group General \
-    --key extraItems "org.kde.plasma.battery,org.kde.plasma.networkmanagement,org.kde.plasma.volume,org.kde.plasma.bluetooth"
+// Clock
+var clock = p.addWidget("org.kde.plasma.digitalclock");
+clock.currentConfigGroup = ["Appearance"];
+clock.writeConfig("use24hFormat",   2);
+clock.writeConfig("showSeconds",    true);
+clock.writeConfig("showDate",       false);
+clock.writeConfig("fontFamily",     "JetBrains Mono");
+clock.writeConfig("customFontSize", 11);
 
-# Clock
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --key plugin "org.kde.plasma.digitalclock"
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key use24hFormat    2
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key showSeconds     true
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key showDate        false
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key fontFamily      "JetBrains Mono"
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_CLOCK --group Configuration --group Appearance --key customFontSize  11
+// Show desktop
+p.addWidget("org.kde.plasma.showdesktop");
+LAYOUTEOF
 
-kwriteconfig5 --file "$APPFILE" --group Containments --group $PANEL_ID --group Applets --group $ID_SHOWDESKTOP --key plugin "org.kde.plasma.showdesktop"
+# Tell plasmashell to load the layout template on next start
+kwriteconfig5 --file kdeglobals --group KDE --key SingleClick false 2>/dev/null || true
+# Mark the layout template for use
+kwriteconfig5 --file plasmashellrc \
+    --group PlasmaViews --group "Panel 0" \
+    --key layoutTemplate "raptor-hud" 2>/dev/null || true
 
 # ── 7. GTK settings ───────────────────────────────────────────────────────────
 mkdir -p "$HOME/.config/gtk-3.0"
@@ -1022,18 +1107,19 @@ plasma-changeicons "$ICON_THEME" 2>/dev/null || true
 dbus-send --session --dest=org.kde.KIconLoader --type=signal \
     /KIconLoader org.kde.KIconLoader.iconChanged int32:0 2>/dev/null || true
 
-# ── 9. Restore nitrogen wallpaper if one has been set ────────────────────────
+# ── 9. Restore wallpaper if one has been saved ────────────────────────────────
 WP_FILE="$HOME/.config/raptor-wallpaper"
 if [ -f "$WP_FILE" ]; then
     WP=$(cat "$WP_FILE")
-    [ -f "$WP" ] && nitrogen --set-scaled "$WP" 2>/dev/null || true
+    [ -f "$WP" ] && raptor-set-wallpaper "$WP" 2>/dev/null || true
 fi
 
-# ── 10. Restart Plasma ───────────────────────────────────────────────────────
+# ── 10. Restart Plasma (loads layout.js on fresh start) ──────────────────────
 qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
 kquitapp6 plasmashell 2>/dev/null || kquitapp5 plasmashell 2>/dev/null || true
 sleep 2
 DISPLAY=:0 plasmashell --replace &>/dev/null &
+disown
 
 echo "RAPTOR_HUD_APPLIED"
 EOF
