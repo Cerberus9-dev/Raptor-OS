@@ -8,6 +8,7 @@ set -e
 #     (was: --group "Containments][$ID" → now: --group Containments --group $ID)
 #   • Battery icon pinned next to WiFi in system tray
 #   • Nitrogen installed for static wallpaper; raptor-set-wallpaper command added
+#   • mkdir -p added before metadata.json heredoc to ensure parent dir exists
 # =============================================================================
 
 # ── Palette reference ─────────────────────────────────────────────────────────
@@ -827,6 +828,9 @@ cp /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg \
    /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets/panel-background.svg
 
 # ── Radar arc plasmoid ────────────────────────────────────────────────────────
+# FIX: mkdir -p must come BEFORE the metadata.json heredoc redirect
+mkdir -p /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui
+
 cat << 'EOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/metadata.json
 {
     "KPackageStructure": "Plasma/Applet",
@@ -842,7 +846,6 @@ cat << 'EOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/metadata.json
 }
 EOF
 
-mkdir -p /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui
 cat << 'QMLEOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui/main.qml
 import QtQuick 2.15
 import QtQuick.Controls 2.15
