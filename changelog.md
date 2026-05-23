@@ -16,6 +16,14 @@
   line, fade trail, concentric range rings, crosshair grid, and monospace clock overlay;
   configurable arc colour, sweep colour, sweep speed, opacity, and ring count via
   Plasma widget settings
+- **Custom Radar HUD taskbar** — fully custom KDE Plasma panel replacing the default taskbar
+  with an F-22 cockpit-inspired radar theme; features phosphor-green sweep line with
+  persistence trail, randomised contact blips that light up as the sweep passes and decay
+  between rotations, 8-point crosshair grid with diagonal lines, bearing tick marks around
+  the rim, and a HUD status readout (clock, range label, IFF/MODE-S status); configurable
+  arc colour, sweep colour, speed, opacity, and grid ring count via widget settings;
+  panel corner radar arc decorations (`org.raptoros.radararc`) on both ends of the taskbar
+  with live sweep, blip persistence, and HDG/ALT readouts
 
 ### Changed
 - `raptor-performance.sh` and `raptor-ram-optimizer.sh` consolidated into unified `raptor-cortex.sh`
