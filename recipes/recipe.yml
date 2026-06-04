@@ -118,7 +118,7 @@ modules:
     notify: true
     system:
       install:
-        - com.discordapp.Discord
+        - com.vesktop.Vesktop
         - com.heroicgameslauncher.hgl
         - net.davidotek.pupgui2
         - com.usebottles.bottles
