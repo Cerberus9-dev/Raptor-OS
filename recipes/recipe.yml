@@ -16,6 +16,8 @@ modules:
         destination: /usr/lib/systemd/system/raptor-cpugovernor.service
       - source: ../files/system_files/raptor-powerprofile.service
         destination: /usr/lib/systemd/system/raptor-powerprofile.service
+      - source: ../files/system_files/raptor-app-choice.sh
+        destination: /usr/bin/raptor-app-choice.sh
       - source: ../files/system_files/raptor-browser-choice.sh
         destination: /usr/bin/raptor-browser-choice.sh
       - source: ../files/system_files/zram-generator.conf
