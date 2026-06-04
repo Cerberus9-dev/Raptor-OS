@@ -5,7 +5,7 @@ ConditionEnvironment=DISPLAY
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/raptor-browser-choice.sh
+ExecStart=/usr/bin/raptor-app-choice.sh
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
