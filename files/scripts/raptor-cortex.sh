@@ -420,7 +420,7 @@ EOF
 # ── Python GUI ────────────────────────────────────────────────────────────────
 cat << 'PYEOF' > /usr/bin/raptor-cortex
 #!/usr/bin/env python3
-"""Raptor Cortex v4.1 — Unified memory & performance management for Raptor OS"""
+"""Raptor Cortex v4.2 — Unified memory & performance management for Raptor OS"""
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -432,8 +432,9 @@ import threading
 import os
 import sys
 
-CORTEX_CONFIG = "/etc/raptor/cortex-suspend.conf"
-HELPER = "/usr/lib/raptor/cortex-helper"
+CORTEX_CONFIG  = "/etc/raptor/cortex-suspend.conf"
+HELPER         = "/usr/lib/raptor/cortex-helper"
+MODE_STATE_FILE = os.path.expanduser("~/.config/raptor-cortex-mode")
 
 ALL_SERVICES = [
     ("Baloo file indexer",     "baloo_file"),
@@ -471,6 +472,29 @@ PERFORMANCE_MODES = {
         "#2ec27e",
     ),
 }
+
+
+def detect_system_mode() -> str:
+    """Read the persisted Cortex mode from ~/.config/raptor-cortex-mode.
+    Falls back to 'balanced' if not set."""
+    try:
+        with open(MODE_STATE_FILE) as f:
+            mode = f.read().strip()
+            if mode in PERFORMANCE_MODES:
+                return mode
+    except Exception:
+        pass
+    return "balanced"
+
+
+def persist_mode(mode: str) -> None:
+    """Write the current mode to ~/.config/raptor-cortex-mode."""
+    try:
+        os.makedirs(os.path.dirname(MODE_STATE_FILE), exist_ok=True)
+        with open(MODE_STATE_FILE, "w") as f:
+            f.write(mode + "\n")
+    except Exception as e:
+        print(f"[cortex] Could not persist mode: {e}", file=sys.stderr)
 
 
 def read_meminfo():
@@ -575,8 +599,10 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self._running = False
         self._suspended_now = []
         self._cortex_patterns = load_cortex_config()
-        self._current_mode = "balanced"
+        # Read the persisted mode so the UI always reflects reality
+        self._current_mode = detect_system_mode()
         self._mode_btns = {}
+        self._toast_overlay = None
         self._build_ui()
         GLib.timeout_add_seconds(2, self._refresh_stats)
         self._refresh_stats()
@@ -586,10 +612,15 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self.set_content(root)
         root.append(Adw.HeaderBar())
 
+        # Toast overlay wraps the scrollable content
+        self._toast_overlay = Adw.ToastOverlay()
+        self._toast_overlay.set_vexpand(True)
+        root.append(self._toast_overlay)
+
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
-        root.append(scroll)
+        self._toast_overlay.set_child(scroll)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         content.set_margin_top(20)
@@ -600,7 +631,6 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
 
         self.mode_banner = Adw.Banner()
         self.mode_banner.set_revealed(True)
-        self.mode_banner.set_use_markup(True)
         self._update_mode_banner()
         content.append(self.mode_banner)
 
@@ -746,22 +776,15 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
 
     def _refresh_mode_buttons(self):
         for key, (row, icon, check) in self._mode_btns.items():
-            if key == self._current_mode:
-                row.set_title(f"<b>{PERFORMANCE_MODES[key][0]}</b>")
-                row.set_use_markup(True)
-                icon.set_opacity(1.0)
-                icon.set_css_classes(["accent"])
-                check.set_visible(True)
-                row.set_opacity(1.0)
-                row.set_sensitive(False)
-            else:
-                row.set_title(PERFORMANCE_MODES[key][0])
-                row.set_use_markup(False)
-                icon.set_opacity(0.4)
-                icon.set_css_classes([])
-                check.set_visible(False)
-                row.set_opacity(0.55)
-                row.set_sensitive(True)
+            is_active = (key == self._current_mode)
+            # Active row: show checkmark, full opacity, not clickable (already selected)
+            check.set_visible(is_active)
+            icon.set_opacity(1.0 if is_active else 0.4)
+            icon.set_css_classes(["accent"] if is_active else [])
+            row.set_opacity(1.0 if is_active else 0.65)
+            # Sensitive=False on the active row prevents re-selecting same mode,
+            # but ALL inactive rows remain fully clickable.
+            row.set_sensitive(not is_active)
 
     def _switch_row(self, title, subtitle, default):
         row = Adw.SwitchRow()
@@ -778,21 +801,49 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         threading.Thread(target=save_cortex_config, args=(self._cortex_patterns,), daemon=True).start()
 
     def _on_mode_switch(self, row, mode_key):
+        # Update UI immediately so it feels responsive
         self._current_mode = mode_key
         self._refresh_mode_buttons()
         self._update_mode_banner()
+        # Persist the selection so next app launch reads the right mode
+        persist_mode(mode_key)
+        # Apply the kernel tuning in a background thread
         threading.Thread(target=self._apply_mode, args=(mode_key,), daemon=True).start()
 
     def _apply_mode(self, mode_key):
-        subprocess.run(["sudo", HELPER, "set-mode", mode_key], capture_output=True)
+        ok = True
+
+        result = subprocess.run(["sudo", HELPER, "set-mode", mode_key],
+                                capture_output=True, text=True)
+        if result.returncode != 0:
+            ok = False
+
         if mode_key == "performance":
-            subprocess.run(["sudo", HELPER, "1", "1", "1", "1", "0", "0", "0", "1"], capture_output=True)
-            subprocess.run(["sudo", HELPER, "trim-background"], capture_output=True)
+            subprocess.run(["sudo", HELPER, "1", "1", "1", "1", "0", "0", "0", "1"],
+                           capture_output=True)
+            subprocess.run(["sudo", HELPER, "trim-background"],
+                           capture_output=True)
         elif mode_key == "balanced":
-            subprocess.run(["sudo", HELPER, "1", "1", "0", "1", "0", "0", "0", "0"], capture_output=True)
+            subprocess.run(["sudo", HELPER, "1", "1", "0", "1", "0", "0", "0", "0"],
+                           capture_output=True)
         elif mode_key == "power_saving":
-            subprocess.run(["sudo", HELPER, "1", "0", "0", "0", "0", "0", "0", "0"], capture_output=True)
-        GLib.idle_add(lambda: (self._refresh_stats(), False))
+            subprocess.run(["sudo", HELPER, "1", "0", "0", "0", "0", "0", "0", "0"],
+                           capture_output=True)
+
+        label = PERFORMANCE_MODES[mode_key][0]
+        if ok:
+            msg = f"Mode set to {label}"
+        else:
+            msg = f"{label} applied (powerprofilesctl unavailable, kernel tuning still active)"
+
+        GLib.idle_add(self._on_mode_applied, msg)
+
+    def _on_mode_applied(self, message):
+        toast = Adw.Toast.new(message)
+        toast.set_timeout(3)
+        self._toast_overlay.add_toast(toast)
+        self._refresh_stats()
+        return False
 
     def _refresh_stats(self):
         used, total = mem_used_mb()
