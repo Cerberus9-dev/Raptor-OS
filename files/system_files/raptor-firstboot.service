@@ -1,14 +1,25 @@
 [Unit]
-Description=Raptor OS First-Boot Setup Dialog
-After=graphical-session.target
-ConditionEnvironment=DISPLAY
+Description=Raptor OS First-Boot Setup Dialogs
+# Wait for Plasma shell to be running — GUI dialogs need it
+After=plasma-plasmashell.service
+# XDG_RUNTIME_DIR is set in every Wayland AND X11 user session
+# (it's the /run/user/<uid> directory). This replaces the broken
+# ConditionEnvironment=DISPLAY which was never set on Wayland.
+ConditionEnvironment=XDG_RUNTIME_DIR
+# Run until BOTH stamps exist; skip if already complete
+ConditionPathExists=|!%h/.local/share/raptor/browser-choice-done
+ConditionPathExists=|!%h/.local/share/raptor/app-choice-done
 
 [Service]
 Type=oneshot
+# Each script checks its own stamp and exits 0 immediately if already done,
+# so it's always safe to call both in sequence.
+ExecStart=/usr/bin/raptor-browser-choice.sh
 ExecStart=/usr/bin/raptor-app-choice.sh
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
+# zenity returns 1 on "Skip" — treat as success so the chain continues
 SuccessExitStatus=0 1
 
 [Install]
