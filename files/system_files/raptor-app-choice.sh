@@ -1,121 +1,149 @@
 #!/bin/bash
 # raptor-app-choice.sh
-# First-boot app selection dialog allowing users to choose applications to install.
-# Replaces the old browser-only dialog with an expanded package selection system.
+# First-boot optional-app selection dialog.
+# v2.0: fixed declare -A, user stamp path, Wayland-safe (no DISPLAY requirement),
+#       additive-only (does NOT re-offer apps already installed by default).
 #
-# Supports: Vesktop (communication), VSCode, Blender, etc.
+# Runs as a user service (raptor-firstboot.service) after plasma-plasmashell.
+# Stamp at ~/.local/share/raptor/app-choice-done prevents re-running.
 
 set -euo pipefail
 
-STAMP_FILE="/var/lib/raptor/app-choice-done"
+STAMP_FILE="${HOME}/.local/share/raptor/app-choice-done"
 LOG_TAG="raptor-app-choice"
-CONFIG_FILE="/etc/raptor/app-selections.conf"
 
-log()  { logger -t "$LOG_TAG" -- "$*"; }
-err()  { logger -t "$LOG_TAG" -p user.err -- "$*"; }
+log() { logger -t "${LOG_TAG}" -- "$*"; }
+err() { logger -t "${LOG_TAG}" -p user.err -- "$*"; }
 
-# ── Guard ────────────────────────────────────────────────────────────────────
-if [[ -f "$STAMP_FILE" ]]; then
+# ── Guard ─────────────────────────────────────────────────────────────────────
+if [[ -f "${STAMP_FILE}" ]]; then
     log "App selection already done — skipping."
     exit 0
 fi
 
-# ── Prerequisite check ───────────────────────────────────────────────────────
+# ── Prerequisite check ────────────────────────────────────────────────────────
 if ! command -v zenity &>/dev/null; then
-    err "zenity not found; cannot show app dialog."
-    exit 1
+    err "zenity not found — cannot show app dialog. Writing stamp to avoid loop."
+    mkdir -p "$(dirname "${STAMP_FILE}")" && touch "${STAMP_FILE}"
+    exit 0
 fi
 
-# ── App selection dialog ──────────────────────────────────────────────────────
-# Format: TRUE/FALSE for pre-selected, App Name, Description
-APPS=$(zenity \
-    --list \
-    --title="Welcome to Raptor OS — Application Setup" \
-    --text="<b>Choose which applications to install on first boot:</b>\n\nSelected apps will be installed from Flathub." \
-    --checklist \
-    --column="Install" \
-    --column="Application" \
-    --column="Description" \
-    TRUE  "Vesktop"         "Discord client (modern, lightweight)" \
-    FALSE "VSCodium"        "Open-source code editor" \
-    FALSE "Blender"         "3D modeling and animation" \
-    FALSE "Audacity"        "Audio editing" \
-    FALSE "Kdenlive"        "Video editing" \
-    FALSE "Krita"           "Digital painting" \
-    FALSE "Gimp"            "Image editor" \
-    FALSE "LibreOffice"     "Office suite" \
-    FALSE "OBS Studio"      "Streaming and recording" \
-    --width=500 --height=400 \
-    --ok-label="Install Selected" \
-    --cancel-label="Skip" \
-    2>/dev/null) || true
+if ! command -v flatpak &>/dev/null; then
+    err "flatpak not found — cannot install optional apps. Writing stamp to avoid loop."
+    mkdir -p "$(dirname "${STAMP_FILE}")" && touch "${STAMP_FILE}"
+    exit 0
+fi
 
-case "${APPS:-}" in
-    "")
-        # User clicked "Skip" or closed dialog
-        log "App selection skipped by user."
-        exit 0
-        ;;
-    *)
-        log "User selected apps: $APPS"
-        
-        # Parse the pipe-delimited list and install selected apps
-        IFS='|' read -ra SELECTED_APPS <<< "$APPS"
-        
-        FLATPAK_INSTALLS=(
-            ["Vesktop"]="com.vesktop.Vesktop"
-            ["VSCodium"]="com.vscodium.codium"
-            ["Blender"]="org.blender.Blender"
-            ["Audacity"]="org.audacityteam.Audacity"
-            ["Kdenlive"]="org.kde.kdenlive"
-            ["Krita"]="org.kde.krita"
-            ["Gimp"]="org.gimp.GIMP"
-            ["LibreOffice"]="org.libreoffice.LibreOffice"
-            ["OBS Studio"]="com.obsproject.Studio"
-        )
-        
-        FAILED_INSTALLS=()
-        
-        for app in "${SELECTED_APPS[@]}"; do
-            app="${app%\"}"  # Remove trailing quote if present
-            app="${app#\"}"  # Remove leading quote if present
-            
-            if [[ -z "$app" ]]; then
-                continue
-            fi
-            
-            FLATPAK_ID="${FLATPAK_INSTALLS[$app]:-}"
-            if [[ -z "$FLATPAK_ID" ]]; then
-                log "Unknown app: $app"
-                continue
-            fi
-            
-            log "Installing flatpak: $FLATPAK_ID"
-            if ! flatpak install -y --noninteractive "flathub" "$FLATPAK_ID" 2>&1 | tee -a /tmp/raptor-install.log; then
-                err "Failed to install $app ($FLATPAK_ID)"
-                FAILED_INSTALLS+=("$app")
-            else
-                log "Successfully installed $app"
-            fi
-        done
-        
-        # Show result dialog
-        if [[ ${#FAILED_INSTALLS[@]} -eq 0 ]]; then
-            zenity --info \
-                --title="Installation Complete" \
-                --text="All selected applications have been installed successfully!" \
-                --width=300 2>/dev/null || true
-        else
-            FAILED_LIST=$(printf '%s\n' "${FAILED_INSTALLS[@]}")
-            zenity --warning \
-                --title="Some Installations Failed" \
-                --text="The following applications could not be installed:\n\n$FAILED_LIST\n\nCheck your internet connection and try again." \
-                --width=350 2>/dev/null || true
-        fi
-        ;;
-esac
+# ── App catalogue ─────────────────────────────────────────────────────────────
+# Format: "PRESELECT|DISPLAY_NAME|FLATPAK_ID|DESCRIPTION"
+# Only list apps NOT already installed by the default Flatpak list in recipe.yml.
+# Mandatory defaults (Vesktop, Heroic, ProtonUp, Bottles, Flatseal, MissionCenter)
+# are never shown here — they are always installed.
+APP_CATALOGUE=(
+    # ── Communication ──────────────────────────────────────────────────────
+    "FALSE|Telegram|org.telegram.desktop|Fast, secure messaging"
+    "FALSE|Signal|org.signal.Signal|Private, encrypted messaging"
+    "FALSE|Slack|com.slack.Slack|Team communication"
+    "FALSE|Zoom|us.zoom.Zoom|Video conferencing"
+    # ── Productivity ───────────────────────────────────────────────────────
+    "TRUE|VSCodium|com.vscodium.codium|Open-source VS Code (no telemetry)"
+    "FALSE|ONLYOFFICE|org.onlyoffice.desktopeditors|Office suite — Word/Excel/PowerPoint compat"
+    "FALSE|Bitwarden|com.bitwarden.desktop|Open-source password manager"
+    "FALSE|Joplin|net.cozic.joplin_desktop|Note-taking app with markdown support"
+    "FALSE|MarkText|com.github.marktext.marktext|Clean markdown editor"
+    "FALSE|Calibre|com.calibre_ebook.calibre|Ebook library manager"
+    # ── Creative ───────────────────────────────────────────────────────────
+    "FALSE|Blender|org.blender.Blender|3D modelling, animation, rendering"
+    "FALSE|Shotcut|org.shotcut.Shotcut|Video editor (non-linear)"
+    "FALSE|Boatswain|com.feaneron.Boatswain|Elgato Stream Deck controller"
+    # ── Development ────────────────────────────────────────────────────────
+    "FALSE|Godot Engine|org.godotengine.Godot|Free, open-source game engine"
+    "FALSE|GitHub Desktop|io.github.shiftey.Desktop|Git GUI for GitHub repos"
+    "FALSE|Pods|com.github.marhkb.Pods|Podman/Docker container GUI"
+    # ── Gaming & Media ─────────────────────────────────────────────────────
+    "FALSE|Lutris|net.lutris.Lutris|Game launcher for Linux, Wine, emulators"
+    "FALSE|Spotify|com.spotify.Client|Music and podcast streaming"
+    "FALSE|Plex|tv.plex.PlexDesktop|Media server desktop client"
+)
 
-# ── Write stamp ──────────────────────────────────────────────────────────────
-mkdir -p "$(dirname "$STAMP_FILE")"
-touch "$STAMP_FILE"
+# ── Build zenity argument list ────────────────────────────────────────────────
+ZENITY_ARGS=()
+for entry in "${APP_CATALOGUE[@]}"; do
+    IFS='|' read -r preselect name id desc <<< "${entry}"
+    ZENITY_ARGS+=("${preselect}" "${name}" "${id}" "${desc}")
+done
+
+# ── Show dialog ───────────────────────────────────────────────────────────────
+SELECTED=$(
+    zenity \
+        --list \
+        --title="Raptor OS — Optional App Setup" \
+        --text="<b>Select optional applications to install from Flathub:</b>\n\nPre-ticked apps are recommended for most users.\nYou can install more later from Discover or the terminal." \
+        --checklist \
+        --column="Install" \
+        --column="Application" \
+        --column="Flatpak ID" \
+        --column="Description" \
+        --print-column="3" \
+        --separator="|" \
+        "${ZENITY_ARGS[@]}" \
+        --width=700 --height=600 \
+        --ok-label="Install Selected" \
+        --cancel-label="Skip for Now" \
+        2>/dev/null
+) || true
+# zenity exits 1 on "Skip" — that's caught by `|| true`
+
+# ── Always write stamp so we never loop ───────────────────────────────────────
+mkdir -p "$(dirname "${STAMP_FILE}")"
+touch "${STAMP_FILE}"
+
+if [[ -z "${SELECTED:-}" ]]; then
+    log "App selection skipped or nothing selected."
+    exit 0
+fi
+
+log "User selected Flatpak IDs: ${SELECTED}"
+
+# ── Install selected Flatpaks ─────────────────────────────────────────────────
+# declare -A is required for associative arrays — this was missing before.
+declare -A ID_TO_NAME
+for entry in "${APP_CATALOGUE[@]}"; do
+    IFS='|' read -r _pre name id _desc <<< "${entry}"
+    ID_TO_NAME["${id}"]="${name}"
+done
+
+FAILED=()
+IFS='|' read -ra TO_INSTALL <<< "${SELECTED}"
+
+for flatpak_id in "${TO_INSTALL[@]}"; do
+    flatpak_id="${flatpak_id//\"/}"   # strip stray quotes zenity may add
+    [[ -z "${flatpak_id}" ]] && continue
+
+    app_name="${ID_TO_NAME[${flatpak_id}]:-${flatpak_id}}"
+    log "Installing ${app_name} (${flatpak_id})…"
+
+    if flatpak install -y --noninteractive flathub "${flatpak_id}" \
+            >> /tmp/raptor-app-install.log 2>&1; then
+        log "OK: ${app_name}"
+    else
+        err "FAILED: ${app_name} (${flatpak_id})"
+        FAILED+=("${app_name}")
+    fi
+done
+
+# ── Result dialog ─────────────────────────────────────────────────────────────
+if [[ ${#FAILED[@]} -eq 0 ]]; then
+    zenity --info \
+        --title="Raptor OS — Setup Complete" \
+        --text="All selected applications were installed successfully." \
+        --width=340 2>/dev/null || true
+else
+    FAIL_LIST=$(printf '  • %s\n' "${FAILED[@]}")
+    zenity --warning \
+        --title="Some Apps Failed to Install" \
+        --text="The following could not be installed:\n\n${FAIL_LIST}\n\nCheck your connection and install them later from Discover." \
+        --width=380 2>/dev/null || true
+fi
+
 log "App selection complete."
