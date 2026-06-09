@@ -8,8 +8,10 @@ modules:
   # ── Static files ─────────────────────────────────────────────────────────────
   - type: files
     files:
+      # User service — must live in the user unit dir so it runs inside the
+      # login session (needed for GUI dialogs and correct env on Wayland).
       - source: ../files/system_files/raptor-firstboot.service
-        destination: /usr/lib/systemd/system/raptor-firstboot.service
+        destination: /usr/lib/systemd/user/raptor-firstboot.service
       - source: ../files/system_files/raptor-ensure-services.service
         destination: /usr/lib/systemd/system/raptor-ensure-services.service
       - source: ../files/system_files/raptor-cpugovernor.service
@@ -116,25 +118,21 @@ modules:
       - tuned-ppd
 
   # ── Flatpaks ──────────────────────────────────────────────────────────────────
+  # Only mandatory/core apps here. Optional apps (VSCodium, Blender, Bitwarden,
+  # Joplin, etc.) are offered by raptor-firstboot.service on first login so the
+  # user can choose what they actually want.
   - type: default-flatpaks@v1
     notify: true
     system:
       install:
-        - com.vesktop.Vesktop
-        - com.heroicgameslauncher.hgl
-        - net.davidotek.pupgui2
-        - com.usebottles.bottles
-        - com.vscodium.codium
-        - com.github.marhkb.Pods
-        - org.blender.Blender
-        - org.shotcut.Shotcut
-        - com.calibre_ebook.calibre
-        - net.cozic.joplin_desktop
-        - com.github.marktext.marktext
-        - io.missioncenter.MissionCenter
-        - com.github.tchx84.Flatseal
-        - com.bitwarden.desktop
-        - com.feaneron.Boatswain
+        # Core gaming stack — always present
+        - com.vesktop.Vesktop            # Discord replacement (mandatory)
+        - com.heroicgameslauncher.hgl    # Epic/GOG/Amazon game launcher
+        - net.davidotek.pupgui2          # ProtonUp-Qt
+        - com.usebottles.bottles         # Wine/DXVK app manager
+        # System utilities — always present
+        - io.missioncenter.MissionCenter # GPU/CPU/RAM monitor
+        - com.github.tchx84.Flatseal    # Flatpak permission manager
 
   # ── Custom build scripts ──────────────────────────────────────────────────────
   # raptor-hud.sh also copies the plasmoid from /tmp/files
@@ -150,7 +148,12 @@ modules:
   - type: systemd
     system:
       enabled:
-        - raptor-firstboot.service
         - raptor-ensure-services.service
         - raptor-gpu-profile.service
         - raptor-cpugovernor.service
+    user:
+      enabled:
+        # User service: runs inside the login session after Plasma starts.
+        # Needs to be a USER unit so it has access to WAYLAND_DISPLAY / DISPLAY
+        # and can spawn GUI dialogs via zenity.
+        - raptor-firstboot.service
