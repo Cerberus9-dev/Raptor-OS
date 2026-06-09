@@ -1039,10 +1039,21 @@ QMLEOF
 cat << 'EOF' > /usr/lib/raptor/hud/apply-plasma-panel.sh
 #!/bin/bash
 # Raptor HUD — Plasma panel + theme config (run as USER on first login)
-# v4.2: panel via layout.js; wallpaper via plasma-apply-wallpaperimage; no nitrogen
+# v4.3: kwriteconfig6 for Plasma 6; Wayland-safe restart; no plasma-changeicons
+
+set -euo pipefail
 
 CFG="$HOME/.config"
 LOCAL_SHARE="$HOME/.local/share"
+
+# ── kwriteconfig shim — always use Plasma 6 binary on Bazzite ─────────────────
+kwc() {
+    if command -v kwriteconfig6 &>/dev/null; then
+        kwriteconfig6 "$@" 2>/dev/null || true
+    else
+        kwriteconfig5 "$@" 2>/dev/null || true
+    fi
+}
 
 # ── 0. Clean slate ────────────────────────────────────────────────────────────
 rm -f "$CFG/plasma-org.kde.plasma.desktop-appletsrc"
@@ -1051,26 +1062,32 @@ rm -f "$LOCAL_SHARE/plasma/layout-templates/"*.layout.js 2>/dev/null || true
 mkdir -p "$LOCAL_SHARE/plasma/layout-templates"
 
 # ── 1. Color scheme ───────────────────────────────────────────────────────────
-plasma-apply-colorscheme /usr/share/color-schemes/RaptorOS.colors 2>/dev/null || true
-kwriteconfig5 --file kdeglobals --group General --key ColorScheme RaptorOS
-kwriteconfig5 --file kdeglobals --group General --key Name        RaptorOS
+# plasma-apply-colorscheme accepts either a scheme name or a file path
+plasma-apply-colorscheme RaptorOS 2>/dev/null \
+    || plasma-apply-colorscheme /usr/share/color-schemes/RaptorOS.colors 2>/dev/null \
+    || true
+kwc --file kdeglobals --group General --key ColorScheme RaptorOS
+kwc --file kdeglobals --group General --key Name        RaptorOS
 
 # ── 2. Window decoration ──────────────────────────────────────────────────────
-kwriteconfig5 --file kwinrc --group "org.kde.kdecoration2" --key library org.kde.kwin.aurorae
-kwriteconfig5 --file kwinrc --group "org.kde.kdecoration2" --key theme "__aurorae__svg__RaptorOS"
+kwc --file kwinrc --group "org.kde.kdecoration2" --key library org.kde.kwin.aurorae
+kwc --file kwinrc --group "org.kde.kdecoration2" --key theme "__aurorae__svg__RaptorOS"
 
 # ── 3. Icons ──────────────────────────────────────────────────────────────────
 ICON_THEME="breeze-dark"
-kwriteconfig5 --file kdeglobals --group Icons --key Theme "$ICON_THEME"
-kwriteconfig5 --file kdeglobals --group KDE   --key LookAndFeelPackage org.kde.breezedark.desktop
+kwc --file kdeglobals --group Icons --key Theme "$ICON_THEME"
+kwc --file kdeglobals --group KDE   --key LookAndFeelPackage org.kde.breezedark.desktop
+
+# plasma-apply-icon-theme replaces plasma-changeicons in Plasma 6
+plasma-apply-icon-theme "$ICON_THEME" 2>/dev/null || true
 
 # ── 4. Kvantum ────────────────────────────────────────────────────────────────
 mkdir -p "$HOME/.config/Kvantum"
 printf '[General]\ntheme=RaptorOS\n' > "$HOME/.config/Kvantum/kvantum.kvconfig"
-kwriteconfig5 --file kdeglobals --group KDE --key widgetStyle kvantum
+kwc --file kdeglobals --group KDE --key widgetStyle kvantum
 
 # ── 5. Plasma theme ───────────────────────────────────────────────────────────
-kwriteconfig5 --file plasmarc --group Theme --key name RaptorOS
+kwc --file plasmarc --group Theme --key name RaptorOS
 
 # ── 6. Panel layout via layout.js ─────────────────────────────────────────────
 # Plasma loads ~/.local/share/plasma/layout-templates/raptor-hud.layout.js
@@ -1138,10 +1155,9 @@ clock.writeConfig("customFontSize", 11);
 p.addWidget("org.kde.plasma.showdesktop");
 LAYOUTEOF
 
-# Tell plasmashell to load the layout template on next start
-kwriteconfig5 --file kdeglobals --group KDE --key SingleClick false 2>/dev/null || true
-# Mark the layout template for use
-kwriteconfig5 --file plasmashellrc \
+# Mark the layout template for use on Plasma's next start
+kwc --file kdeglobals --group KDE --key SingleClick false 2>/dev/null || true
+kwc --file plasmashellrc \
     --group PlasmaViews --group "Panel 0" \
     --key layoutTemplate "raptor-hud" 2>/dev/null || true
 
@@ -1160,7 +1176,7 @@ GTKEOF
 XDG_RUNTIME_DIR="/run/user/$(id -u)" kbuildsycoca6 --noincremental 2>/dev/null || \
 XDG_RUNTIME_DIR="/run/user/$(id -u)" kbuildsycoca5 --noincremental 2>/dev/null || true
 
-plasma-changeicons "$ICON_THEME" 2>/dev/null || true
+# Notify KIconLoader of theme change (session bus, no need for plasma-changeicons)
 dbus-send --session --dest=org.kde.KIconLoader --type=signal \
     /KIconLoader org.kde.KIconLoader.iconChanged int32:0 2>/dev/null || true
 
@@ -1171,11 +1187,20 @@ if [ -f "$WP_FILE" ]; then
     [ -f "$WP" ] && raptor-set-wallpaper "$WP" 2>/dev/null || true
 fi
 
-# ── 10. Restart Plasma (loads layout.js on fresh start) ──────────────────────
-qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
+# ── 10. Restart Plasma — works on both Wayland and X11 ───────────────────────
+# Tell KWin to reload its config first (picks up decoration changes without full restart)
+if command -v qdbus6 &>/dev/null; then
+    qdbus6 org.kde.KWin /KWin reconfigure 2>/dev/null || true
+else
+    qdbus  org.kde.KWin /KWin reconfigure 2>/dev/null || true
+fi
+
+# Quit the running plasmashell, then relaunch without pinning to X11 display.
+# On Wayland the WAYLAND_DISPLAY / XDG_RUNTIME_DIR are inherited from the
+# systemd user service environment — do NOT set DISPLAY=:0 here.
 kquitapp6 plasmashell 2>/dev/null || kquitapp5 plasmashell 2>/dev/null || true
 sleep 2
-DISPLAY=:0 plasmashell --replace &>/dev/null &
+plasmashell --replace &>/dev/null &
 disown
 
 echo "RAPTOR_HUD_APPLIED"
