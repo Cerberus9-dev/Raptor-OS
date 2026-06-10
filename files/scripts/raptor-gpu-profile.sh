@@ -120,7 +120,6 @@ AMDGPU_HIGH_POWER=1
 PROTON_ENABLE_NVAPI=1
 DXVK_ASYNC=1
 DXVK_FRAME_RATE=0
-RADV_DEBUG=nocompute
 VKD3D_CONFIG=dxr11,dxr
 VKD3D_FEATURE_LEVEL=12_2
 $COMMON_VARS
@@ -274,9 +273,11 @@ if [ -f "$ENVFILE" ]; then
             RUNTIME_DIR="/run/user/$uid"
             if [ -d "$RUNTIME_DIR" ]; then
                 DBUS="unix:path=$RUNTIME_DIR/bus"
+                # set-environment accepts KEY=VALUE pairs directly (import-environment
+                # only accepts variable names already in the current env — wrong here).
                 sudo -u "#$uid" \
                      DBUS_SESSION_BUS_ADDRESS="$DBUS" \
-                     systemctl --user import-environment "${LIVE_VARS[@]}" \
+                     systemctl --user set-environment "${LIVE_VARS[@]}" \
                      2>/dev/null || true
                 USER_ENVDIR="$(getent passwd "$uid" | cut -d: -f6)/.config/environment.d"
                 mkdir -p "$USER_ENVDIR" 2>/dev/null || true
