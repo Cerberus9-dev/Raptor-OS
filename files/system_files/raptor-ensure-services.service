@@ -1,12 +1,25 @@
 [Unit]
-Description=Raptor OS Auto-Enable Services
-After=local-fs.target
-Before=multi-user.target
+Description=Raptor OS Service Health Check
+# Validates that essential Raptor services are active after boot and logs
+# warnings for any that failed to start. Does NOT call systemctl enable
+# (that is handled at build time via recipe.yml; runtime enabling on an
+# immutable OSTree image is a no-op or fails silently on the read-only layer).
+After=multi-user.target
+After=raptor-gpu-profile.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'systemctl enable raptor-gpu-profile.service || logger -t raptor-ensure-services -p user.err "Failed to enable raptor-gpu-profile.service"'
 RemainAfterExit=yes
+ExecStart=/bin/bash -c '\
+  for svc in raptor-gpu-profile.service; do \
+    if systemctl is-active --quiet "$svc"; then \
+      logger -t raptor-ensure "OK: $svc is active"; \
+    else \
+      logger -t raptor-ensure -p daemon.warning \
+        "WARNING: $svc is not active — attempting start"; \
+      systemctl start --no-block "$svc" 2>/dev/null || true; \
+    fi; \
+  done'
 StandardOutput=journal
 StandardError=journal
 
