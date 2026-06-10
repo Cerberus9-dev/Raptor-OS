@@ -34,6 +34,81 @@ if ! command -v flatpak &>/dev/null; then
     exit 0
 fi
 
+# ── Per-user app configuration ─────────────────────────────────────────────────
+# Runs unconditionally — even if the user clicks Skip on the app selection
+# dialog below. Handles anything that must live in per-user directories and
+# therefore can't be set at image build time (Flatpak user data, ~/.mozilla).
+# Previously lived in raptor-appconfig.sh + raptor-appconfig.service; merged
+# here to eliminate redundant files and service units.
+
+# Vesktop: write Chromium flags.txt to cap V8 heap and force Wayland-native
+VESKTOP_CFG="${HOME}/.var/app/com.vesktop.Vesktop/config/vesktop"
+if flatpak info com.vesktop.Vesktop &>/dev/null 2>&1; then
+    mkdir -p "${VESKTOP_CFG}"
+    cat > "${VESKTOP_CFG}/flags.txt" << 'VESKTOPFLAGS'
+# Raptor OS: Vesktop Chromium flags
+# Caps memory and forces Wayland-native rendering (avoids ~30 MB XWayland overhead).
+
+--ozone-platform=wayland
+--enable-wayland-ime
+
+# V8 old-gen heap: 256 MB (default ~1.4 GB on systems with free RAM)
+--max-old-space-size=256
+--js-flags=--max-old-space-size=256
+
+# Max 2 renderer processes (~80-120 MB each)
+--renderer-process-limit=2
+
+# Share renderer processes across same-site origins
+--process-per-site
+
+# Reduce CPU/memory for occluded/background windows
+--disable-backgrounding-occluded-windows
+--disable-renderer-backgrounding
+
+# Signal allocator to apply more aggressive GC pressure
+--memory-model=low
+
+# VA-API hardware video decode (reduces CPU load in video calls/streams)
+--enable-features=VaapiVideoDecoder,VaapiVideoEncoder
+--disable-features=UseChromeOSDirectVideoDecoder,CrashpadWithBrowserLock
+VESKTOPFLAGS
+
+    # Belt-and-suspenders: also set via flatpak user override (env vars are
+    # picked up even if the flags.txt path ever changes between Vesktop versions)
+    flatpak override --user com.vesktop.Vesktop \
+        --env=OZONE_PLATFORM=wayland \
+        --env=ELECTRON_OZONE_PLATFORM_HINT=auto \
+        2>/dev/null || true
+    log "Vesktop: flags.txt and user Flatpak override applied."
+else
+    log "Vesktop not installed — skipping Vesktop config."
+fi
+
+# Firefox: copy skel user.js to any existing profiles that don't have one yet.
+# policies.json (system-wide, from raptor-gaming.sh) handles memory defaults;
+# user.js covers GPU compositing, rendering quality, and privacy prefs.
+FF_SKEL="/etc/skel/.mozilla/firefox/raptor-default/user.js"
+if [[ -f "${FF_SKEL}" ]]; then
+    for profdir in \
+        "${HOME}/.mozilla/firefox/"*.default        \
+        "${HOME}/.mozilla/firefox/"*.default-release \
+        "${HOME}/.mozilla/firefox/"*.default-esr;
+    do
+        [[ -d "${profdir}" ]] || continue
+        if [[ ! -f "${profdir}/user.js" ]]; then
+            cp "${FF_SKEL}" "${profdir}/user.js"
+            log "Firefox user.js deployed to: $(basename "${profdir}")"
+        fi
+    done
+fi
+
+# Flatpak: ensure the user-level Flathub remote exists so app installs below work.
+if command -v flatpak &>/dev/null; then
+    flatpak remote-add --user --if-not-exists flathub \
+        https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+fi
+
 # ── App catalogue ─────────────────────────────────────────────────────────────
 # Format: "PRESELECT|DISPLAY_NAME|FLATPAK_ID|DESCRIPTION"
 # Only list apps NOT already installed by the default Flatpak list in recipe.yml.
