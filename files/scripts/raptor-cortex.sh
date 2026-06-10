@@ -437,19 +437,28 @@ HELPER         = "/usr/lib/raptor/cortex-helper"
 MODE_STATE_FILE = os.path.expanduser("~/.config/raptor-cortex-mode")
 
 ALL_SERVICES = [
-    ("Baloo file indexer",     "baloo_file"),
-    ("Akonadi server",         "akonadiserver"),
-    ("KDE Connect daemon",     "kdeconnectd"),
-    ("Thumbnail generator",    "kio_thumbnail"),
-    ("Activity manager",       "kactivitymanagerd"),
-    ("Evolution data server",  "evolution-data"),
-    ("KDE wallet daemon",      "kwalletd"),
-    ("Plasma geolocation",     "plasma-geolocation"),
-    ("KDE sycoca builder",     "kbuildsycoca"),
-    ("Zeitgeist daemon",       "zeitgeist"),
-    ("GVFS metadata",          "gvfsd-metadata"),
-    ("Colour management",      "colord"),
-    ("PipeWire media session", "pipewire-media-session"),
+    # ── KDE / indexing ────────────────────────────────────────────────────────
+    ("Baloo file indexer",      "baloo_file"),
+    ("Akonadi server",          "akonadiserver"),
+    ("KDE Connect daemon",      "kdeconnectd"),
+    ("Thumbnail generator",     "kio_thumbnail"),
+    ("Activity manager",        "kactivitymanagerd"),
+    ("KDE wallet daemon",       "kwalletd"),
+    ("Plasma geolocation",      "plasma-geolocation"),
+    ("KDE sycoca builder",      "kbuildsycoca"),
+    # ── GNOME / cross-desktop ─────────────────────────────────────────────────
+    ("Evolution data server",   "evolution-data"),
+    ("Zeitgeist daemon",        "zeitgeist"),
+    ("GVFS metadata",           "gvfsd-metadata"),
+    ("Colour management",       "colord"),
+    # ── System daemons safe to pause while gaming ─────────────────────────────
+    ("Package manager daemon",  "packagekitd"),      # apt/dnf background checks
+    ("KDE crash handler",       "drkonqi"),           # crash reporter, unneeded in-game
+    ("Bluetooth OBEX",          "obexd"),             # BT file transfer daemon
+    ("Smart card daemon",       "pcscd"),             # rarely used on gaming desktops
+    ("Printer discovery",       "cups-browsed"),      # network printer scan
+    # ── Audio session (suspend last — restoring audio can be slow) ────────────
+    ("PipeWire media session",  "pipewire-media-session"),
 ]
 
 PERFORMANCE_MODES = {
