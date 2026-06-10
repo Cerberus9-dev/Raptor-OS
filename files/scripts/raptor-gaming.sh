@@ -83,52 +83,116 @@ done
 TEARDOWN
 chmod +x /usr/bin/raptor-zram-teardown.sh
 
-# ── Firefox optimization profile ───────────────────────────────────────────────
+# ── Firefox system-wide defaults (policies.json) ──────────────────────────────
+# policies.json is read before any user profile — the cleanest way to set
+# memory-management defaults without overwriting user settings permanently.
+mkdir -p /etc/firefox/policies
+cat << 'POLICIES' > /etc/firefox/policies/policies.json
+{
+  "policies": {
+    "Preferences": {
+      "browser.cache.memory.capacity": {
+        "Value": 65536,
+        "Status": "default"
+      },
+      "browser.sessionhistory.max_total_viewers": {
+        "Value": 2,
+        "Status": "default"
+      },
+      "dom.ipc.processCount": {
+        "Value": 4,
+        "Status": "default"
+      },
+      "dom.ipc.processCount.webIsolated": {
+        "Value": 2,
+        "Status": "default"
+      },
+      "browser.tabs.unloadOnLowMemory": {
+        "Value": true,
+        "Status": "default"
+      },
+      "media.memory_cache_max_size": {
+        "Value": 32768,
+        "Status": "default"
+      },
+      "browser.sessionstore.interval": {
+        "Value": 45000,
+        "Status": "default"
+      },
+      "browser.sessionstore.max_serialize_back": {
+        "Value": 5,
+        "Status": "default"
+      },
+      "browser.sessionstore.max_serialize_forward": {
+        "Value": 3,
+        "Status": "default"
+      },
+      "config.trim_on_minimize": {
+        "Value": true,
+        "Status": "default"
+      }
+    },
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "OverrideFirstRunPage": "",
+    "DontCheckDefaultBrowser": true
+  }
+}
+POLICIES
+
+# ── Firefox user.js (rendering + privacy; written to skel for new users) ───────
 setup_firefox_optimizations() {
     local PROFILE_DIR="$1"
+    mkdir -p "$PROFILE_DIR"
     cat << 'FFJS' > "$PROFILE_DIR/user.js"
-// ── Raptor OS: Firefox Performance & Privacy Hardening ─────────────────────
+// ── Raptor OS: Firefox Rendering, Privacy & Memory Hardening ─────────────────
+// Memory defaults are managed via /etc/firefox/policies/policies.json.
+// This file handles GPU compositing, rendering quality, and privacy.
 
-// ── Rendering / GPU ──────────────────────────────────────────────────────────
+// ── GPU / WebRender ───────────────────────────────────────────────────────────
 user_pref("layers.acceleration.enabled", true);
 user_pref("gfx.webrender.all", true);
 user_pref("gfx.webrender.compositor", true);
 user_pref("gfx.webrender.compositor.force-enabled", true);
+user_pref("gfx.webrender.program-binary-disk", true);
 user_pref("media.hardware-video-decoding.enabled", true);
 user_pref("media.hardware-video-decoding.force-enabled", true);
+user_pref("media.ffmpeg.vaapi.enabled", true);
 user_pref("layers.offmainthreadcomposition.enabled", true);
 user_pref("dom.webgpu.enabled", true);
 
-// ── Process & memory ─────────────────────────────────────────────────────────
-user_pref("dom.ipc.processCount", 8);
-user_pref("dom.ipc.processCount.webIsolated", 4);
-user_pref("config.trim_on_minimize", true);
-user_pref("browser.sessionhistory.max_total_viewers", 4);
-user_pref("browser.cache.memory.capacity", 262144);
-user_pref("browser.cache.disk.capacity", 524288);
-user_pref("javascript.options.mem.gc_incremental_slice_ms", 5);
-user_pref("javascript.options.mem.gc_min_number_of_chunks", 16);
+// ── JavaScript GC tuning ──────────────────────────────────────────────────────
+// Shorter GC slices: reduces janky pauses while maintaining low heap
+user_pref("javascript.options.mem.gc_incremental_slice_ms", 10);
+user_pref("javascript.options.mem.high_water_mark", 48);
+user_pref("javascript.options.mem.gc_high_frequency_time_limit_ms", 500);
 
-// ── Network ──────────────────────────────────────────────────────────────────
+// ── Disk cache (use disk, not memory, for media/page content) ─────────────────
+user_pref("browser.cache.disk.enable", true);
+user_pref("browser.cache.disk.capacity", 524288);
+user_pref("browser.cache.memory.enable", true);
+// browser.cache.memory.capacity set in policies.json (64 MB)
+
+// ── Network ───────────────────────────────────────────────────────────────────
+// HTTP/2 + QUIC (HTTP/3) — pipelining was removed in Firefox 83, do not set it
 user_pref("network.http.max-connections", 900);
 user_pref("network.http.max-connections-per-server", 32);
 user_pref("network.http.max-persistent-connections-per-server", 10);
-user_pref("network.http.pipelining", true);
-user_pref("network.http.pipelining.maxrequests", 8);
-user_pref("network.http.proxy.pipelining", true);
+user_pref("network.http.http2.enabled", true);
+user_pref("network.http.http3.enable", true);
 user_pref("network.prefetch-next", true);
 user_pref("network.dns.disablePrefetch", false);
 user_pref("network.predictor.enabled", true);
+// DNS-over-HTTPS via Cloudflare (mode 2 = preferred, falls back to system)
 user_pref("network.trr.mode", 2);
 user_pref("network.trr.uri", "https://cloudflare-dns.com/dns-query");
 
-// ── Telemetry & bloat OFF ────────────────────────────────────────────────────
+// ── Telemetry & bloat OFF ─────────────────────────────────────────────────────
 user_pref("toolkit.telemetry.enabled", false);
 user_pref("toolkit.telemetry.unified", false);
 user_pref("toolkit.telemetry.server", "");
 user_pref("datareporting.healthreport.uploadEnabled", false);
 user_pref("datareporting.policy.dataSubmissionEnabled", false);
-user_pref("browser.ping-centre.telemetry", false);
 user_pref("app.shield.optoutstudies.enabled", false);
 user_pref("extensions.shield-recipe-client.enabled", false);
 user_pref("browser.newtabpage.activity-stream.feeds.telemetry", false);
@@ -139,12 +203,7 @@ user_pref("browser.newtabpage.activity-stream.showSponsoredTopSites", false);
 user_pref("breakpad.reportURL", "");
 user_pref("browser.tabs.crashReporting.sendReport", false);
 
-// ── Startup ──────────────────────────────────────────────────────────────────
-user_pref("browser.sessionstore.resume_from_crash", false);
-user_pref("browser.shell.checkDefaultBrowser", false);
-user_pref("browser.rights.3.shown", true);
-
-// ── Scroll / animation smoothness ────────────────────────────────────────────
+// ── Scroll smoothness ─────────────────────────────────────────────────────────
 user_pref("apz.allow_zooming", true);
 user_pref("general.smoothScroll", true);
 user_pref("general.smoothScroll.mouseWheel.durationMinMS", 80);
@@ -311,6 +370,102 @@ ALL ALL=(root) NOPASSWD: /usr/bin/raptor-trim-background.sh
 ALL ALL=(root) NOPASSWD: /usr/bin/raptor-restore-background.sh
 ALL ALL=(root) NOPASSWD: /usr/bin/raptor-zram-teardown.sh
 SUDOERS
+
+# ── Vesktop: system-level Flatpak overrides ────────────────────────────────────
+# Run on the build image so every user gets Wayland-native Vesktop out of the box.
+# Per-user memory flags (V8 heap cap, renderer limit) are written by
+# raptor-appconfig.sh on first login, since flatpak override --user is per-user.
+if command -v flatpak &>/dev/null; then
+    flatpak override --system com.vesktop.Vesktop \
+        --env=OZONE_PLATFORM=wayland \
+        --env=ELECTRON_OZONE_PLATFORM_HINT=auto \
+        2>/dev/null || true
+    echo "Vesktop: system-level Flatpak overrides applied (Wayland-native)"
+fi
+
+# ── Baseline sysctl: sane memory defaults shipped in the image ────────────────
+# These are overridden at runtime by raptor-cortex (per-mode tuning).
+# Goal: reduce kernel's eagerness to keep stale pages, keep swap minimal.
+cat << 'SYSCTL' > /etc/sysctl.d/90-raptor-memory.conf
+# Raptor OS: baseline memory tuning
+# These values are conservative defaults; raptor-cortex applies profile-specific
+# overrides at runtime (e.g., swappiness=180 in performance mode).
+
+# Prefer keeping processes in RAM over evicting to swap
+vm.swappiness = 10
+
+# VFS inode/dentry cache: default=100 (aggressively reclaims caches).
+# 50 = hold caches 2× longer — benefits games that reload the same assets.
+vm.vfs_cache_pressure = 50
+
+# Dirty page writeback: flush at 10% RAM dirty, background flush at 3%.
+vm.dirty_ratio = 10
+vm.dirty_background_ratio = 3
+
+# Writeback interval: 15 s (batches I/O, reduces storage wake-ups).
+vm.dirty_writeback_centisecs = 1500
+vm.dirty_expire_centisecs = 3000
+
+# OOM killer: be more decisive (kills one process rather than thrashing).
+vm.oom_kill_allocating_task = 0
+vm.panic_on_oom = 0
+
+# Prevent address space exhaustion from many small anonymous mappings.
+vm.max_map_count = 2147483642
+SYSCTL
+
+# ── Systemd user drop-ins: cap RAM on the heaviest background services ─────────
+# These sit in the user service manager cgroup and prevent baloo / akonadi
+# from quietly consuming hundreds of MB while a game is running.
+# Users who need more headroom for mail/search can raise these in their own
+# ~/.config/systemd/user/ overrides.
+
+for svc_dir in \
+    "baloo_file.service.d" \
+    "akonadiserver.service.d" \
+    "kdeconnectd.service.d" \
+    "evolution-data-server.service.d" \
+    "tracker-miner-fs-3.service.d"
+do
+    mkdir -p "/etc/systemd/user/${svc_dir}"
+done
+
+cat << 'DROP' > /etc/systemd/user/baloo_file.service.d/raptor-memcap.conf
+# Raptor OS: hard cap on Baloo file indexer
+# Default: unbounded. During peak indexing it can exceed 400 MB.
+[Service]
+MemoryHigh=64M
+MemoryMax=128M
+DROP
+
+cat << 'DROP' > /etc/systemd/user/akonadiserver.service.d/raptor-memcap.conf
+# Raptor OS: hard cap on Akonadi PIM server
+# Most Raptor users don't use KDE PIM; cap prevents runaway growth.
+[Service]
+MemoryHigh=128M
+MemoryMax=256M
+DROP
+
+cat << 'DROP' > /etc/systemd/user/kdeconnectd.service.d/raptor-memcap.conf
+[Service]
+MemoryHigh=48M
+MemoryMax=96M
+DROP
+
+cat << 'DROP' > /etc/systemd/user/evolution-data-server.service.d/raptor-memcap.conf
+[Service]
+MemoryHigh=64M
+MemoryMax=128M
+DROP
+
+cat << 'DROP' > /etc/systemd/user/tracker-miner-fs-3.service.d/raptor-memcap.conf
+# tracker-miner-fs-3 (GNOME file tracker) — may not exist on KDE but harmless if so.
+[Service]
+MemoryHigh=48M
+MemoryMax=96M
+DROP
+
+echo "Memory caps installed for background services."
 
 # ── Game launch option hints ───────────────────────────────────────────────────
 cat << 'EOF' > /etc/raptor/unturned-launch-options.txt
