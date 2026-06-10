@@ -69,28 +69,11 @@ ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue
 EOF
 udevadm control --reload-rules 2>/dev/null || true
 
-# ── ZRAM swap setup (runtime) ──────────────────────────────────────────────────
-cat << 'ZRAMSCRIPT' > /usr/lib/raptor/zram-setup.sh
-#!/bin/bash
-set -euo pipefail
-TOTAL_RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
-TOTAL_RAM_GB=$(( TOTAL_RAM_KB / 1024 / 1024 ))
-ZRAM_SIZE_GB=$(( TOTAL_RAM_GB / 2 ))
-[ "$ZRAM_SIZE_GB" -lt 1 ] && ZRAM_SIZE_GB=1
-[ "$ZRAM_SIZE_GB" -gt 8 ] && ZRAM_SIZE_GB=8
-
-modprobe zram 2>/dev/null || true
-sleep 0.2
-ZDEV=$(zramctl --find --size ${ZRAM_SIZE_GB}G --algorithm zstd 2>/dev/null || \
-       zramctl --find --size ${ZRAM_SIZE_GB}G --algorithm lz4 2>/dev/null)
-if [ -n "$ZDEV" ]; then
-    mkswap "$ZDEV"
-    swapon -p 100 "$ZDEV"
-    echo "ZRAM swap on $ZDEV (${ZRAM_SIZE_GB}G)"
-fi
-ZRAMSCRIPT
-chmod +x /usr/lib/raptor/zram-setup.sh
-
+# ── ZRAM swap ─────────────────────────────────────────────────────────────────
+# ZRAM is configured via /etc/systemd/zram-generator.conf (installed by the
+# files module in recipe.yml). systemd-zram-generator handles device creation
+# automatically at boot — no separate service or script is needed here.
+# A manual teardown helper is kept for Cortex / emergency use.
 cat << 'TEARDOWN' > /usr/bin/raptor-zram-teardown.sh
 #!/bin/bash
 for dev in $(zramctl --noheadings --output NAME 2>/dev/null); do
@@ -99,25 +82,6 @@ for dev in $(zramctl --noheadings --output NAME 2>/dev/null); do
 done
 TEARDOWN
 chmod +x /usr/bin/raptor-zram-teardown.sh
-
-cat << 'ZRAMSVC' > /usr/lib/systemd/system/raptor-zram.service
-[Unit]
-Description=Raptor OS ZRAM Swap
-After=local-fs.target
-DefaultDependencies=no
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/lib/raptor/zram-setup.sh
-ExecStop=/usr/bin/raptor-zram-teardown.sh
-
-[Install]
-WantedBy=multi-user.target
-ZRAMSVC
-
-# FIX v2.2: Enable ZRAM service — was written but never activated
-systemctl enable raptor-zram.service 2>/dev/null || true
 
 # ── Firefox optimization profile ───────────────────────────────────────────────
 setup_firefox_optimizations() {
@@ -208,6 +172,8 @@ setup_brave_optimizations() {
 
     cat << 'BRAVEFLAGS' > "$BRAVE_CONFIG_DIR/raptor-brave-flags.conf"
 # Raptor OS: Brave / Chromium performance flags
+# Note: --use-gl=desktop is intentionally absent — it conflicts with
+# --enable-features=UseOzonePlatform on Wayland and causes rendering issues.
 --enable-features=VaapiVideoDecoder,VaapiVideoEncoder,CanvasOopRasterization,UseOzonePlatform,WebRTCPipeWireCapturer,Vulkan,DefaultANGLEVulkan,VulkanFromANGLE,ParallelDownloading,OverlayScrollbar,BackForwardCache,LightweightNoStatePrefetch
 --disable-features=UseChromeOSDirectVideoDecoder
 --enable-accelerated-video-decode
@@ -216,7 +182,6 @@ setup_brave_optimizations() {
 --enable-zero-copy
 --enable-oop-rasterization
 --enable-raw-draw
---use-gl=desktop
 --enable-hardware-overlays=single-fullscreen
 --num-raster-threads=4
 --renderer-process-limit=6
@@ -260,8 +225,9 @@ done
 mkdir -p /etc/skel/.config/BraveSoftware/Brave-Browser/Default
 setup_brave_optimizations "/etc/skel/.config/BraveSoftware/Brave-Browser/Default"
 
-# Brave launcher wrapper
-cat << 'BRAVELAUNCHER' > /usr/local/bin/brave-optimized
+# Brave launcher wrapper — must live in /usr/bin, not /usr/local/bin
+# (/usr/local is reset on OSTree layer deployments)
+cat << 'BRAVELAUNCHER' > /usr/bin/brave-optimized
 #!/bin/bash
 FLAGS_FILE="$HOME/.config/BraveSoftware/Brave-Browser/Default/raptor-brave-flags.conf"
 EXTRA_FLAGS=""
@@ -270,15 +236,16 @@ if [ -f "$FLAGS_FILE" ]; then
 fi
 exec brave-browser $EXTRA_FLAGS "$@"
 BRAVELAUNCHER
-chmod +x /usr/local/bin/brave-optimized
+chmod +x /usr/bin/brave-optimized
 
 # ── Background process trimmer ─────────────────────────────────────────────────
 cat << 'TRIMMER' > /usr/bin/raptor-trim-background.sh
 #!/bin/bash
 echo "=== Raptor Background Trimmer ==="
 sync
-echo 1 > /proc/sys/vm/drop_caches
-echo "✔ Dropped page caches"
+# 3 = drop page caches + dentries + inodes (1 = page only, 2 = dentry/inode only)
+echo 3 > /proc/sys/vm/drop_caches
+echo "✔ Dropped page/dentry/inode caches"
 echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
 echo "✔ Compacted memory"
 
@@ -342,7 +309,6 @@ chmod +x /usr/bin/raptor-restore-background.sh
 cat << 'SUDOERS' >> /etc/sudoers.d/raptor-gpu
 ALL ALL=(root) NOPASSWD: /usr/bin/raptor-trim-background.sh
 ALL ALL=(root) NOPASSWD: /usr/bin/raptor-restore-background.sh
-ALL ALL=(root) NOPASSWD: /usr/lib/raptor/zram-setup.sh
 ALL ALL=(root) NOPASSWD: /usr/bin/raptor-zram-teardown.sh
 SUDOERS
 
