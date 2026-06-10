@@ -158,4 +158,6 @@ modules:
         # User service: runs inside the login session after Plasma starts.
         # Needs to be a USER unit so it has access to WAYLAND_DISPLAY / DISPLAY
         # and can spawn GUI dialogs via zenity.
+        # raptor-app-choice.sh also handles per-user app config inline
+        # (Vesktop flags, Firefox user.js sync, Flatpak user remote).
         - raptor-firstboot.service
