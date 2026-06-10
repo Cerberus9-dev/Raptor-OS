@@ -1,11 +1,17 @@
-[[Unit]
-Description=Raptor OS CPU Governor Management
-After=sysinit.target
-Before=multi-user.target
+[Unit]
+Description=Raptor OS CPU Governor
+# Run after the GPU profile service so both finish in one boot phase.
+# gpu-detect.sh (called by raptor-gpu-profile.service) already sets the
+# CPU governor as part of profile detection. This service is retained for
+# compatibility and delegates to the same script.
+After=raptor-gpu-profile.service
+PartOf=raptor-gpu-profile.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/raptor-cpugovernor.sh
+# Re-run gpu-detect.sh to pick up the governor set by the profile.
+# The script is idempotent — running it twice is harmless.
+ExecStart=/usr/lib/raptor/gpu-detect.sh
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
