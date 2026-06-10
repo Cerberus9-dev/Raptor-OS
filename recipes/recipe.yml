@@ -150,7 +150,9 @@ modules:
       enabled:
         - raptor-ensure-services.service
         - raptor-gpu-profile.service
-        - raptor-cpugovernor.service
+        # raptor-cpugovernor.service intentionally removed: it calls
+        # /usr/bin/raptor-cpugovernor.sh which does not exist. CPU governor
+        # is already handled inside gpu-detect.sh (raptor-gpu-profile.service).
     user:
       enabled:
         # User service: runs inside the login session after Plasma starts.
