@@ -150,7 +150,10 @@ modules:
       enabled:
         - raptor-ensure-services.service
         - raptor-gpu-profile.service
-        # raptor-cpugovernor.service intentionally removed: it calls
+        # raptor-powerprofile.service: sets balanced as the boot default power
+        # profile via powerprofilesctl; Cortex overrides at runtime per mode.
+        - raptor-powerprofile.service
+        # raptor-cpugovernor.service intentionally omitted: it called
         # /usr/bin/raptor-cpugovernor.sh which does not exist. CPU governor
         # is already handled inside gpu-detect.sh (raptor-gpu-profile.service).
     user:
