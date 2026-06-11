@@ -42,8 +42,8 @@ fi
 # here to eliminate redundant files and service units.
 
 # Vesktop: write Chromium flags.txt to cap V8 heap and force Wayland-native
-VESKTOP_CFG="${HOME}/.var/app/com.vesktop.Vesktop/config/vesktop"
-if flatpak info com.vesktop.Vesktop &>/dev/null 2>&1; then
+VESKTOP_CFG="${HOME}/.var/app/dev.vencord.Vesktop/config/vesktop"
+if flatpak info dev.vencord.Vesktop &>/dev/null 2>&1; then
     mkdir -p "${VESKTOP_CFG}"
     cat > "${VESKTOP_CFG}/flags.txt" << 'VESKTOPFLAGS'
 # Raptor OS: Vesktop Chromium flags
@@ -76,7 +76,7 @@ VESKTOPFLAGS
 
     # Belt-and-suspenders: also set via flatpak user override (env vars are
     # picked up even if the flags.txt path ever changes between Vesktop versions)
-    flatpak override --user com.vesktop.Vesktop \
+    flatpak override --user dev.vencord.Vesktop \
         --env=OZONE_PLATFORM=wayland \
         --env=ELECTRON_OZONE_PLATFORM_HINT=auto \
         2>/dev/null || true
@@ -137,8 +137,15 @@ APP_CATALOGUE=(
     "FALSE|Pods|com.github.marhkb.Pods|Podman/Docker container GUI"
     # ── Gaming & Media ─────────────────────────────────────────────────────
     "FALSE|Lutris|net.lutris.Lutris|Game launcher for Linux, Wine, emulators"
+    "FALSE|Protontricks|com.github.Matoking.protontricks|Configure Steam/Proton games — install DirectX, runtimes, VC++, etc."
     "FALSE|Spotify|com.spotify.Client|Music and podcast streaming"
     "FALSE|Plex|tv.plex.PlexDesktop|Media server desktop client"
+    # ── Audio ──────────────────────────────────────────────────────────────
+    "FALSE|EasyEffects|com.github.wwmm.easyeffects|Headset EQ, bass boost, noise reduction via PipeWire"
+    # ── System tools ───────────────────────────────────────────────────────
+    "FALSE|Warehouse|io.github.flattool.Warehouse|Browse, manage and clean up installed Flatpak apps"
+    "FALSE|Impression|io.gitlab.adhami3310.Impression|Flash OS images to USB drives"
+    "FALSE|CoreCtrl|org.corectrl.CoreCtrl|AMD GPU and CPU control — overclocking, fan curves, power limits"
 )
 
 # ── Build zenity argument list ────────────────────────────────────────────────
