@@ -6,6 +6,257 @@
 - Custom Raptor OS logo
 - Better seamless fully custom wallpaper system like windows
 
+## [v2.6] - 2026-06-11 (Full System Overhaul — Gaming, Audio, Network & Bug Sweep)
+
+### Fixed
+
+#### Critical — Firstboot & Services (were silently broken on all Wayland installs)
+- **`raptor-firstboot.service` never ran on Wayland** — `ConditionEnvironment=DISPLAY`
+  evaluates false on every Bazzite Wayland boot since `DISPLAY` is never set; replaced
+  with `ConditionEnvironment=XDG_RUNTIME_DIR` which is present in both Wayland and X11
+  sessions
+- **`raptor-firstboot.service` was a system service trying to show a GUI** — installed
+  to `/usr/lib/systemd/system/` and enabled as a system unit; system services have no
+  display session, no D-Bus session bus, and no Plasma shell — dialogs cannot appear;
+  converted to a user service at `/usr/lib/systemd/user/` and moved to `user.enabled`
+  in recipe.yml
+- **`raptor-app-choice.sh` installed nothing** — `FLATPAK_INSTALLS` array declared without
+  `declare -A`; bash silently treated it as an indexed array, so every associative key
+  lookup returned empty and no Flatpak was ever installed regardless of what the user selected
+- **`raptor-app-choice.sh` dialog looped every boot** — Skip path exited without writing
+  the stamp file; app selection dialog re-appeared on every login until an app was installed
+- **Stamp files required root** — both firstboot scripts wrote stamps to `/var/lib/raptor/`
+  which is not writable from a user service; moved to `~/.local/share/raptor/`
+
+#### Critical — Cortex Profile Switching (buttons appeared broken)
+- **Profile mode always showed "Balanced" active on launch** — `_current_mode` was
+  hardcoded to `"balanced"` at startup with no system detection; if the actual mode
+  differed, the wrong button was disabled and clicking the correct mode appeared to
+  do nothing; mode is now read from `~/.config/raptor-cortex-mode` on launch
+- **Mode selection did not persist** — switching to Performance and reopening Cortex
+  reverted to Balanced every time; selection now written to disk immediately on switch
+- **`set_use_markup(True)` on `Adw.ActionRow`** — unreliable in libadwaita; removed
+  in favour of sensitivity and opacity changes that are guaranteed to work
+
+#### Critical — Taskbar / HUD theme never applied on Plasma 6
+- **All `kwriteconfig5` calls in `apply-plasma-panel.sh` do nothing on Plasma 6** —
+  KDE 6 ignores kwriteconfig5 writes entirely; replaced with a `kwc()` shim that
+  calls `kwriteconfig6` first with `kwriteconfig5` as a fallback
+- **`plasma-changeicons` does not exist in Plasma 6** — command was removed upstream;
+  replaced with `plasma-apply-icon-theme`
+- **`DISPLAY=:0 plasmashell --replace` crashes on Wayland** — explicitly forcing `:0`
+  tells plasmashell to start in X11 mode, which fails on a live Wayland session;
+  removed the `DISPLAY=:0` prefix so plasmashell inherits the correct session environment
+
+#### Performance Regressions
+- **`RADV_DEBUG=nocompute` was in the Extreme GPU profile** — this flag disables the ACE
+  (Async Compute Engine) on AMD RDNA hardware, which DX12, Vulkan, and modern Proton titles
+  depend on for async reprojection, shadow rendering, and post-processing; removing it
+  recovers 10–25% performance in affected titles
+- **`echo 1 > /proc/sys/vm/drop_caches`** — value `1` only evicts page caches; corrected
+  to `3` to also drop dentries and inodes, maximising free RAM before gaming
+- **`raptor-zram.service` raced against `zram-generator.conf`** — both tried to claim
+  `/dev/zram0` at boot; removed the manual service and its setup script; ZRAM is now
+  managed exclusively by `systemd-zram-generator` via `zram-generator.conf`
+- **`brave-optimized` was written to `/usr/local/bin/`** — `/usr/local` is reset to
+  empty on every OSTree layer deployment; launcher disappeared after every system update;
+  moved to `/usr/bin/` alongside all other Raptor scripts
+- **`--use-gl=desktop` in Brave flags conflicts with Wayland** — this flag forces the
+  GLX/EGL desktop backend which is incompatible with `UseOzonePlatform`; on Wayland
+  sessions Brave either silently fell back to XWayland or failed to start the GPU
+  process; removed with an explanatory comment
+
+#### Update Manager
+- **`check_for_updates()` treated exit code 77 as "no updates"** — `77` is not a
+  documented rpm-ostree exit code; the check was misclassifying genuine errors as
+  "system is up to date"
+- **`fetch_changelog()` silently disabled TLS verification on first failure** — the
+  `ssl.CERT_NONE` fallback loop sent requests over an unverified connection without
+  any indication to the user
+- **ANSI escape regex was incomplete** — missed ESC+single-character sequences
+  (`ESC M`, `ESC c`, etc.) and OSC sequences terminated by `\x1b\\` (string terminator)
+  rather than `\x07`; raw escape characters leaked into the update log
+- **`Adw.MessageDialog` deprecated in libadwaita 1.5+** — Bazzite ships 1.6; every
+  dialog open flooded the journal with GObject deprecation warnings; replaced with
+  `Adw.AlertDialog` with a fallback to `MessageDialog` for older versions
+- **`_countdown` lambda recreated a closure every second** — `lambda: (self._countdown
+  (secs-1), False)[1]` was opaque and allocated a new object each tick; replaced with
+  a named `_tick_countdown` method that returns `False` directly
+- **`_do_reboot` discarded the Popen object** — if `pkexec` was cancelled or the
+  helper failed, the error was swallowed silently; now waits for the process and
+  surfaces failures as a warning in the status row
+- **`raptor-update-launcher` set `DBUS_SESSION_BUS_ADDRESS` explicitly** — overriding
+  the session bus with a uid-formula string breaks portal D-Bus calls when the actual
+  socket path doesn't match; removed the override, relying on the session manager's
+  correct value
+- **`raptor-cpugovernor.service` failed to load** — unit file had `[[Unit]` (double
+  bracket) making it syntactically invalid; also called `/usr/bin/raptor-cpugovernor.sh`
+  which does not exist in the repo; service failed silently at every boot
+- **`raptor-powerprofile.service` did nothing** — `Type=oneshot` with no `ExecStart`
+  was a placeholder that completed immediately; now sets `balanced` as the boot default
+  power profile via `powerprofilesctl`
+- **`raptor-ensure-services.service` called `systemctl enable` at runtime** — on an
+  immutable OSTree image the symlink target is read-only; the call either silently
+  no-ops or fails; replaced with a health-check using `systemctl is-active` that
+  attempts `systemctl start --no-block` for any failed services
+- **`systemctl --user import-environment KEY=VALUE` was wrong** — `import-environment`
+  accepts variable names already in the calling process's environment, not `KEY=VALUE`
+  strings; GPU environment variables were silently never propagated to user sessions;
+  switched to `set-environment` which accepts `KEY=VALUE` pairs directly
+- **`raptor-powerprofile.service` not enabled** — was installed but never listed in
+  recipe.yml `system.enabled`; now enabled after getting a real `ExecStart`
+- **ZRAM swap-priority not set** — without an explicit priority ZRAM was ranked at
+  the kernel default of `-2`, below any disk-based swap partition; set to `100`
+
+---
+
+### Added
+
+#### Raptor Update Manager — Flatpak Support
+- Flatpak apps now checked and updated alongside the system image — previously only
+  `rpm-ostree` was handled; apps installed via the firstboot picker (Spotify, Godot, etc.)
+  were never updated through the GUI
+- Second status row in the UI shows Flatpak update state independently of the system row
+- Update button adapts its label: "Update & Reboot" when an OSTree update is pending,
+  "Update Flatpaks" when only Flatpak updates exist (no reboot triggered for apps-only updates)
+- New `flatpak-update-helper` script with polkit policy and sudoers entry
+
+#### Firstboot App Picker (Complete Rewrite)
+- **20 optional Flatpak apps** across five categories: Communication (Telegram, Signal,
+  Slack, Zoom), Productivity (VSCodium, ONLYOFFICE, Bitwarden, Joplin, MarkText, Calibre),
+  Creative (Blender, Shotcut, Boatswain), Development (Godot Engine, GitHub Desktop, Pods),
+  Gaming & Media (Lutris, Protontricks, Spotify, Plex)
+- **Per-user app configuration runs before the dialog** — Vesktop memory flags, Firefox
+  profile sync, and Flatpak user remote setup now apply unconditionally even when the
+  user clicks Skip; previously these were in a separate `raptor-appconfig.sh` that
+  required its own service and stamp file; merged and eliminated the extra files
+
+#### Vesktop Memory & Wayland Optimisation
+- System-level Flatpak override sets `OZONE_PLATFORM=wayland` — Vesktop previously
+  ran through XWayland on Wayland sessions, consuming ~30 MB of extra address space
+  per launch
+- Per-user `flags.txt` caps V8 old-generation heap at 256 MB (Chromium default is ~1.4 GB
+  on systems with free RAM and it never shrinks), limits renderer processes to 2
+  (~80–120 MB each), enables VA-API hardware video decode for video calls and streams
+
+#### Firefox Memory Overhaul
+- New `/etc/firefox/policies/policies.json` system-wide defaults: memory cache capped
+  at 64 MB (was 256 MB in user.js — 4× too large), content process count reduced from
+  8 to 4, `browser.tabs.unloadOnLowMemory` enabled, media cache capped at 32 MB,
+  session save interval raised from 15 s to 45 s
+- `user.js` cleaned up: dead HTTP pipelining prefs removed (pipelining was removed from
+  Firefox in version 83), GPU compositing and WebRender prefs retained and expanded
+  with `media.ffmpeg.vaapi.enabled` and `gfx.webrender.program-binary-disk`
+
+#### PipeWire Low-Latency Gaming Audio
+- Default quantum lowered from 1024 to 256 samples — reduces round-trip audio latency
+  from ~21 ms to ~5 ms at 48 kHz; stable on all modern hardware
+- ALSA device auto-suspend disabled — prevents the ~120–300 ms audio glitch/pop that
+  occurs when a game plays the first sound after a 5-second idle (device wake latency)
+- PipeWire graph thread set to RT priority 88 via `libpipewire-module-rt`
+- PipeWire and WirePlumber configured to auto-restart on failure (common after
+  suspend/resume on AMD hardware); previously a crash left audio dead until logout
+
+#### Network Gaming Optimisations
+- **BBR congestion control + CAKE qdisc** — replaces CUBIC; BBR models bandwidth
+  directly and maintains much lower queue depth, preventing ping spikes when a background
+  download is running during a game session
+- **128 MB TCP socket buffers** — the previous 256 KB default (a 1990s value) caused
+  packet drops on high-bandwidth game server connections
+- **TCP fast-open** — saves one RTT on reconnects to known game servers by sending
+  data in the SYN packet; noticeable on game server rejoin after disconnect
+- **No slow-start after idle** — prevents TCP from reverting to a tiny initial window
+  after a brief pause; games have bursty traffic patterns
+- **Cloudflare DoT as system resolver** — Cloudflare averages ~10 ms global DNS lookup
+  vs ~40–80 ms for ISP resolvers; affects every new game server connection and
+  matchmaking endpoint; systemd-resolved configured with Quad9 fallback and
+  DNSSEC allow-downgrade
+
+#### Kernel Boot Arguments
+- `split_lock_detect=off` — disables kernel serialisation of split-lock memory accesses;
+  some older Windows game ports under Proton trigger this frequently, causing measurable
+  frametime spikes
+- `transparent_hugepage=madvise` — lets games request 2 MB hugepages without forcing
+  them globally (avoiding fragmentation on mixed workloads)
+- `nowatchdog` + `nmi_watchdog=0` — removes periodic NMI watchdog timer interrupts
+  from the CPU; these fire even mid-frame and show up as latency outliers in frametime
+  graphs
+
+#### MangoHud Default Theme
+- Ships a default `/etc/mangohud/MangoHud.conf` matching the Raptor OS F-22 palette:
+  `#020F12` dark background, `#33FF33` CPU, `#00D4FF` GPU, `#F5A623` engine, JetBrains
+  Mono font; shows FPS, frametime graph, GPU/CPU stats + temps + clocks, VRAM, and
+  Proton/Wine version; FPS colour thresholds at 45 and 60 fps; toggle with Shift+F12
+
+#### Gamemode Full Configuration
+- New `/etc/gamemode.ini`: AMD GPU power level raised to `high` while gaming (unlocks
+  boost clocks and higher TDP budget); game processes reniced to -10; screensaver/DPMS
+  inhibited during gaming; Steam, Heroic, Lutris, and Bottles registered as valid
+  supervisors; previously gamemode was installed but ran with defaults, providing only
+  a CPU governor switch
+- `gamemoded.service` added to `user.enabled` — without this the daemon never started
+  at login and `ENABLE_GAMEMODE=1` launch options silently did nothing
+
+#### Input Device Improvements
+- New udev rules disable USB autosuspend for all HID input devices — autosuspend saves
+  ~0.5 W but causes 16–500 ms input latency spikes when the device wakes; unacceptable
+  during gaming
+- Proper `uaccess` permissions for DualSense (054c), Steam Controller/Valve Index (28de),
+  and Xbox controllers via hidraw so tools like Chiaki and DS4Windows work without root
+- `uinput` device set to `group=input mode=0660` for user-space virtual device creation
+  (antimicro, xpadneo, sc-controller)
+
+#### Baseline Memory Configuration
+- New `/etc/sysctl.d/90-raptor-memory.conf`: `vm.swappiness=10`, `vm.vfs_cache_pressure=50`
+  (holds VFS caches 2× longer — benefits games reloading assets from the same directories),
+  proper dirty ratios, `vm.max_map_count=2147483642` — some 64-bit games (Elden Ring,
+  Star Citizen via Proton) exhaust the default 65530 memory map limit and crash silently
+
+#### Background Service Memory Caps
+- systemd user drop-ins cap RAM on the five heaviest background services: Baloo file
+  indexer (128 MB max — can exceed 400 MB during initial index), Akonadi PIM server
+  (256 MB), KDE Connect (96 MB), Evolution Data Server (128 MB), GNOME file tracker
+  (96 MB); users can raise individual limits in `~/.config/systemd/user/`
+
+#### Fastfetch Themed Config
+- Ships a default `/etc/xdg/fastfetch/config.jsonc` with Raptor OS colouring (green keys,
+  cyan title, white values); shows OS, kernel, DE/WM/theme, CPU, GPU (via PCI), RAM,
+  disk, and local IP
+
+#### New Packages
+- `mangohud` — explicit RPM (was implicitly provided by Bazzite base; now declared)
+- `protontricks` — RPM for non-Flatpak use; complements Protontricks Flatpak in the
+  optional app picker
+- `partitionmanager` — KDE Partition Manager; previously absent from the install list
+
+#### New Optional Apps in Firstboot Picker
+- **Protontricks** — configure Steam/Proton game prefixes; install DirectX, Visual C++
+  runtimes, .NET, and other Windows components for games that require them
+- **EasyEffects** — PipeWire-native audio processing: EQ, bass boost, noise suppression
+  for headset microphones
+- **Warehouse** — browse, manage, and clean up installed Flatpak apps and accumulated
+  runtimes (GNOME and KDE runtimes can accumulate 10+ GB over time)
+- **Impression** — USB image flasher
+- **CoreCtrl** — AMD GPU and CPU control: overclocking, undervolting, fan curves,
+  and power limits without manual sysfs writes
+
+---
+
+### Changed
+- Default Flatpak install list trimmed to core-only (Vesktop, Heroic, ProtonUp-Qt,
+  Bottles, Flatseal, MissionCenter) — all optional apps moved to the firstboot picker
+  so users choose what they actually want instead of getting everything pre-installed
+- `raptor-app-choice.sh` now also handles all per-user app configuration inline before
+  the dialog; the separate `raptor-appconfig.sh` script and `raptor-appconfig.service`
+  unit have been eliminated
+- Audio and network optimisations converted from build scripts (`raptor-audio.sh`,
+  `raptor-network.sh`) to individual static config files with explicit
+  `source → destination` mappings in recipe.yml — each file is now readable directly
+  in the repo without running anything
+- `raptor-cpugovernor.service` removed from `system.enabled` — CPU governor is handled
+  by `raptor-gpu-profile.service` → `gpu-detect.sh`; the service file is retained on
+  disk for compatibility but no longer starts at boot
+
 ## [v2.5] - 2026-05-21 (Script Consolidation, Build Fix & Radar HUD)
 
 ### Fixed
