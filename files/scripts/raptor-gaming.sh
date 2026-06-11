@@ -376,7 +376,7 @@ SUDOERS
 # Per-user memory flags (V8 heap cap, renderer limit) are written by
 # raptor-appconfig.sh on first login, since flatpak override --user is per-user.
 if command -v flatpak &>/dev/null; then
-    flatpak override --system com.vesktop.Vesktop \
+    flatpak override --system dev.vencord.Vesktop \
         --env=OZONE_PLATFORM=wayland \
         --env=ELECTRON_OZONE_PLATFORM_HINT=auto \
         2>/dev/null || true
@@ -503,5 +503,143 @@ Notes:
   -Xms512m      Start JVM heap small
   -XX:+UseG1GC  G1 GC — fewer long pauses vs default collector
 EOF
+
+# ── MangoHud: Raptor OS themed HUD config ─────────────────────────────────────
+mkdir -p /etc/mangohud
+cat << 'MANGOCFG' > /etc/mangohud/MangoHud.conf
+# ── Raptor OS MangoHud default ────────────────────────────────────────────────
+toggle_hud=Shift_R+F12
+toggle_fps_limit=Shift_R+F1
+position=top-left
+legacy_layout=false
+hud_compact=false
+round_corners=6
+fps
+frametime
+frame_timing=1
+gpu_stats
+gpu_temp
+gpu_core_clock
+gpu_mem_clock
+gpu_power
+gpu_load_change
+cpu_stats
+cpu_temp
+cpu_mhz
+ram
+vram
+wine
+engine_version
+fps_color_change=1
+fps_value=45,60
+fps_color=FF4040,F5C211,33FF33
+background_color=020F12
+background_alpha=0.55
+text_color=E8F4F8
+gpu_color=00D4FF
+cpu_color=33FF33
+memory_color=A8FF78
+engine_color=F5A623
+frametime_color=00E5FF
+text_outline=true
+font_size=20
+font_file=/usr/share/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf
+fps_limit=0
+MANGOCFG
+
+# ── Gamemode: full configuration ──────────────────────────────────────────────
+cat << 'GAMEMODE' > /etc/gamemode.ini
+[general]
+reaper_freq=5
+desired_governor=performance
+igpu_desiredgov=powersave
+gpu_device=auto
+defaultgov=powersave
+softrealtime=auto
+renice=10
+inhibit_screensaver=1
+
+[filter]
+whitelist=
+blacklist=
+
+[gpu]
+apply_gpu_optimisations=accept-responsibility
+gpu_device=0
+amd_performance_level=high
+
+[cpu]
+park_cores=no
+pin_cores=no
+
+[supervisor]
+supervisor_whitelist=steam,heroic,lutris,bottles
+GAMEMODE
+
+# ── Input device udev rules ───────────────────────────────────────────────────
+cat << 'INPUTRULES' > /usr/lib/udev/rules.d/61-raptor-input.rules
+# Disable USB autosuspend for all HID input devices (mice, keyboards, pads).
+# Autosuspend saves ~0.5 W but causes 16-500 ms input latency spikes on wake.
+ACTION=="add", SUBSYSTEM=="usb", DRIVERS=="usbhid", \
+    ATTR{power/autosuspend}="-1"
+
+# uinput: allow user-space to create virtual devices (antimicro, xpadneo, etc.)
+KERNEL=="uinput", SUBSYSTEM=="misc", \
+    OPTIONS+="static_node=uinput", TAG+="uaccess", TAG+="udev-acl", \
+    MODE="0660", GROUP="input"
+
+# Xbox controllers
+SUBSYSTEM=="input", ATTRS{name}=="Xbox*", TAG+="uaccess"
+SUBSYSTEM=="input", ATTRS{name}=="Microsoft X-Box*", TAG+="uaccess"
+
+# Sony DualSense / DualShock — hidraw access for Chiaki / PS Remote Play
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="054c", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="054c", MODE="0660", GROUP="input"
+
+# Steam Controller / Valve Index
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="28de", MODE="0660", GROUP="input"
+INPUTRULES
+udevadm control --reload-rules 2>/dev/null || true
+
+# ── Fastfetch: Raptor OS themed config ────────────────────────────────────────
+mkdir -p /etc/xdg/fastfetch
+cat << 'FFCONF' > /etc/xdg/fastfetch/config.jsonc
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": { "source": "small", "color": { "1": "green", "2": "cyan" } },
+  "display": {
+    "separator": "  ",
+    "color": { "keys": "green", "title": "cyan", "output": "white" },
+    "brightColor": true
+  },
+  "modules": [
+    { "type": "title",    "format": "{user-name}@{host-name}" },
+    "break",
+    { "type": "os",       "key": "OS       " },
+    { "type": "kernel",   "key": "Kernel   " },
+    { "type": "uptime",   "key": "Uptime   " },
+    { "type": "packages", "key": "Packages " },
+    { "type": "shell",    "key": "Shell    " },
+    "break",
+    { "type": "de",       "key": "Desktop  " },
+    { "type": "wm",       "key": "WM       " },
+    { "type": "theme",    "key": "Theme    " },
+    "break",
+    { "type": "cpu",      "key": "CPU      " },
+    { "type": "gpu",      "key": "GPU      ", "detectionMethod": "pci" },
+    { "type": "memory",   "key": "RAM      " },
+    { "type": "swap",     "key": "Swap     " },
+    { "type": "disk",     "key": "Disk     ", "folders": "/" },
+    "break",
+    { "type": "localip",  "key": "IP       " },
+    "break",
+    "colors"
+  ]
+}
+FFCONF
+mkdir -p /etc/skel/.config/fastfetch
+cp /etc/xdg/fastfetch/config.jsonc /etc/skel/.config/fastfetch/config.jsonc
+
 
 echo "GAMING_READY"
