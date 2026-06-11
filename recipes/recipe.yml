@@ -163,7 +163,7 @@ modules:
   #                           them globally (avoids fragmentation on mixed workloads)
   # nowatchdog + nmi=0      — removes periodic watchdog NMIs during gaming sessions
   - type: kargs
-    addArgs:
+    kargs:
       - split_lock_detect=off
       - transparent_hugepage=madvise
       - nowatchdog
