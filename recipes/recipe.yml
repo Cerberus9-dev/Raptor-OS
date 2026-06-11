@@ -162,7 +162,7 @@ modules:
   # transparent_hugepage    — madvise lets games request hugepages without forcing
   #                           them globally (avoids fragmentation on mixed workloads)
   # nowatchdog + nmi=0      — removes periodic watchdog NMIs during gaming sessions
-  - type: kernel-args
+  - type: kargs
     addArgs:
       - split_lock_detect=off
       - transparent_hugepage=madvise
