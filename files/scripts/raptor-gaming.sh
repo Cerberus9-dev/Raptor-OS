@@ -93,43 +93,43 @@ cat << 'POLICIES' > /etc/firefox/policies/policies.json
     "Preferences": {
       "browser.cache.memory.capacity": {
         "Value": 65536,
-        "Status": "default"
+        "Status": "user"
       },
       "browser.sessionhistory.max_total_viewers": {
         "Value": 2,
-        "Status": "default"
+        "Status": "user"
       },
       "dom.ipc.processCount": {
         "Value": 4,
-        "Status": "default"
+        "Status": "user"
       },
       "dom.ipc.processCount.webIsolated": {
         "Value": 2,
-        "Status": "default"
+        "Status": "user"
       },
       "browser.tabs.unloadOnLowMemory": {
         "Value": true,
-        "Status": "default"
+        "Status": "user"
       },
       "media.memory_cache_max_size": {
         "Value": 32768,
-        "Status": "default"
+        "Status": "user"
       },
       "browser.sessionstore.interval": {
         "Value": 45000,
-        "Status": "default"
+        "Status": "user"
       },
       "browser.sessionstore.max_serialize_back": {
         "Value": 5,
-        "Status": "default"
+        "Status": "user"
       },
       "browser.sessionstore.max_serialize_forward": {
         "Value": 3,
-        "Status": "default"
+        "Status": "user"
       },
       "config.trim_on_minimize": {
         "Value": true,
-        "Status": "default"
+        "Status": "user"
       }
     },
     "DisableTelemetry": true,
