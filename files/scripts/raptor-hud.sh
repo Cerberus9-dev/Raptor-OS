@@ -1420,12 +1420,15 @@ cat << 'EOF' > /usr/lib/systemd/user/raptor-hud-apply.service
 [Unit]
 Description=Raptor HUD — Apply KDE theme on first login
 After=plasma-plasmashell.service
-ConditionPathExists=!%h/.local/share/raptor-hud-applied
+# v2 stamp: forces re-application on installs where the kwriteconfig5 version
+# ran and wrote the v1 stamp (.../raptor-hud-applied) without applying anything.
+# Delete ~/.local/share/raptor-hud-applied-v2 to re-run manually.
+ConditionPathExists=!%h/.local/share/raptor-hud-applied-v2
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/touch %h/.local/share/raptor-hud-applied
+ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v2'
 RemainAfterExit=yes
 
 [Install]
