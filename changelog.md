@@ -6,7 +6,31 @@
 - Custom Raptor OS logo
 - Better seamless fully custom wallpaper system like windows
 
-## [v2.6] - 2026-06-11 (Full System Overhaul — Gaming, Audio, Network & Bug Sweep)
+## [v2.6.1] - 2026-06-11 (Build Hotfixes)
+
+### Fixed
+
+- **Vesktop not installing** — Flatpak ID changed from `com.vesktop.Vesktop` to
+  `dev.vencord.Vesktop` when the project moved under the Vencord organisation on
+  Flathub; the old ID returns 404, causing the `default-flatpaks` module to abort
+  the build; corrected in `recipe.yml`, `raptor-app-choice.sh` (config path +
+  `flatpak info` check + user override call), and `raptor-gaming.sh` (system override)
+
+- **Kernel boot arguments not applying** — BlueBuild module type was `kernel-args`
+  which does not exist; the correct name is `kargs`; additionally the argument list
+  property was `addArgs` instead of `kargs`; both errors caused the module to fail
+  schema validation and the build to abort, meaning `split_lock_detect=off`,
+  `transparent_hugepage=madvise`, and the watchdog disables were never set on any
+  v2.6 install
+
+- **Network gaming configs not deploying** — `91-raptor-network.conf`,
+  `raptor-network-modules.conf`, and `raptor-dns.conf` were referenced as static
+  files in the `files` module but were not consistently landing in the repo;
+  moved inline to `raptor-gaming.sh` using heredocs (same approach as memory sysctl,
+  MangoHud, and gamemode configs); BBR congestion control, CAKE qdisc, TCP buffer
+  tuning, and Cloudflare DoT DNS now reliably deploy with every build
+
+
 
 ### Fixed
 
