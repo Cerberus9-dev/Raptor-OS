@@ -121,7 +121,7 @@ modules:
       - thunderbird
 
       # Disk management
-      - partitionmanager
+      - kde-partitionmanager
 
       # Theming — Raptor HUD
       - kvantum
