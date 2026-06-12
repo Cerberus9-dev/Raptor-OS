@@ -33,13 +33,6 @@ modules:
         destination: /etc/systemd/user/pipewire.service.d/raptor-restart.conf
       - source: ../files/system_files/raptor-wireplumber-restart.conf
         destination: /etc/systemd/user/wireplumber.service.d/raptor-restart.conf
-      # ── Network: gaming sysctl, BBR/CAKE modules, DoT DNS ─────────────────
-      - source: ../files/system_files/91-raptor-network.conf
-        destination: /etc/sysctl.d/91-raptor-network.conf
-      - source: ../files/system_files/raptor-network-modules.conf
-        destination: /etc/modules-load.d/raptor-network.conf
-      - source: ../files/system_files/raptor-dns.conf
-        destination: /etc/systemd/resolved.conf.d/raptor-dns.conf
       - source: ../files/system_files/zram-generator.conf
         destination: /etc/systemd/zram-generator.conf
 
