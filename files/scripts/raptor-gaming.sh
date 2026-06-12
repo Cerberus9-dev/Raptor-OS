@@ -642,4 +642,53 @@ mkdir -p /etc/skel/.config/fastfetch
 cp /etc/xdg/fastfetch/config.jsonc /etc/skel/.config/fastfetch/config.jsonc
 
 
+# ── Network gaming sysctl ─────────────────────────────────────────────────────
+cat << 'NETSYSCTL' > /etc/sysctl.d/91-raptor-network.conf
+# Raptor OS: network gaming optimisation
+net.core.rmem_max                  = 134217728
+net.core.wmem_max                  = 134217728
+net.core.rmem_default              = 262144
+net.core.wmem_default              = 262144
+net.ipv4.tcp_rmem                  = 4096 262144 134217728
+net.ipv4.tcp_wmem                  = 4096 262144 134217728
+net.ipv4.udp_rmem_min              = 8192
+net.ipv4.udp_wmem_min              = 8192
+net.core.default_qdisc             = cake
+net.ipv4.tcp_congestion_control    = bbr
+net.ipv4.tcp_fastopen              = 3
+net.ipv4.tcp_tw_reuse              = 1
+net.ipv4.tcp_fin_timeout           = 15
+net.ipv4.tcp_max_tw_buckets        = 1440000
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_no_metrics_save       = 1
+net.core.netdev_max_backlog        = 50000
+net.core.netdev_budget             = 600
+net.core.netdev_budget_usecs       = 8000
+net.core.somaxconn                 = 65535
+net.ipv4.neigh.default.gc_thresh1  = 4096
+net.ipv4.neigh.default.gc_thresh2  = 8192
+net.ipv4.neigh.default.gc_thresh3  = 16384
+net.ipv4.ip_local_port_range       = 1024 65535
+NETSYSCTL
+
+# ── BBR / CAKE module preload ─────────────────────────────────────────────────
+cat << 'MODULES' > /etc/modules-load.d/raptor-network.conf
+# Raptor OS: load BBR + CAKE at initramfs so sysctl can reference them
+tcp_bbr
+sch_cake
+MODULES
+
+# ── DNS-over-TLS ──────────────────────────────────────────────────────────────
+mkdir -p /etc/systemd/resolved.conf.d
+cat << 'RESOLVED' > /etc/systemd/resolved.conf.d/raptor-dns.conf
+# Raptor OS: Cloudflare DoT resolver — faster than ISP default (~10 ms global)
+[Resolve]
+DNS=1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
+FallbackDNS=9.9.9.9#dns.quad9.net 8.8.8.8#dns.google
+DNSOverTLS=opportunistic
+DNSSEC=allow-downgrade
+Cache=yes
+DNSStubListener=yes
+RESOLVED
+
 echo "GAMING_READY"
