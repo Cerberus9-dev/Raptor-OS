@@ -194,7 +194,10 @@ case "$ACTION" in
             echo defer+madvise > /sys/kernel/mm/transparent_hugepage/defrag  2>/dev/null || true
         fi
         [ "$DO_CPU" = "1" ] && echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
-        for proc in plasmashell kwin_wayland kwin_x11 kded6 baloo_file; do
+        # Send USR1 only to processes with safe handlers.
+        # kwin_wayland and kwin_x11 do NOT catch SIGUSR1 — the kernel would
+        # terminate them, causing a full compositor restart (screen goes black).
+        for proc in plasmashell kded6 baloo_file; do
             for pid in $(pgrep "$proc" 2>/dev/null || true); do
                 kill -USR1 "$pid" 2>/dev/null || true
             done
