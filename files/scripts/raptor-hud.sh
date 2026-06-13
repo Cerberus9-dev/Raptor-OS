@@ -1089,77 +1089,108 @@ kwc --file kdeglobals --group KDE --key widgetStyle kvantum
 # ── 5. Plasma theme ───────────────────────────────────────────────────────────
 kwc --file plasmarc --group Theme --key name RaptorOS
 
-# ── 6. Panel layout via layout.js ─────────────────────────────────────────────
-# Plasma loads ~/.local/share/plasma/layout-templates/raptor-hud.layout.js
-# when no existing panel config is found (first boot / clean slate above).
-# This is the correct API — it runs inside Plasma's JS engine with full access
-# to panels(), desktops(), and createWidget().
-cat > "$LOCAL_SHARE/plasma/layout-templates/raptor-hud.layout.js" << 'LAYOUTEOF'
-// Raptor HUD panel layout — loaded by plasmashell on first run
-// Removes default panel and creates a fresh one with the Raptor applet order.
+# ── 6. Panel layout — write plasma-org.kde.plasma.desktop-appletsrc directly ──
+# Direct appletsrc write is the most reliable approach in Plasma 6.
+# The layout.js / layoutTemplate mechanism was removed: if any addWidget() call
+# throws (e.g. the radar arc plasmoid not found), the JS VM halts mid-execution
+# and Plasma silently falls back to the default panel with no error message.
+# Writing appletsrc directly is deterministic and has no failure fallback.
+cat > "$CFG/plasma-org.kde.plasma.desktop-appletsrc" << 'APPLETSRC'
+[ActionPlugins][0]
+RightButton;NoModifier=org.kde.contextmenu
 
-var panels = Array.prototype.slice.call(panels());
-for (var i = 0; i < panels.length; i++) {
-    panels[i].remove();
-}
+[Containments][2]
+activityId=
+formfactor=2
+immutability=1
+lastScreen=0
+location=4
+plugin=org.kde.panel
+wallpaperplugin=org.kde.image
 
-var p = new Panel();
-p.location        = "bottom";
-p.height          = 48;
-p.lengthMode      = "fill";
-p.alignment       = "center";
-p.hiding          = "none";
-p.floating        = false;
+[Containments][2][Applets][22]
+immutability=1
+plugin=org.kde.plasma.kickoff
 
-// App launcher
-var launcher = p.addWidget("org.kde.plasma.kickoff");
+[Containments][2][Applets][22][Configuration]
+PreloadWeight=100
 
-// Left radar arc
-var radarL = p.addWidget("org.raptoros.radararc");
-radarL.currentConfigGroup = ["General"];
-radarL.writeConfig("side", "left");
+[Containments][2][Applets][22][Configuration][Shortcuts]
+global=Alt+F1
 
-// Left spacer
-p.addWidget("org.kde.plasma.panelspacer");
+[Containments][2][Applets][23]
+immutability=1
+plugin=org.raptoros.radararc
 
-// Task manager (icon-only)
-var tasks = p.addWidget("org.kde.plasma.icontasks");
-tasks.currentConfigGroup = ["General"];
-tasks.writeConfig("showLabels", false);
-tasks.writeConfig("maxStripes", 1);
+[Containments][2][Applets][23][Configuration][General]
+side=left
 
-// Right spacer
-p.addWidget("org.kde.plasma.panelspacer");
+[Containments][2][Applets][24]
+immutability=1
+plugin=org.kde.plasma.panelspacer
 
-// Right radar arc
-var radarR = p.addWidget("org.raptoros.radararc");
-radarR.currentConfigGroup = ["General"];
-radarR.writeConfig("side", "right");
+[Containments][2][Applets][25]
+immutability=1
+plugin=org.kde.plasma.icontasks
 
-// System tray
-var tray = p.addWidget("org.kde.plasma.systemtray");
-tray.currentConfigGroup = ["Configuration", "General"];
-tray.writeConfig("shownItems",  "org.kde.plasma.networkmanagement,org.kde.plasma.battery");
-tray.writeConfig("extraItems",  "org.kde.plasma.battery,org.kde.plasma.networkmanagement,org.kde.plasma.volume,org.kde.plasma.bluetooth");
+[Containments][2][Applets][25][Configuration][General]
+launchers=
+maxStripes=1
+showLabels=false
 
-// Clock
-var clock = p.addWidget("org.kde.plasma.digitalclock");
-clock.currentConfigGroup = ["Appearance"];
-clock.writeConfig("use24hFormat",   2);
-clock.writeConfig("showSeconds",    true);
-clock.writeConfig("showDate",       false);
-clock.writeConfig("fontFamily",     "JetBrains Mono");
-clock.writeConfig("customFontSize", 11);
+[Containments][2][Applets][26]
+immutability=1
+plugin=org.kde.plasma.panelspacer
 
-// Show desktop
-p.addWidget("org.kde.plasma.showdesktop");
-LAYOUTEOF
+[Containments][2][Applets][27]
+immutability=1
+plugin=org.raptoros.radararc
 
-# Mark the layout template for use on Plasma's next start
-kwc --file kdeglobals --group KDE --key SingleClick false 2>/dev/null || true
+[Containments][2][Applets][27][Configuration][General]
+side=right
+
+[Containments][2][Applets][28]
+immutability=1
+plugin=org.kde.plasma.systemtray
+
+[Containments][2][Applets][28][Configuration]
+PreloadWeight=100
+
+[Containments][2][Applets][28][Configuration][General]
+extraItems=org.kde.plasma.battery,org.kde.plasma.networkmanagement,org.kde.plasma.volume,org.kde.plasma.bluetooth
+shownItems=org.kde.plasma.networkmanagement,org.kde.plasma.battery
+
+[Containments][2][Applets][29]
+immutability=1
+plugin=org.kde.plasma.digitalclock
+
+[Containments][2][Applets][29][Configuration][Appearance]
+customFontSize=11
+fontFamily=JetBrains Mono
+showDate=false
+showSeconds=true
+use24hFormat=2
+
+[Containments][2][Applets][30]
+immutability=1
+plugin=org.kde.plasma.showdesktop
+
+[Containments][2][General]
+AppletOrder=22;23;24;25;26;27;28;29;30
+
+[Containments][2][Configuration]
+PreloadWeight=0
+
+[ScreenMapping]
+itemsOnDisabledScreens=
+APPLETSRC
+
 kwc --file plasmashellrc \
-    --group PlasmaViews --group "Panel 0" \
-    --key layoutTemplate "raptor-hud" 2>/dev/null || true
+    --group PlasmaViews --group "Panel 2" \
+    --key thickness 48 2>/dev/null || true
+kwc --file plasmashellrc \
+    --group PlasmaViews --group "Panel 2" \
+    --key floating 0 2>/dev/null || true
 
 # ── 7. GTK settings ───────────────────────────────────────────────────────────
 mkdir -p "$HOME/.config/gtk-3.0"
