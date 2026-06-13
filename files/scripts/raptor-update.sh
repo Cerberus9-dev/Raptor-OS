@@ -630,62 +630,6 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
             "dialog-error-symbolic", "error")
         self.subtitle.set_text("Something went wrong.")
 
-            adj = self._log_scroll.get_vadjustment()
-            adj.set_value(adj.get_upper() - adj.get_page_size())
-            return False
-        GLib.idle_add(_scroll)
-
-    def _run_update(self):
-        try:
-            proc = run_privileged(UPDATE_HELPER)
-        except RuntimeError as e:
-            GLib.idle_add(self._append_log, f"\nERROR: {e}\n")
-            GLib.idle_add(self._on_update_error, -1)
-            return
-        try:
-            for line in proc.stdout:
-                clean = ANSI_ESCAPE.sub("", line)
-                if clean:
-                    GLib.idle_add(self._append_log, clean)
-            proc.stdout.close()
-            rc = proc.wait()
-        except Exception as e:
-            GLib.idle_add(self._append_log, f"\nERROR reading output: {e}\n")
-            GLib.idle_add(self._on_update_error, -1)
-            return
-        if rc == 0:
-            GLib.idle_add(self._on_update_success)
-        else:
-            GLib.idle_add(self._on_update_error, rc)
-
-    def _on_update_success(self):
-        self._update_running = False
-        self.update_spinner.stop()
-        self._append_log("\n✓ Update complete. Rebooting in 15 seconds…\n")
-        self._set_status(
-            "Update complete! Rebooting in 15 seconds…",
-            "emblem-ok-symbolic", "success")
-        self.subtitle.set_text("Update installed successfully.")
-        self.cancel_reboot_btn.set_visible(True)
-        self._countdown(15)
-
-    def on_cancel_reboot(self, btn):
-        self._reboot_cancelled = True
-        self.cancel_reboot_btn.set_visible(False)
-        self._set_status(
-            "Reboot cancelled — reboot manually when ready.",
-            "emblem-ok-symbolic", "success")
-        self.check_btn.set_sensitive(True)
-
-    def _on_update_error(self, code):
-        self._update_running = False
-        self.update_spinner.stop()
-        self.update_btn.set_sensitive(True)
-        self.check_btn.set_sensitive(True)
-        self._set_status(
-            f"Update failed (exit {code}). See log above for details.",
-            "dialog-error-symbolic", "error")
-        self.subtitle.set_text("Something went wrong.")
 
 
 if __name__ == "__main__":
