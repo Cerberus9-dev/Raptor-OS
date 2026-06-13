@@ -1,0 +1,122 @@
+name: Build Raptor OS ISO
+
+# ISO builds are MANUAL ONLY.
+#
+# Rationale: existing users update via "rpm-ostree upgrade" (or the Raptor
+# Update Manager). A new ISO is only needed when you want to publish a fresh
+# install image — typically after a major release, not every commit.
+#
+# How to trigger:
+#   GitHub → Actions → "Build Raptor OS ISO" → Run workflow
+#
+# Required secrets (set in repo Settings → Secrets → Actions):
+#   IA_ACCESS_KEY  — Internet Archive S3 access key
+#   IA_SECRET_KEY  — Internet Archive S3 secret key
+#   IA_IDENTIFIER  — Internet Archive item identifier (e.g. raptor-os_202506)
+#
+# Get IA credentials at: https://archive.org/account/s3.php
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Image tag to build ISO from (default: latest)"
+        required: false
+        default: "latest"
+      upload_to_ia:
+        description: "Upload finished ISO to Internet Archive"
+        type: boolean
+        default: true
+
+concurrency:
+  group: iso-build
+  cancel-in-progress: false   # Never cancel a running ISO build mid-way
+
+jobs:
+  build-iso:
+    name: Build ISO
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      # ── Free disk space ─────────────────────────────────────────────────────
+      # ISO builds are large; the osbuild workspace alone can exceed 8 GB.
+      - name: Free disk space
+        run: |
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          docker system prune -af || true
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Build ISO ───────────────────────────────────────────────────────────
+      # jasonn3/build-container-installer converts an OCI image to a bootable
+      # Anaconda-based ISO using osbuild under the hood.
+      - name: Build ISO
+        uses: jasonn3/build-container-installer@v1
+        id: build
+        with:
+          image_name: raptor-os
+          image_repo: ghcr.io/cerberus9-dev
+          image_tag: ${{ github.event.inputs.version_tag }}
+          # Keep this in sync with the Fedora version Bazzite is currently on.
+          # Check: https://github.com/ublue-os/bazzite/blob/main/recipe.yml
+          version: 42
+          variant: Kinoite
+          iso_name: raptor-os-${{ github.event.inputs.version_tag }}.iso
+
+      # ── Upload to GitHub Artifacts (always, for immediate download) ─────────
+      # 14-day retention is enough for testing. Internet Archive is the
+      # permanent home (next step).
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: raptor-os-iso-${{ github.run_number }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            ${{ steps.build.outputs.iso_path }}
+            ${{ steps.build.outputs.iso_path }}.sha256
+
+      # ── Upload to Internet Archive ──────────────────────────────────────────
+      - name: Install internetarchive CLI
+        if: github.event.inputs.upload_to_ia == 'true'
+        run: pip install internetarchive --quiet
+
+      - name: Upload to Internet Archive
+        if: github.event.inputs.upload_to_ia == 'true'
+        env:
+          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+        run: |
+          ISO_PATH="${{ steps.build.outputs.iso_path }}"
+          ISO_NAME=$(basename "$ISO_PATH")
+          SHA_PATH="${ISO_PATH}.sha256"
+          IDENTIFIER="${{ secrets.IA_IDENTIFIER }}"
+          DATE=$(date +%Y-%m-%d)
+
+          ia configure --username="" --password="" \
+            --access-key="$IA_ACCESS_KEY" \
+            --secret-key="$IA_SECRET_KEY"
+
+          ia upload "$IDENTIFIER" "$ISO_PATH" "$SHA_PATH" \
+            --metadata="title:Raptor OS — ${{ github.event.inputs.version_tag }} ($DATE)" \
+            --metadata="description:Raptor OS gaming Linux distribution. Based on Bazzite with KDE Plasma 6." \
+            --metadata="subject:Linux;Gaming;KDE;Bazzite;Fedora" \
+            --metadata="mediatype:software" \
+            --no-derive \
+            --checksum \
+            --verbose
+
+          echo ""
+          echo "✓ Uploaded to Internet Archive"
+          echo "  https://archive.org/details/$IDENTIFIER"
