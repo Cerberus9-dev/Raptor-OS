@@ -412,6 +412,13 @@ vm.panic_on_oom = 0
 
 # Prevent address space exhaustion from many small anonymous mappings.
 vm.max_map_count = 2147483642
+
+# Keep a larger pool of free pages on hand so allocations under memory
+# pressure (a game requesting a large texture buffer, etc.) don't stall
+# waiting for synchronous reclaim. 128 MB is generous for 8GB+ systems;
+# the kernel default (usually ~4-16 MB on desktop) is too thin for
+# bursty allocation patterns common in games.
+vm.min_free_kbytes = 131072
 SYSCTL
 
 # ── Systemd user drop-ins: cap RAM on the heaviest background services ─────────
@@ -425,7 +432,8 @@ for svc_dir in \
     "akonadiserver.service.d" \
     "kdeconnectd.service.d" \
     "evolution-data-server.service.d" \
-    "tracker-miner-fs-3.service.d"
+    "tracker-miner-fs-3.service.d" \
+    "kactivitymanagerd.service.d"
 do
     mkdir -p "/etc/systemd/user/${svc_dir}"
 done
@@ -465,7 +473,38 @@ MemoryHigh=48M
 MemoryMax=96M
 DROP
 
+cat << 'DROP' > /etc/systemd/user/kactivitymanagerd.service.d/raptor-memcap.conf
+# Activity tracking daemon — most users never use KDE Activities, but it
+# runs by default and its SQLite usage-tracking DB grows over time.
+[Service]
+MemoryHigh=48M
+MemoryMax=96M
+DROP
+
 echo "Memory caps installed for background services."
+
+# ── journald: cap in-memory/disk usage ────────────────────────────────────────
+# journald keeps a chunk of recent logs in a tmpfs-backed runtime journal
+# (/run/log/journal) — this is RAM. Default limits scale with disk/RAM size
+# and can reach several hundred MB. Capping both runtime (RAM) and persistent
+# (disk) journals keeps logging from quietly eating into available memory.
+mkdir -p /etc/systemd/journald.conf.d
+cat << 'JOURNALD' > /etc/systemd/journald.conf.d/raptor-memory.conf
+[Journal]
+# Runtime journal lives in /run (tmpfs = RAM). Cap it small.
+RuntimeMaxUse=64M
+# Persistent journal on disk — generous enough for troubleshooting,
+# small enough not to matter on any modern SSD.
+SystemMaxUse=200M
+JOURNALD
+
+# ── Mask ModemManager ──────────────────────────────────────────────────────────
+# ModemManager probes for cellular/WWAN hardware on every boot and stays
+# resident. Desktop and laptop gaming systems essentially never have a modem.
+# Masking (symlink to /dev/null) fully prevents it from starting; users with
+# a WWAN card can re-enable with: sudo systemctl unmask ModemManager.service
+mkdir -p /etc/systemd/system
+ln -sf /dev/null /etc/systemd/system/ModemManager.service
 
 # ── Game launch option hints ───────────────────────────────────────────────────
 cat << 'EOF' > /etc/raptor/unturned-launch-options.txt
