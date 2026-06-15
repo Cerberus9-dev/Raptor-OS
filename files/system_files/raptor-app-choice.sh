@@ -127,9 +127,18 @@ APP_CATALOGUE=(
     "FALSE|Joplin|net.cozic.joplin_desktop|Note-taking app with markdown support"
     "FALSE|MarkText|com.github.marktext.marktext|Clean markdown editor"
     "FALSE|Calibre|com.calibre_ebook.calibre|Ebook library manager"
+    # ── Office ────────────────────────────────────────────────────────────
+    "FALSE|LibreOffice|org.libreoffice.LibreOffice|Full office suite — Writer, Calc, Impress"
     # ── Creative ───────────────────────────────────────────────────────────
+    "FALSE|GIMP|org.gimp.GIMP|Photo editing and image manipulation"
+    "FALSE|Inkscape|org.inkscape.Inkscape|Vector graphics editor"
+    "FALSE|Krita|org.kde.krita|Digital painting and illustration"
+    "FALSE|Darktable|org.darktable.Darktable|RAW photo development and editing"
     "FALSE|Blender|org.blender.Blender|3D modelling, animation, rendering"
+    "FALSE|Kdenlive|org.kde.kdenlive|Non-linear video editor (KDE)"
     "FALSE|Shotcut|org.shotcut.Shotcut|Video editor (non-linear)"
+    "FALSE|OBS Studio|com.obsproject.Studio|Screen recording and live streaming"
+    "FALSE|Audacity|org.audacityteam.Audacity|Audio recording and editing"
     "FALSE|Boatswain|com.feaneron.Boatswain|Elgato Stream Deck controller"
     # ── Development ────────────────────────────────────────────────────────
     "FALSE|Godot Engine|org.godotengine.Godot|Free, open-source game engine"
@@ -140,6 +149,7 @@ APP_CATALOGUE=(
     "FALSE|Protontricks|com.github.Matoking.protontricks|Configure Steam/Proton games — install DirectX, runtimes, VC++, etc."
     "FALSE|Spotify|com.spotify.Client|Music and podcast streaming"
     "FALSE|Plex|tv.plex.PlexDesktop|Media server desktop client"
+    "FALSE|VLC|org.videolan.VLC|Plays virtually any media format/codec"
     # ── Audio ──────────────────────────────────────────────────────────────
     "FALSE|EasyEffects|com.github.wwmm.easyeffects|Headset EQ, bass boost, noise reduction via PipeWire"
     # ── System tools ───────────────────────────────────────────────────────
