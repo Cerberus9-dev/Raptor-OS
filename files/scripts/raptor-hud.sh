@@ -1099,6 +1099,25 @@ cat > "$CFG/plasma-org.kde.plasma.desktop-appletsrc" << 'APPLETSRC'
 [ActionPlugins][0]
 RightButton;NoModifier=org.kde.contextmenu
 
+[Containments][1]
+activityId=
+formfactor=0
+immutability=1
+lastScreen=0
+location=0
+plugin=org.kde.plasma.folder
+wallpaperplugin=org.kde.image
+
+[Containments][1][Applets][20]
+immutability=1
+plugin=org.kde.plasma.folder
+
+[Containments][1][Wallpaper][org.kde.image][General]
+FillMode=2
+
+[Containments][1][General]
+AppletOrder=20
+
 [Containments][2]
 activityId=
 formfactor=2
@@ -1118,13 +1137,6 @@ PreloadWeight=100
 [Containments][2][Applets][22][Configuration][Shortcuts]
 global=Alt+F1
 
-[Containments][2][Applets][23]
-immutability=1
-plugin=org.raptoros.radararc
-
-[Containments][2][Applets][23][Configuration][General]
-side=left
-
 [Containments][2][Applets][24]
 immutability=1
 plugin=org.kde.plasma.panelspacer
@@ -1141,13 +1153,6 @@ showLabels=false
 [Containments][2][Applets][26]
 immutability=1
 plugin=org.kde.plasma.panelspacer
-
-[Containments][2][Applets][27]
-immutability=1
-plugin=org.raptoros.radararc
-
-[Containments][2][Applets][27][Configuration][General]
-side=right
 
 [Containments][2][Applets][28]
 immutability=1
@@ -1176,7 +1181,7 @@ immutability=1
 plugin=org.kde.plasma.showdesktop
 
 [Containments][2][General]
-AppletOrder=22;23;24;25;26;27;28;29;30
+AppletOrder=22;24;25;26;28;29;30
 
 [Containments][2][Configuration]
 PreloadWeight=0
@@ -1451,15 +1456,18 @@ cat << 'EOF' > /usr/lib/systemd/user/raptor-hud-apply.service
 [Unit]
 Description=Raptor HUD — Apply KDE theme on first login
 After=plasma-plasmashell.service
-# v2 stamp: forces re-application on installs where the kwriteconfig5 version
-# ran and wrote the v1 stamp (.../raptor-hud-applied) without applying anything.
-# Delete ~/.local/share/raptor-hud-applied-v2 to re-run manually.
-ConditionPathExists=!%h/.local/share/raptor-hud-applied-v2
+# v3 stamp: v2 shipped an appletsrc with ONLY a Panel containment (no Desktop
+# containment) and radararc applets that could fail to load, both of which
+# risked Plasma falling back to a default/empty layout. v3 adds a complete
+# Desktop containment and removes radararc from the auto-generated panel
+# (still installed as an optional widget — add via "Add Widgets" if desired).
+# Delete ~/.local/share/raptor-hud-applied-v3 to re-run manually.
+ConditionPathExists=!%h/.local/share/raptor-hud-applied-v3
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v2'
+ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v3'
 RemainAfterExit=yes
 
 [Install]
