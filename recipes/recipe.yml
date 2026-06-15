@@ -57,7 +57,6 @@ modules:
       # KDE extras
       - plasma-systemmonitor
       - gwenview
-      - kamoso
       - kcalc
       - variety
 
@@ -65,20 +64,15 @@ modules:
       - power-profiles-daemon
 
       # Multimedia
-      - vlc
+      # mpv only — lightweight, no large runtime deps. VLC, OBS, Audacity,
+      # and Kdenlive are available in the firstboot optional app picker.
       - mpv
-      - obs-studio
-      - audacity
-      - kdenlive
 
-      # Creative
-      - gimp
-      - inkscape
-      - krita
-      - darktable
-
-      # Office
-      - libreoffice
+      # Creative & Office apps (GIMP, Inkscape, Krita, Darktable, LibreOffice)
+      # moved to the firstboot optional app picker — these RPMs pull in
+      # large dependency trees (Qt/GTK image processing libs, color
+      # management, spell-check dictionaries) that add significant size to
+      # every install regardless of whether the user ever opens them.
 
       # Gaming
       - gamemode
