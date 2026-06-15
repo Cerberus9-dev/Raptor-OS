@@ -113,6 +113,33 @@ _apply_audio_powersave() {
     done
 }
 
+# ── cgroup v2 memory.reclaim — the actual "free RAM now" lever ────────────────
+# drop_caches only touches kernel-internal page/dentry/inode caches, which on
+# a freshly-booted system are often small (tens of MB). The vast majority of
+# "used" RAM on a gaming desktop is ANONYMOUS memory held by running apps —
+# Firefox tabs, Discord/Vesktop, Steam, etc. memory.reclaim (kernel 5.10+,
+# present on all Fedora/Bazzite kernels) asks the kernel to walk the LRU of
+# every process in a cgroup, write back dirty pages, drop clean pages, and
+# swap out cold anonymous pages to zram. This is what actually moves the
+# "Freed XXX MB" number in the Cortex UI.
+#
+# NEVER write to the root cgroup's memory.reclaim — that walks ALL processes
+# including system services and can reclaim pages a game is actively using.
+# Scoped to user.slice: covers Firefox/Vesktop/Steam/etc., not the kernel
+# or system daemons.
+_reclaim_user_slice() {
+    local amount="${1:-1073741824}"  # bytes; default 1 GiB request
+    local wrote=0
+    for f in /sys/fs/cgroup/user.slice/memory.reclaim \
+             /sys/fs/cgroup/user.slice/user-*.slice/memory.reclaim \
+             /sys/fs/cgroup/user.slice/user-*.slice/user@*.service/memory.reclaim; do
+        if [ -w "$f" ]; then
+            echo "$amount" > "$f" 2>/dev/null && wrote=1
+        fi
+    done
+    return 0
+}
+
 # FIX: clear Powerdevil session action so switching to power-saver
 # doesn't trigger a logout/suspend. Patches every user's config and
 # tells the running daemon to reload.
@@ -156,6 +183,8 @@ case "$ACTION" in
             echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
             echo 2 > /proc/sys/vm/drop_caches 2>/dev/null || true
             echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true
+            # Reclaim ~1 GiB from running user apps (Firefox, Vesktop, Steam, etc.)
+            _reclaim_user_slice 1073741824
         fi
         [ "$DO_COMPACT" = "1" ] && echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
         if [ "$DO_ZRAM" = "1" ]; then
@@ -182,6 +211,10 @@ case "$ACTION" in
             echo 1 > /proc/sys/kernel/numa_balancing 2>/dev/null || true
             echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
             echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
+            # Deep clean: request a much larger reclaim (~3 GiB). The kernel
+            # reclaims at most what's actually reclaimable — over-requesting
+            # is harmless, it just means "give back everything you can".
+            _reclaim_user_slice 3221225472
         fi
         if [ "$DO_SWAP" = "1" ]; then
             CURRENT=$(cat /proc/sys/vm/swappiness 2>/dev/null || echo 80)
@@ -194,14 +227,6 @@ case "$ACTION" in
             echo defer+madvise > /sys/kernel/mm/transparent_hugepage/defrag  2>/dev/null || true
         fi
         [ "$DO_CPU" = "1" ] && echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
-        # Send USR1 only to processes with safe handlers.
-        # kwin_wayland and kwin_x11 do NOT catch SIGUSR1 — the kernel would
-        # terminate them, causing a full compositor restart (screen goes black).
-        for proc in plasmashell kded6 baloo_file; do
-            for pid in $(pgrep "$proc" 2>/dev/null || true); do
-                kill -USR1 "$pid" 2>/dev/null || true
-            done
-        done
         ;;
 
     # ── Per-mode kernel tuning ─────────────────────────────────────────────
@@ -296,6 +321,9 @@ case "$ACTION" in
         sync || true
         echo 1 > /proc/sys/vm/drop_caches    2>/dev/null || true
         echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true
+        # Reclaim ~1.5 GiB from background apps before the game starts —
+        # frees real RAM the game can use, not just kernel caches.
+        _reclaim_user_slice 1610612736
         BACKGROUND_PROCS=(
             "tracker-miner" "tracker-store" "tracker3"
             "baloo_file" "baloo_file_extractor" "akonadi"
@@ -963,7 +991,43 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
     def on_resume(self, btn):
         for _, pattern in ALL_SERVICES:
             if pattern in self._cortex_patterns:
-                subprocess.run(["pkill", "-CONT", "-f", pattern], capture_output=True)
+                subprocess.run(["pkill", "-CONT", "-f", pattern], capture_output=True)#!/bin/bash
+set -e
+
+# =============================================================================
+# Raptor Cortex v4.1 — Unified Memory & Performance Management
+# • RAM optimization with page cache management, compaction, zram recompress
+# • Background service trimming/restoring for gaming
+# • Seamless performance mode switching (no login required)
+# • Game mode auto-suspend/resume via Cortex patterns
+# • CPU boost management (complements GPU Profiler)
+# • Per-mode kernel tuning (power/balanced/performance)
+# • Battery slider passthrough via power-profiles-daemon
+# • PCIe ASPM, NVMe power states, USB autosuspend, runtime PM
+# =============================================================================
+
+# ── Custom icon ───────────────────────────────────────────────────────────────
+mkdir -p /usr/share/icons/hicolor/scalable/apps
+cat << 'SVGEOF' > /usr/share/icons/hicolor/scalable/apps/raptor-cortex.svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#4c1d95"/>
+    </radialGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#bg)"/>
+  <circle cx="32" cy="32" r="24" fill="none" stroke="#a78bfa" stroke-width="1.5"
+          stroke-dasharray="12 4" stroke-linecap="round"/>
+  <line x1="32" y1="10" x2="32" y2="18" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="32" y1="46" x2="32" y2="54" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="10" y1="32" x2="18" y2="32" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="46" y1="32" x2="54" y2="32" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+
         self._suspended_now.clear()
         self.resume_btn.set_sensitive(False)
         self.sus_group.set_visible(False)
