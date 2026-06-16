@@ -5,6 +5,100 @@
 - Custom KDE splash screen
 - Custom Raptor OS logo
 - Better seamless fully custom wallpaper system like windows
+- Functional Custom taskbar (In progress)
+
+## [v2.6.2] - 2026-06-13 (Taskbar Stability, Real Memory Reclaim & Smaller Install)
+
+### Fixed
+
+- **"Optimize Memory Now" crashed the taskbar** — the optimize routine sent
+  `SIGUSR1` to `plasmashell` and `kded6` as part of a (non-functional) memory-trim
+  signal. Neither process installs a SIGUSR1 handler, so the kernel's default
+  action — terminate — applied. Killing `plasmashell` is killing the panel; systemd
+  restarted it immediately, which looked like the taskbar vanishing and reappearing.
+  The entire signal-based mechanism has been removed
+
+- **Panel layout still broken after the v2 HUD rewrite** — the v2 `appletsrc`
+  defined only a Panel containment with no Desktop containment, and included two
+  `org.raptoros.radararc` applets (custom Canvas/QML). If that plasmoid hit any
+  QML error on load, Plasma 6 could abort loading the rest of the containment's
+  applets or fall back to a default layout — taking the whole panel with it.
+  Rewrote `appletsrc` (now v3) with a complete Desktop containment alongside the
+  Panel, and removed the radar arc applets from the auto-generated layout. The
+  panel now uses only stock, known-good KDE applets: launcher, task manager,
+  system tray, clock, show desktop
+
+- **`partitionmanager` package not found** — Fedora's package providing the
+  `partitionmanager` binary is named `kde-partitionmanager`; corrected in
+  `recipe.yml`
+
+- **Firefox memory policy silently ignored on existing profiles** — the
+  `policies.json` written in v2.6 used `"Status": "default"`, which only applies
+  if the user has no existing value for that preference. Any profile that wasn't
+  brand new already had its own `browser.cache.memory.capacity` etc., so the
+  64 MB cap, process-count reduction, and tab-unloading were never actually
+  applied. Changed all ten memory-related policies to `"Status": "user"`, which
+  writes the value directly into the profile, overriding whatever was there
+
+- **Changelog structure** — a previous edit dropped the `## [v2.6]` version
+  header while inserting `v2.6.1` above it, leaving v2.6's entire feature list
+  (300+ lines) orphaned under the v2.6.1 heading with a duplicate `### Fixed`.
+  Header restored
+
+### Added
+
+- **Real memory reclaim via cgroup v2** — `drop_caches` only affects kernel-internal
+  page/dentry/inode caches, which are often small on a normal desktop. The bulk of
+  "used" RAM is anonymous memory held by running apps (Firefox, Vesktop, Steam).
+  Added `_reclaim_user_slice()`, which writes to
+  `/sys/fs/cgroup/user.slice/memory.reclaim` (cgroup v2, kernel 5.10+) — this walks
+  the LRU of every process under `user.slice` and writes back/drops/swaps-to-zram
+  whatever's reclaimable, scoped to user processes only (never the root cgroup).
+  Wired into "Drop caches" (1 GiB request), "Deep Clean" (3 GiB), and game-mode
+  entry via `trim-background` (1.5 GiB) — the "Freed XXX MB" number in Cortex now
+  reflects real memory given back by background apps, not just kernel cache trivia
+
+- **`vm.min_free_kbytes = 131072`** — added to the baseline sysctl. The kernel
+  default (often 4–16 MB on desktop) is thin for the large, bursty allocations
+  games make; a bigger free-page reserve avoids synchronous-reclaim stalls at
+  allocation time
+
+- **journald RAM caps** — `/etc/systemd/journald.conf.d/raptor-memory.conf` limits
+  the runtime journal (tmpfs-backed, i.e. RAM) to 64 MB and the persistent on-disk
+  journal to 200 MB; default limits scale with disk size and can otherwise reach
+  several hundred MB in the runtime journal alone
+
+- **`ModemManager.service` masked** — probes for cellular hardware on every boot
+  and stays resident afterward; essentially no gaming desktop or laptop has a WWAN
+  modem. Re-enable with `sudo systemctl unmask ModemManager.service` if needed
+
+- **`kactivitymanagerd` memory cap** — `MemoryHigh=48M` / `MemoryMax=96M`; was
+  already in Cortex's gaming-mode suspend list but had no systemd memory cap like
+  the other background services. Its activity-tracking database grows over time
+  even for users who never touch KDE Activities
+
+- **GitHub Actions workflow overhaul** — `build.yml` now only triggers on changes
+  to `recipes/**` and `files/**` (README/changelog edits no longer trigger a
+  10–15 minute image build), runs on a weekly schedule to pick up upstream Bazzite
+  updates, and cancels in-progress runs when a new push arrives. ISO building moved
+  to a separate, manually-triggered `build-iso.yml` with Internet Archive upload
+  support — ISOs are now built on-demand for releases rather than on every commit
+
+### Changed
+
+- **Smaller fresh install** — moved nine apps out of the default RPM install into
+  the firstboot optional picker: GIMP, Inkscape, Krita, Darktable, Kdenlive, OBS
+  Studio, Audacity, LibreOffice, and VLC. These pull in substantial dependency
+  trees (color management, spell-check dictionaries, codec packs, separate Qt/GTK
+  creative-app stacks) that previously added significant size to every install
+  regardless of use. `mpv` remains as the default lightweight media player.
+  `kamoso` (webcam booth app) removed entirely — rarely used, and Vesktop/OBS/
+  browser all cover the same need
+
+- **Radar arc HUD widget no longer auto-added to the panel** — removed from the
+  default layout for stability (see Fixed, above). The plasmoid is still installed
+  at `/usr/share/plasma/plasmoids/org.raptoros.radararc/` and can be added manually
+  via Plasma's "Add Widgets" panel
 
 ## [v2.6.1] - 2026-06-11 (Build Hotfixes)
 
@@ -30,7 +124,7 @@
   MangoHud, and gamemode configs); BBR congestion control, CAKE qdisc, TCP buffer
   tuning, and Cloudflare DoT DNS now reliably deploy with every build
 
-
+## [v2.6] - 2026-06-11 (Full System Overhaul — Gaming, Audio, Network & Bug Sweep)
 
 ### Fixed
 
