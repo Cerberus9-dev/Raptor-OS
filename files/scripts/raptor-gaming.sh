@@ -2,9 +2,12 @@
 set -oue pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Raptor OS — Gaming & System Optimization  v2.2
-# Covers: Lutris, Steam, ulimits, browser hardening (Firefox + Brave),
-#         background process trimmer, ZRAM setup, and I/O scheduler tuning.
+# Raptor OS — Gaming & System Optimization  v2.6
+# Covers: app launcher configs (Lutris, Steam), browser hardening (Firefox,
+#         Brave), background process trimmer, I/O scheduler tuning, MangoHud
+#         theme, gamemode.ini, input udev rules, fastfetch config, network
+#         sysctl, DNS, journald caps, ModemManager masking, and systemd
+#         cgroup memory caps for background services.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ── Ensure required directories exist ─────────────────────────────────────────
