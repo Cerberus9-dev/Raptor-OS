@@ -1182,6 +1182,10 @@ plugin=org.kde.plasma.showdesktop
 
 [Containments][2][General]
 AppletOrder=22;24;25;26;28;29;30
+panelMinimumLength=0
+panelMaximumLength=10000
+panelAlignment=0
+thickness=48
 
 [Containments][2][Configuration]
 PreloadWeight=0
