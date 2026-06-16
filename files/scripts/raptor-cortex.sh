@@ -164,10 +164,19 @@ _clear_powerdevil_session_action() {
     done < /etc/passwd
     # Tell Powerdevil daemon to reload
     for uid in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $1}' || true); do
-        runuser -u "#$uid" -- \
-            dbus-send --session --dest=org.kde.Solid.PowerManagement \
-            /org/kde/Solid/PowerManagement \
-            org.kde.Solid.PowerManagement.refreshStatus 2>/dev/null || true
+        # sudo + env: reliably passes the session bus path to the target user.
+        # runuser does not inherit the session environment consistently on
+        # Bazzite; bare env-prefix (VAR=x sudo ...) is not interpreted by sudo.
+        RUNTIME_DIR="/run/user/$uid"
+        if [ -d "$RUNTIME_DIR" ]; then
+            sudo -u "#$uid" \
+                env DBUS_SESSION_BUS_ADDRESS="unix:path=$RUNTIME_DIR/bus" \
+                dbus-send --session \
+                    --dest=org.kde.Solid.PowerManagement \
+                    /org/kde/Solid/PowerManagement \
+                    org.kde.Solid.PowerManagement.refreshStatus \
+                    2>/dev/null || true
+        fi
     done
 }
 
@@ -745,17 +754,20 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         opts_group.set_description("Choose what to run when you click Optimize Memory Now.")
         content.append(opts_group)
 
-        self.opt_caches  = self._switch_row("Drop page/dentry/inode caches",    "Immediately frees RAM",                          True)
+        self.opt_caches  = self._switch_row("Drop caches + reclaim app memory",
+                                             "Frees kernel caches AND asks running apps (Firefox, Vesktop, Steam) to release cold pages",
+                                             True)
         opts_group.add(self.opt_caches)
         self.opt_compact = self._switch_row("Memory compaction",                 "Reduces fragmentation",                          True)
         opts_group.add(self.opt_compact)
         self.opt_zram    = self._switch_row("zram recompress",                   "Re-squeeze compressed swap pages",               True)
         opts_group.add(self.opt_zram)
-        self.opt_swap    = self._switch_row("Swap pressure flush",               "Push cold pages to swap temporarily",            True)
+        self.opt_swap    = self._switch_row("Swap pressure flush",               "Push cold pages to ZRAM swap (aggressive — use before gaming)",
+                                             False)
         opts_group.add(self.opt_swap)
         self.opt_oom     = self._switch_row("Adjust OOM scores",                 "Protect KDE shell; make browsers killable",      True)
         opts_group.add(self.opt_oom)
-        self.opt_deep    = self._switch_row("Deep Clean (slow)",                 "Flush hugepages + NUMA + slab caches",           False)
+        self.opt_deep    = self._switch_row("Deep Clean (slow)",                 "Flush hugepages + NUMA + slab caches + reclaim 3 GiB", False)
         opts_group.add(self.opt_deep)
 
         cortex_group = Adw.PreferencesGroup(title="Raptor Cortex — Game Mode")
@@ -991,43 +1003,7 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
     def on_resume(self, btn):
         for _, pattern in ALL_SERVICES:
             if pattern in self._cortex_patterns:
-                subprocess.run(["pkill", "-CONT", "-f", pattern], capture_output=True)#!/bin/bash
-set -e
-
-# =============================================================================
-# Raptor Cortex v4.1 — Unified Memory & Performance Management
-# • RAM optimization with page cache management, compaction, zram recompress
-# • Background service trimming/restoring for gaming
-# • Seamless performance mode switching (no login required)
-# • Game mode auto-suspend/resume via Cortex patterns
-# • CPU boost management (complements GPU Profiler)
-# • Per-mode kernel tuning (power/balanced/performance)
-# • Battery slider passthrough via power-profiles-daemon
-# • PCIe ASPM, NVMe power states, USB autosuspend, runtime PM
-# =============================================================================
-
-# ── Custom icon ───────────────────────────────────────────────────────────────
-mkdir -p /usr/share/icons/hicolor/scalable/apps
-cat << 'SVGEOF' > /usr/share/icons/hicolor/scalable/apps/raptor-cortex.svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#7c3aed"/>
-      <stop offset="100%" stop-color="#4c1d95"/>
-    </radialGradient>
-    <radialGradient id="core" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#c4b5fd"/>
-      <stop offset="100%" stop-color="#7c3aed"/>
-    </radialGradient>
-  </defs>
-  <circle cx="32" cy="32" r="30" fill="url(#bg)"/>
-  <circle cx="32" cy="32" r="24" fill="none" stroke="#a78bfa" stroke-width="1.5"
-          stroke-dasharray="12 4" stroke-linecap="round"/>
-  <line x1="32" y1="10" x2="32" y2="18" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
-  <line x1="32" y1="46" x2="32" y2="54" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
-  <line x1="10" y1="32" x2="18" y2="32" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
-  <line x1="46" y1="32" x2="54" y2="32" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
-
+                subprocess.run(["pkill", "-CONT", "-f", pattern], capture_output=True)
         self._suspended_now.clear()
         self.resume_btn.set_sensitive(False)
         self.sus_group.set_visible(False)
