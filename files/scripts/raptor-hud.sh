@@ -1227,21 +1227,40 @@ if [ -f "$WP_FILE" ]; then
     [ -f "$WP" ] && raptor-set-wallpaper "$WP" 2>/dev/null || true
 fi
 
-# ── 10. Restart Plasma — works on both Wayland and X11 ───────────────────────
-# Tell KWin to reload its config first (picks up decoration changes without full restart)
+# ── 10. Restart Plasma — works on Wayland and inside systemd user services ────
+# Systemd user services do not automatically inherit DBUS_SESSION_BUS_ADDRESS,
+# WAYLAND_DISPLAY, or XDG_RUNTIME_DIR from the interactive session — they only
+# get them if KDE's startplasma-wayland already called
+# `systemctl --user import-environment` before this service fired.
+# Set them explicitly so kquitapp6 and plasmashell --replace always work.
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+
+# Reload KWin config without restarting it (picks up decoration/compositor changes)
 if command -v qdbus6 &>/dev/null; then
     qdbus6 org.kde.KWin /KWin reconfigure 2>/dev/null || true
 else
     qdbus  org.kde.KWin /KWin reconfigure 2>/dev/null || true
 fi
 
-# Quit the running plasmashell, then relaunch without pinning to X11 display.
-# On Wayland the WAYLAND_DISPLAY / XDG_RUNTIME_DIR are inherited from the
-# systemd user service environment — do NOT set DISPLAY=:0 here.
-kquitapp6 plasmashell 2>/dev/null || kquitapp5 plasmashell 2>/dev/null || true
-sleep 2
-plasmashell --replace &>/dev/null &
-disown
+# Restart plasmashell via systemd unit — most reliable inside a user service
+# because systemctl talks to the user manager via a private socket, not D-Bus.
+if systemctl --user restart plasma-plasmashell.service 2>/dev/null; then
+    echo "Plasmashell restarted via systemd"
+else
+    # Fallback 1: D-Bus quit request (needs DBUS_SESSION_BUS_ADDRESS above)
+    kquitapp6 plasmashell 2>/dev/null || \
+    kquitapp5 plasmashell 2>/dev/null || \
+    # Fallback 2: force kill — always works, less graceful
+    killall plasmashell 2>/dev/null || true
+    sleep 2
+    WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+    DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
+    plasmashell --replace &>/dev/null &
+    disown
+fi
 
 echo "RAPTOR_HUD_APPLIED"
 EOF
@@ -1460,18 +1479,18 @@ cat << 'EOF' > /usr/lib/systemd/user/raptor-hud-apply.service
 [Unit]
 Description=Raptor HUD — Apply KDE theme on first login
 After=plasma-plasmashell.service
-# v3 stamp: v2 shipped an appletsrc with ONLY a Panel containment (no Desktop
-# containment) and radararc applets that could fail to load, both of which
-# risked Plasma falling back to a default/empty layout. v3 adds a complete
-# Desktop containment and removes radararc from the auto-generated panel
-# (still installed as an optional widget — add via "Add Widgets" if desired).
-# Delete ~/.local/share/raptor-hud-applied-v3 to re-run manually.
-ConditionPathExists=!%h/.local/share/raptor-hud-applied-v3
+# v4 stamp: v3 fixed the appletsrc structure. v4 fixes the plasmashell
+# restart — kquitapp6 silently fails when DBUS_SESSION_BUS_ADDRESS is
+# absent from the systemd user service env. v4 sets all session env vars
+# explicitly and uses systemctl --user restart plasma-plasmashell.service
+# as the primary method (uses private socket, not D-Bus).
+# Delete ~/.local/share/raptor-hud-applied-v4 to re-run manually.
+ConditionPathExists=!%h/.local/share/raptor-hud-applied-v4
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v3'
+ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v4'
 RemainAfterExit=yes
 
 [Install]
