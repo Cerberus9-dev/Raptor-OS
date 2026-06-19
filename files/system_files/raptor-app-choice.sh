@@ -156,6 +156,8 @@ APP_CATALOGUE=(
     "FALSE|Warehouse|io.github.flattool.Warehouse|Browse, manage and clean up installed Flatpak apps"
     "FALSE|Impression|io.gitlab.adhami3310.Impression|Flash OS images to USB drives"
     "FALSE|CoreCtrl|org.corectrl.CoreCtrl|AMD GPU and CPU control — overclocking, fan curves, power limits"
+    # ── Communication ──────────────────────────────────────────────────────
+    "FALSE|Thunderbird|org.mozilla.Thunderbird|Email and calendar client"
 )
 
 # ── Build zenity argument list ────────────────────────────────────────────────
