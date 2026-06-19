@@ -1038,27 +1038,27 @@ QMLEOF
 # appletsrc file doesn't exist yet and Plasma ignores partial writes on first run.
 cat << 'EOF' > /usr/lib/raptor/hud/apply-plasma-panel.sh
 #!/bin/bash
-# apply-plasma-panel.sh  v5.0 — Raptor OS HUD theme + panel setup
+# apply-plasma-panel.sh  v6.0 — Raptor OS HUD theme applicator
 #
-# TWO-PHASE design that fixes four bugs from v4:
-#   1. THEME (colours, plasmarc, icons) — runs EVERY time: safe, no side effects
-#   2. PANEL LAYOUT (appletsrc)         — runs ONCE: guarded by [RaptorOS] marker
-#      - reads and restores current wallpaper + pinned launchers before write
-#      - does NOT use systemctl restart (caused reboot hang via target cascade)
-#      - uses detached delayed subshell instead: service exits, THEN plasmashell
-#        restarts 5 s later with no systemd involvement
+# THEME ONLY. Never touches plasma-org.kde.plasma.desktop-appletsrc,
+# never writes wallpaper, never clears pinned apps. The F-22 HUD visual
+# look (dark panel + neon glow) comes entirely from the RaptorOS Plasma
+# theme SVGs — the panel structure is irrelevant.
+#
+# v1-v5 all had variants of the same bug: modifying the appletsrc caused
+# the wallpaper to reset, pinned apps to clear, and either broke the boot
+# sequence (v4 used systemctl restart plasma-plasmashell which is PartOf
+# graphical-session.target) or silently failed when D-Bus vars weren't
+# in the service environment.
 
 set -euo pipefail
 
-CFG="$HOME/.config"
-APPLETSRC="$CFG/plasma-org.kde.plasma.desktop-appletsrc"
-
-# ── Session env — set explicitly; systemd user services may not inherit them ──
+# Session env — set explicitly; systemd user services don't always inherit these
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 
-# ── kwriteconfig shim ─────────────────────────────────────────────────────────
+# kwriteconfig shim — tries Plasma 6 first, falls back to 5
 kwc() {
     if command -v kwriteconfig6 &>/dev/null; then
         kwriteconfig6 "$@" 2>/dev/null || true
@@ -1067,36 +1067,41 @@ kwc() {
     fi
 }
 
-# ═══════════════════════════════════════════════════════
-# PHASE 1 — THEME  (always runs, never touches layout)
-# ═══════════════════════════════════════════════════════
+# Verify the RaptorOS theme is installed before trying to apply it.
+# If it's missing for any reason, bail rather than leaving plasmarc
+# pointing at a theme that doesn't exist (causes Breeze fallback).
+THEME_DIR="/usr/share/plasma/desktoptheme/RaptorOS"
+if [ ! -f "$THEME_DIR/metadata.desktop" ] && [ ! -f "$THEME_DIR/metadata.json" ]; then
+    echo "ERROR: RaptorOS Plasma theme not found at $THEME_DIR — aborting theme apply"
+    exit 1
+fi
 
-# 1. Colour scheme
+# ── 1. Colour scheme ──────────────────────────────────────────────────────────
 plasma-apply-colorscheme RaptorOS 2>/dev/null \
     || plasma-apply-colorscheme /usr/share/color-schemes/RaptorOS.colors 2>/dev/null \
     || true
 kwc --file kdeglobals --group General --key ColorScheme RaptorOS
 kwc --file kdeglobals --group General --key Name        RaptorOS
 
-# 2. Plasma theme (controls panel background / neon glow)
+# ── 2. Plasma theme (provides the panel-background.svg neon glow) ─────────────
 kwc --file plasmarc --group Theme --key name RaptorOS
 
-# 3. Icons
+# ── 3. Icons ──────────────────────────────────────────────────────────────────
 ICON_THEME="breeze-dark"
 kwc --file kdeglobals --group Icons --key Theme "$ICON_THEME"
 kwc --file kdeglobals --group KDE   --key LookAndFeelPackage org.kde.breezedark.desktop
 plasma-apply-icon-theme "$ICON_THEME" 2>/dev/null || true
 
-# 4. Window decoration
+# ── 4. Window decoration ──────────────────────────────────────────────────────
 kwc --file kwinrc --group "org.kde.kdecoration2" --key library org.kde.kwin.aurorae
 kwc --file kwinrc --group "org.kde.kdecoration2" --key theme "__aurorae__svg__RaptorOS"
 
-# 5. Kvantum
+# ── 5. Kvantum ────────────────────────────────────────────────────────────────
 mkdir -p "$HOME/.config/Kvantum"
 printf '[General]\ntheme=RaptorOS\n' > "$HOME/.config/Kvantum/kvantum.kvconfig"
 kwc --file kdeglobals --group KDE --key widgetStyle kvantum
 
-# 6. GTK
+# ── 6. GTK ────────────────────────────────────────────────────────────────────
 mkdir -p "$HOME/.config/gtk-3.0"
 cat > "$HOME/.config/gtk-3.0/settings.ini" << GTKEOF
 [Settings]
@@ -1107,168 +1112,24 @@ gtk-font-name=JetBrains Mono 10
 gtk-application-prefer-dark-theme=1
 GTKEOF
 
-# 7. Sycoca + icon loader notify
+# ── 7. Sycoca rebuild + icon loader notify ────────────────────────────────────
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" kbuildsycoca6 --noincremental 2>/dev/null \
     || XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" kbuildsycoca5 --noincremental 2>/dev/null \
     || true
 dbus-send --session --dest=org.kde.KIconLoader --type=signal \
     /KIconLoader org.kde.KIconLoader.iconChanged int32:0 2>/dev/null || true
 
-# 8. KWin reload (decoration changes, no compositor restart)
+# ── 8. KWin decoration reload (no compositor restart) ─────────────────────────
 qdbus6 org.kde.KWin /KWin reconfigure 2>/dev/null \
     || qdbus org.kde.KWin /KWin reconfigure 2>/dev/null \
     || true
 
-# ═══════════════════════════════════════════════════════
-# PHASE 2 — PANEL LAYOUT  (runs only once per install)
-#
-# Guarded by a [RaptorOS] section in the appletsrc.
-# Future theme-only bumps (v6, v7...) skip this block,
-# so the user's pinned apps, wallpaper, and panel
-# customisations are NEVER touched again after first run.
-# ═══════════════════════════════════════════════════════
-
-if ! grep -q "^\[RaptorOS\]" "$APPLETSRC" 2>/dev/null; then
-
-    # Read wallpaper + launchers from the EXISTING config before overwriting
-    WALLPAPER=""
-    LAUNCHERS=""
-    if [ -f "$APPLETSRC" ]; then
-        WALLPAPER=$(grep -m1 "^Image="     "$APPLETSRC" 2>/dev/null | cut -d= -f2- || true)
-        LAUNCHERS=$(grep -m1 "^launchers=" "$APPLETSRC" 2>/dev/null | cut -d= -f2- || true)
-    fi
-
-    # Write the HUD panel config
-    cat > "$APPLETSRC" << 'APPLETSRC_EOF'
-[RaptorOS]
-managed=true
-note=This section tells raptor-hud-apply.service that the panel layout has been applied. Delete this section to reset the panel to Raptor HUD defaults on next login.
-
-[ActionPlugins][0]
-RightButton;NoModifier=org.kde.contextmenu
-
-[Containments][1]
-activityId=
-formfactor=0
-immutability=1
-lastScreen=0
-location=0
-plugin=org.kde.plasma.folder
-wallpaperplugin=org.kde.image
-
-[Containments][1][Applets][20]
-immutability=1
-plugin=org.kde.plasma.folder
-
-[Containments][1][Wallpaper][org.kde.image][General]
-FillMode=2
-
-[Containments][1][General]
-AppletOrder=20
-
-[Containments][2]
-activityId=
-formfactor=2
-immutability=1
-lastScreen=0
-location=4
-plugin=org.kde.panel
-wallpaperplugin=org.kde.image
-
-[Containments][2][Applets][22]
-immutability=1
-plugin=org.kde.plasma.kickoff
-
-[Containments][2][Applets][22][Configuration]
-PreloadWeight=100
-
-[Containments][2][Applets][22][Configuration][Shortcuts]
-global=Alt+F1
-
-[Containments][2][Applets][24]
-immutability=1
-plugin=org.kde.plasma.panelspacer
-
-[Containments][2][Applets][25]
-immutability=1
-plugin=org.kde.plasma.icontasks
-
-[Containments][2][Applets][25][Configuration][General]
-maxStripes=1
-showLabels=false
-
-[Containments][2][Applets][26]
-immutability=1
-plugin=org.kde.plasma.panelspacer
-
-[Containments][2][Applets][28]
-immutability=1
-plugin=org.kde.plasma.systemtray
-
-[Containments][2][Applets][28][Configuration]
-PreloadWeight=100
-
-[Containments][2][Applets][28][Configuration][General]
-extraItems=org.kde.plasma.battery,org.kde.plasma.networkmanagement,org.kde.plasma.volume,org.kde.plasma.bluetooth
-shownItems=org.kde.plasma.networkmanagement,org.kde.plasma.battery
-
-[Containments][2][Applets][29]
-immutability=1
-plugin=org.kde.plasma.digitalclock
-
-[Containments][2][Applets][29][Configuration][Appearance]
-customFontSize=11
-fontFamily=JetBrains Mono
-showDate=false
-showSeconds=true
-use24hFormat=2
-
-[Containments][2][Applets][30]
-immutability=1
-plugin=org.kde.plasma.showdesktop
-
-[Containments][2][General]
-AppletOrder=22;24;25;26;28;29;30
-panelMinimumLength=0
-panelMaximumLength=10000
-panelAlignment=0
-thickness=48
-
-[Containments][2][Configuration]
-PreloadWeight=0
-
-[ScreenMapping]
-itemsOnDisabledScreens=
-APPLETSRC_EOF
-
-    # Restore wallpaper if we read one from the previous config
-    if [ -n "$WALLPAPER" ]; then
-        printf '\n[Containments][1][Wallpaper][org.kde.image][General]\nImage=%s\n' \
-            "$WALLPAPER" >> "$APPLETSRC"
-    fi
-
-    # Restore pinned taskbar launchers if we read them
-    if [ -n "${LAUNCHERS:-}" ]; then
-        kwc --file plasma-org.kde.plasma.desktop-appletsrc \
-            --group "Containments" --group "2" \
-            --group "Applets"      --group "25" \
-            --group "Configuration" --group "General" \
-            --key "launchers" "$LAUNCHERS"
-    fi
-
-fi   # end PHASE 2
-
-# ═══════════════════════════════════════════════════════
-# RESTART plasmashell
-#
-# Using a detached delayed subshell so this script exits
-# cleanly (service completes, stamp written) BEFORE the
-# restart happens. systemctl restart was removed because
-# plasma-plasmashell.service is PartOf=graphical-session.target
-# — restarting it via systemd mid-session triggered a target
-# cascade that caused the machine to hang on reboot.
-# ═══════════════════════════════════════════════════════
-
+# ── 9. Restart plasmashell to load the new theme ──────────────────────────────
+# Runs in a fully detached subshell so this script exits cleanly first.
+# The stamp is written (ExecStartPost) before plasmashell restarts.
+# systemctl restart is intentionally NOT used — plasma-plasmashell.service
+# is PartOf=graphical-session.target; restarting via systemd cascades and
+# hung the machine on reboot in v4.
 (
     sleep 5
     killall plasmashell 2>/dev/null || true
@@ -1280,7 +1141,7 @@ fi   # end PHASE 2
 ) &>/dev/null &
 disown
 
-echo "RAPTOR_HUD_APPLIED"
+echo "RAPTOR_HUD_APPLIED_V6"
 EOF
 chmod +x /usr/lib/raptor/hud/apply-plasma-panel.sh
 
@@ -1502,13 +1363,13 @@ After=plasma-plasmashell.service
 # absent from the systemd user service env. v4 sets all session env vars
 # explicitly and uses systemctl --user restart plasma-plasmashell.service
 # as the primary method (uses private socket, not D-Bus).
-# Delete ~/.local/share/raptor-hud-applied-v5 to re-run manually.
-ConditionPathExists=!%h/.local/share/raptor-hud-applied-v5
+# Delete ~/.local/share/raptor-hud-applied-v6 to re-run manually.
+ConditionPathExists=!%h/.local/share/raptor-hud-applied-v6
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v5'
+ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v6'
 RemainAfterExit=yes
 
 [Install]
