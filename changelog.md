@@ -5,7 +5,55 @@
 - Custom KDE splash screen
 - Custom Raptor OS logo
 - Better seamless fully custom wallpaper system like windows
-- Functional Custom taskbar (In progress)
+
+## [v2.6.3] - 2026-06-18 (Audio Static, Taskbar & Wallpaper Fixes)
+
+### Fixed
+
+- **Audio static / crackling** — `api.alsa.headroom = 8192` for outputs was
+  the cause. Headroom is extra ALSA buffer samples beyond the quantum that the
+  driver keeps buffered; at 8192 samples that's 170 ms of additional buffer
+  which created a fundamental timing conflict with the 256-sample (5.3 ms)
+  quantum. PipeWire's graph thread tried to produce audio in 5.3 ms bursts
+  while ALSA's driver expected 170 ms fill cycles — the mismatch caused
+  mid-period starvation and the characteristic pop/click/static. Fixed:
+  `api.alsa.headroom = 0` for outputs (PipeWire manages its own timing),
+  quantum raised from 256 → 512 samples (10.7 ms, still excellent for gaming,
+  resilient to CPU spikes during heavy GPU frames), ALSA period size raised to
+  match. Mic inputs keep a small 512-sample headroom since capture timing is
+  less deterministic
+
+- **Wallpaper reset to CachyOS/Bazzite default on boot** — the appletsrc
+  written by `apply-plasma-panel.sh` included `[Containments][1]` (the Desktop
+  containment) with `FillMode=2` but no `Image=` path, so Plasma substituted
+  the distro default wallpaper. Fixed: the script now reads the current
+  wallpaper path from the existing appletsrc before overwriting and appends it
+  back into the new file after the write
+
+- **Pinned taskbar apps cleared on each update** — every stamp bump re-ran the
+  service, deleted the appletsrc, and wrote a fresh one with `launchers=` empty,
+  clearing all pinned apps. Fixed with a two-phase approach: the panel layout
+  (appletsrc) now only writes once per install, guarded by a `[RaptorOS]`
+  section marker. The script reads and restores the existing `launchers=` value
+  before overwriting. Future stamp bumps (v6, v7…) only re-apply the theme —
+  the layout, pinned apps, wallpaper, and widget positions are never touched
+  again unless the user deletes the `[RaptorOS]` section
+
+- **Machine stuck on reboot / required hard power-off** — `apply-plasma-panel.sh`
+  was calling `systemctl --user restart plasma-plasmashell.service` from inside
+  another user service (`raptor-hud-apply.service`). `plasma-plasmashell.service`
+  is `PartOf=graphical-session.target` — restarting it via systemd mid-session
+  signalled to systemd that the graphical session target was cycling, which
+  triggered a shutdown dependency cascade before the system was ready to reboot,
+  leaving the bootloader in a retry loop. Fixed: plasmashell restart now uses a
+  detached background subshell with a 5-second delay. The service exits cleanly
+  (stamp written), then 5 seconds later the subshell runs `killall plasmashell`
+  + `plasmashell --replace` with no systemd involvement at all
+
+- **Taskbar theme still not applying** — the session environment variables
+  (`DBUS_SESSION_BUS_ADDRESS`, `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`) were not
+  reliably inherited by the systemd user service. Now set explicitly at the
+  start of the script using the known standard paths as fallback values
 
 ## [v2.6.2] - 2026-06-13 (Taskbar Stability, Real Memory Reclaim & Smaller Install)
 
