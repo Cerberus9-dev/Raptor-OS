@@ -90,29 +90,25 @@ modules:
       - python3-pip
       - python3-gobject
 
-      # Development — build tools
+      # Development — runtimes (keep: scripts depend on python3-gobject, nodejs)
+      - git
+      - gh
+      - nodejs
+      - python3
+      - python3-pip
+      - python3-gobject
+
+      # Development — build tools (keep core: useful for game mods/compiling)
       - gcc
       - make
       - cmake
-      - ninja-build
-      - meson
-
-      # Development — terminal tools
-      - neovim
-      - tmux
-      - ripgrep
-      - fzf
+      # ninja-build, meson → optional picker (build-system tools, niche)
 
       # GTK / theming
       - libadwaita
 
-      # Containers
-      - podman
-      - podman-compose
-
       # Networking / downloads
       - qbittorrent
-      - thunderbird
 
       # Disk management
       - kde-partitionmanager
@@ -123,6 +119,13 @@ modules:
       - papirus-icon-theme
       - jetbrains-mono-fonts
       - qt5-qtbase
+
+      # Removed from default install (moved to firstboot optional picker):
+      #   neovim, tmux, ripgrep, fzf      — terminal power-user tools
+      #   podman, podman-compose          — container tools
+      #   thunderbird                     — email (most use browser)
+      #   variety                         — wallpaper manager
+      #   btop                            — redundant with htop + Mission Center
 
     remove:
       - tuned-ppd
