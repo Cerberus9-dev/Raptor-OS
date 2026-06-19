@@ -422,6 +422,14 @@ vm.max_map_count = 2147483642
 # the kernel default (usually ~4-16 MB on desktop) is too thin for
 # bursty allocation patterns common in games.
 vm.min_free_kbytes = 131072
+
+# Disable watermark boost — the default (250%) causes sudden large reclaim
+# bursts that show up as gaming stutters. 0 = reclaim gradually instead.
+vm.watermark_boost_factor = 0
+
+# Group related processes for scheduling (games + their threads vs background).
+# Improves responsiveness of the foreground game vs background daemons.
+kernel.sched_autogroup_enabled = 1
 SYSCTL
 
 # ── Systemd user drop-ins: cap RAM on the heaviest background services ─────────
