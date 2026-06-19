@@ -1,13 +1,13 @@
 [Unit]
 Description=Raptor OS Initial Power Profile
-# Set a sane baseline power profile before Cortex or the user changes it.
-# Without this, power-profiles-daemon starts in whatever state it was left in.
+# Wants= (not Requires=) — if power-profiles-daemon is slow or briefly
+# fails at boot, this service still attempts to run rather than blocking
+# for up to 90 s and stalling the multi-user target.
+Wants=power-profiles-daemon.service
 After=power-profiles-daemon.service
-Requires=power-profiles-daemon.service
 
 [Service]
 Type=oneshot
-# Set balanced as the boot default. Cortex overrides this at runtime.
 ExecStart=/bin/bash -c 'powerprofilesctl set balanced 2>/dev/null || true'
 RemainAfterExit=yes
 StandardOutput=journal
