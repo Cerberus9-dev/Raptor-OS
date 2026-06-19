@@ -6,6 +6,56 @@
 - Custom Raptor OS logo
 - Better seamless fully custom wallpaper system like windows
 
+## [v2.6.4] - 2026-06-19 (Boot Stability, Final HUD Fix & Smaller Install)
+
+### Fixed
+
+- **Taskbar still broken (v6 HUD rewrite)** — All versions v1–v5 of
+  `apply-plasma-panel.sh` had variations of the same fundamental mistake:
+  writing to `plasma-org.kde.plasma.desktop-appletsrc`. This caused the
+  wallpaper, pinned apps, and panel widget positions to reset on every stamp
+  bump, and introduced complex "read-and-restore" logic that kept breaking in
+  new ways. The fix: v6 is theme-only. The F-22 HUD visual appearance (dark
+  panel, neon green glow) comes entirely from the `RaptorOS` Plasma theme SVGs
+  — the panel structure (appletsrc) is irrelevant. v6 applies only: colour
+  scheme, `plasmarc Theme name`, icons, window decoration, Kvantum, GTK
+  settings. Never touches the appletsrc. Never writes a wallpaper path. Never
+  clears launchers. The service also verifies the RaptorOS theme directory
+  exists before writing to plasmarc — previously, if the theme was missing for
+  any reason, plasmarc pointed at a non-existent theme and Plasma silently fell
+  back to Breeze Dark with no error
+
+- **Wallpaper resets to Bazzite default** — caused by appletsrc writes in v1–v5
+  (see above). Fixed by v6: no appletsrc writes at all
+
+- **Pinned apps cleared / moved** — same root cause. Fixed by v6
+
+- **Boot stuck / struggles to autoboot** — `raptor-powerprofile.service` had
+  `Requires=power-profiles-daemon.service` (hard dependency). If
+  `power-profiles-daemon` was slow to start or briefly failed at boot, systemd
+  waited up to 90 s before marking the dependency failed, stalling the entire
+  `multi-user.target`. Changed to `Wants=` (soft dependency): if
+  `power-profiles-daemon` isn't ready, the service still runs and the
+  `|| true` on its ExecStart handles the `powerprofilesctl` failure gracefully
+
+### Changed
+
+- **Smaller default install** — removed from the mandatory RPM list:
+  `neovim` (terminal text editor), `tmux` (terminal multiplexer),
+  `ripgrep`/`fzf` (developer search tools), `ninja-build`/`meson`
+  (build systems), `podman`/`podman-compose` (container tools),
+  `thunderbird` (email — most users use browser), `variety` (wallpaper
+  manager), `btop` (redundant with `htop` and Mission Center Flatpak).
+  `Thunderbird` is now in the firstboot optional picker as a Flatpak.
+  `gcc`, `make`, and `cmake` are retained (useful for game mod compilation)
+
+- **Additional memory tuning** — `vm.watermark_boost_factor = 0` added to the
+  system sysctl: the default of 250% causes sudden large memory-reclaim bursts
+  that manifest as frametime spikes during gaming. Disabled in favour of
+  gradual reclaim. `kernel.sched_autogroup_enabled = 1` groups related
+  processes (game + its threads) as a scheduling unit, improving responsiveness
+  of the foreground game relative to background daemons
+
 ## [v2.6.3] - 2026-06-18 (Audio Static, Taskbar & Wallpaper Fixes)
 
 ### Fixed
