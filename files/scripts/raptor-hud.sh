@@ -834,12 +834,38 @@ mkdir -p /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets
 cat << 'EOF' > /usr/share/plasma/desktoptheme/RaptorOS/metadata.desktop
 [Desktop Entry]
 Name=RaptorOS
-Comment=F-22 Raptor cockpit HUD Plasma theme
+Comment=F-22 Fighter Jet Cockpit HUD theme for Raptor OS
 Type=Service
 X-KDE-ServiceTypes=Plasma/Theme
+X-KDE-PluginInfo-Name=RaptorOS
+X-KDE-PluginInfo-Version=2.6
+X-KDE-PluginInfo-License=GPL-2.0-or-later
+X-KDE-PluginInfo-EnabledByDefault=true
 
 [Plasmatarget]
 BaseTheme=breezedark
+EOF
+
+# Plasma 6 uses KPackage format (metadata.json) for theme discovery.
+# Without this file Plasma 6 cannot locate the theme by its ID string —
+# kwriteconfig6 writes "RaptorOS" to plasmarc but Plasma finds no theme
+# with that ID in its package index and silently falls back to Breeze Dark.
+# This is the primary reason the HUD theme never applied in v1–v5.
+cat << 'EOF' > /usr/share/plasma/desktoptheme/RaptorOS/metadata.json
+{
+    "KPlugin": {
+        "Id": "RaptorOS",
+        "Name": "RaptorOS",
+        "Description": "F-22 Fighter Jet Cockpit HUD theme for Raptor OS",
+        "Authors": [{"Name": "Raptor OS", "Email": ""}],
+        "Category": "Plasma Theme",
+        "Version": "2.6",
+        "Website": "https://github.com/Cerberus9-dev/Raptor-OS",
+        "License": "GPL-2.0-or-later",
+        "EnabledByDefault": true
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
 EOF
 
 cat << 'SVGEOF' > /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg
@@ -1363,13 +1389,13 @@ After=plasma-plasmashell.service
 # absent from the systemd user service env. v4 sets all session env vars
 # explicitly and uses systemctl --user restart plasma-plasmashell.service
 # as the primary method (uses private socket, not D-Bus).
-# Delete ~/.local/share/raptor-hud-applied-v6 to re-run manually.
-ConditionPathExists=!%h/.local/share/raptor-hud-applied-v6
+# Delete ~/.local/share/raptor-hud-applied-v7 to re-run manually.
+ConditionPathExists=!%h/.local/share/raptor-hud-applied-v7
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v6'
+ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v7'
 RemainAfterExit=yes
 
 [Install]
