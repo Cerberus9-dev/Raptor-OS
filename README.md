@@ -1,8 +1,8 @@
 # Raptor OS
 A custom Bazzite-based Linux distribution built for gaming performance — F-22 HUD-inspired KDE theme, automatic GPU optimisation, low-latency audio, and a clean firstboot setup experience.
 
-> ⚠️ **HEAVY W.I.P — Feedback is appreciated!**
-> ℹ️ **This is NOT a live OS.** It requires a separate drive, replacing your current OS, or dual booting. For dual booting, make sure you have 40–50 GB available. If you don't have space or time, it can be run in a VM for testing first.
+>  **HEAVY W.I.P — Feedback is appreciated!**
+>  **This is NOT a live OS.** It requires a separate drive, replacing your current OS, or dual booting. For dual booting, make sure you have 40–50 GB available. If you don't have space or time, it can be run in a VM for testing first.
 
 ---
 
