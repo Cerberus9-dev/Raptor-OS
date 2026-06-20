@@ -719,6 +719,16 @@ net.ipv4.neigh.default.gc_thresh1  = 4096
 net.ipv4.neigh.default.gc_thresh2  = 8192
 net.ipv4.neigh.default.gc_thresh3  = 16384
 net.ipv4.ip_local_port_range       = 1024 65535
+
+# Socket busy-polling: spin up to 50 µs before sleeping when waiting for
+# incoming data. Eliminates the wakeup round-trip for low-latency UDP game
+# traffic (position updates, voice). Only applies to sockets that opt in.
+net.core.busy_read                 = 50
+net.core.busy_poll                 = 50
+
+# Maximum open file descriptors — large open-world games and heavily modded
+# titles can exhaust the default 1 M limit on big mod lists.
+fs.file-max                        = 2097152
 NETSYSCTL
 
 # ── BBR / CAKE module preload ─────────────────────────────────────────────────
