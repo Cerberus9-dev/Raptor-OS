@@ -6,6 +6,52 @@
 - Custom Raptor OS logo
 - Better seamless fully custom wallpaper system like windows
 
+## [v2.6.5] - 2026-06-19 (Theme Fix, Mode Profile Corrections, Network Tuning)
+
+### Fixed
+
+- **HUD theme still not applying — root cause found** — Plasma 6 uses KPackage
+  format and discovers themes via `metadata.json`. The RaptorOS theme only had
+  `metadata.desktop` (Plasma 5 format). Without `metadata.json`, Plasma 6 cannot
+  locate the theme by its ID string in its package index — `kwriteconfig6` writes
+  `RaptorOS` to `plasmarc` but Plasma sees no theme with that ID and silently
+  falls back to Breeze Dark. This is almost certainly the primary reason the HUD
+  theme never applied in v1–v6 on Plasma 6 builds. Added `metadata.json` with
+  `"Id": "RaptorOS"` and `"X-Plasma-API-Minimum-Version": "6.0"`. Stamp bumped
+  to v7 so the theme service re-runs on all existing installs
+
+- **Performance mode `vm.swappiness = 60`** — was set to the same value as
+  power saving mode, actively working against gaming. The system-level baseline
+  is `swappiness=10`; performance mode was raising it to 60, telling the kernel
+  to eagerly swap game data out to ZRAM. Fixed to `swappiness=5` (strongly prefer
+  keeping all anonymous memory in RAM)
+
+- **Balanced mode `vm.swappiness = 100`** — at 100 the kernel treats file cache
+  and anonymous memory (game/app heap) equally for eviction, swapping out
+  application data as aggressively as stale file buffers. Fixed to `30` (lean
+  toward RAM retention while still allowing relief under pressure)
+
+- **Performance mode dirty ratios** — `dirty_ratio=10` caused write stalls at
+  only 10% of RAM dirty (1.6 GB on 16 GB). Games write saves and logs rarely
+  but in bursts; a stall at 1.6 GB interrupts gameplay. Raised to `25/10`
+  (background flush at 10%, stall threshold at 25%)
+
+- **`kbuildsycoca6 --invalidate` in game mode entry** — `--invalidate` forces a
+  full sycoca rebuild from scratch, taking 2–5 seconds right when the user is
+  launching a game. Removed from `trim-background`
+
+### Added
+
+- `net.core.busy_read = 50` and `net.core.busy_poll = 50` to the network sysctl
+  — socket busy-polling spins for up to 50 µs before sleeping when waiting for
+  incoming data, eliminating the syscall/wakeup round-trip for low-latency UDP
+  game traffic (position updates, voice chat). Only active on sockets that
+  explicitly opt in via `SO_BUSY_POLL`
+
+- `fs.file-max = 2097152` — raises the system-wide open file descriptor limit
+  from the default 1 M. Open-world games and heavily modded titles (Skyrim,
+  Minecraft with large mod packs) can exhaust the default limit on startup
+
 ## [v2.6.4] - 2026-06-19 (Boot Stability, Final HUD Fix & Smaller Install)
 
 ### Fixed
