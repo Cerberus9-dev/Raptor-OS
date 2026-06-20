@@ -270,9 +270,11 @@ case "$ACTION" in
                 ;;
 
             balanced)
-                echo 100  > /proc/sys/vm/swappiness                2>/dev/null || true
-                echo 15   > /proc/sys/vm/dirty_ratio               2>/dev/null || true
-                echo 5    > /proc/sys/vm/dirty_background_ratio    2>/dev/null || true
+                # swappiness=30: lean toward keeping anonymous memory in RAM
+                # while still allowing some swapping for memory pressure relief.
+                echo 30   > /proc/sys/vm/swappiness                2>/dev/null || true
+                echo 20   > /proc/sys/vm/dirty_ratio               2>/dev/null || true
+                echo 8    > /proc/sys/vm/dirty_background_ratio    2>/dev/null || true
                 echo 1500 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
                 echo 1500 > /proc/sys/vm/dirty_expire_centisecs    2>/dev/null || true
                 echo 0    > /proc/sys/vm/laptop_mode               2>/dev/null || true
@@ -295,9 +297,16 @@ case "$ACTION" in
                 ;;
 
             performance)
-                echo 60  > /proc/sys/vm/swappiness                 2>/dev/null || true
-                echo 10  > /proc/sys/vm/dirty_ratio                2>/dev/null || true
-                echo 3   > /proc/sys/vm/dirty_background_ratio     2>/dev/null || true
+                # swappiness=5: strongly prefer keeping all game data in RAM.
+                # dirty_ratio=25: buffer up to 25% of RAM as dirty pages before
+                # any synchronous write stall — games write saves/logs rarely so
+                # a large dirty window avoids I/O stalls during gameplay.
+                echo 5   > /proc/sys/vm/swappiness                 2>/dev/null || true
+                echo 25  > /proc/sys/vm/dirty_ratio                2>/dev/null || true
+                echo 10  > /proc/sys/vm/dirty_background_ratio     2>/dev/null || true
+                echo 500 > /proc/sys/vm/dirty_writeback_centisecs  2>/dev/null || true
+                echo 500 > /proc/sys/vm/dirty_expire_centisecs     2>/dev/null || true
+                echo 0   > /proc/sys/vm/laptop_mode                2>/dev/null || true
                 echo 500 > /proc/sys/vm/dirty_writeback_centisecs  2>/dev/null || true
                 echo 500 > /proc/sys/vm/dirty_expire_centisecs     2>/dev/null || true
                 echo 0   > /proc/sys/vm/laptop_mode                2>/dev/null || true
@@ -353,7 +362,6 @@ case "$ACTION" in
         systemctl stop snapd.service   2>/dev/null || true
         systemctl stop fstrim.service  2>/dev/null || true
         balooctl6 suspend 2>/dev/null || balooctl suspend 2>/dev/null || true
-        kbuildsycoca6 --invalidate     2>/dev/null || true
         echo 6000 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
         ;;
 
