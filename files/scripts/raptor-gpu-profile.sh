@@ -27,8 +27,11 @@ cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
 MESA_SHADER_CACHE_DISABLE=false
 WINE_LARGE_ADDRESS_AWARE=1
 PROTON_FORCE_LARGE_ADDRESS_AWARE=1
+# WINE_FULLSCREEN_FSR and DXVK_ASYNC are intentionally NOT set globally.
+# They cause flickering/lighting glitches in OpenGL games like Project Zomboid.
+# Set per-game in Steam: right-click game → Properties → Launch Options:
+#   WINE_FULLSCREEN_FSR=1 DXVK_ASYNC=1 %command%
 STAGING_SHARED_MEMORY=1
-WINE_FULLSCREEN_FSR=1
 PROTON_NO_ESYNC=0
 PROTON_NO_FSYNC=0
 ENVEOF
@@ -38,7 +41,7 @@ cat << 'SYSCTL' > /etc/sysctl.d/raptor-gaming.conf
 # ── Raptor OS Gaming sysctl ──────────────────────────────────────────────────
 kernel.sched_autogroup_enabled=1
 kernel.sched_min_granularity_ns=500000
-kernel.sched_wakeup_granularity_ns=3000000
+kernel.sched_wakeup_granularity_ns=1000000
 kernel.sched_migration_cost_ns=250000
 fs.inotify.max_user_watches=524288
 fs.inotify.max_user_instances=256
@@ -99,8 +102,11 @@ echo "Active profile: $PROFILE"
 # ── Common env vars ───────────────────────────────────────────────────────────
 COMMON_VARS="WINE_LARGE_ADDRESS_AWARE=1
 PROTON_FORCE_LARGE_ADDRESS_AWARE=1
+# WINE_FULLSCREEN_FSR and DXVK_ASYNC are intentionally NOT set globally.
+# They cause flickering/lighting glitches in OpenGL games like Project Zomboid.
+# Set per-game in Steam: right-click game → Properties → Launch Options:
+#   WINE_FULLSCREEN_FSR=1 DXVK_ASYNC=1 %command%
 STAGING_SHARED_MEMORY=1
-WINE_FULLSCREEN_FSR=1
 PROTON_NO_ESYNC=0
 PROTON_NO_FSYNC=0"
 
@@ -118,7 +124,7 @@ __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
 __GL_THREADED_OPTIMIZATIONS=1
 AMDGPU_HIGH_POWER=1
 PROTON_ENABLE_NVAPI=1
-DXVK_ASYNC=1
+# DXVK_ASYNC=1  ← set per-game, not globally (causes shader flicker)
 DXVK_FRAME_RATE=0
 VKD3D_CONFIG=dxr11,dxr
 VKD3D_FEATURE_LEVEL=12_2
@@ -148,7 +154,7 @@ __GL_SHADER_DISK_CACHE=1
 __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
 __GL_THREADED_OPTIMIZATIONS=1
 PROTON_ENABLE_NVAPI=1
-DXVK_ASYNC=1
+# DXVK_ASYNC=1  ← set per-game, not globally (causes shader flicker)
 VKD3D_CONFIG=dxr11
 VKD3D_FEATURE_LEVEL=12_1
 $COMMON_VARS
@@ -203,7 +209,7 @@ __GL_SHADER_DISK_CACHE=1
 __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
 __GL_THREADED_OPTIMIZATIONS=1
 PROTON_ENABLE_NVAPI=1
-DXVK_ASYNC=1
+# DXVK_ASYNC=1  ← set per-game, not globally (causes shader flicker)
 VKD3D_CONFIG=dxr11
 $COMMON_VARS
 ENVEOF
@@ -221,7 +227,7 @@ AMD_VULKAN_ICD=RADV
 MESA_SHADER_CACHE_DISABLE=false
 MESA_SHADER_CACHE_MAX_SIZE=2G
 __GL_SHADER_DISK_CACHE=1
-DXVK_ASYNC=1
+# DXVK_ASYNC=1  ← set per-game, not globally (causes shader flicker)
 $COMMON_VARS
 ENVEOF
     elif [ "$GPU_VENDOR" = "intel" ]; then
