@@ -2,13 +2,13 @@
     "KPlugin": {
         "Id": "org.raptoros.radararc",
         "Name": "Radar Arc",
-        "Description": "Cockpit-style radar arc taskbar for Raptor OS",
+        "Description": "F-22 cockpit-style radar HUD plasmoid for Raptor OS panels and desktops",
         "Icon": "view-grid",
         "Category": "Windows and Tasks",
         "Authors": [{"Email": "", "Name": "Raptor OS"}],
         "License": "GPL-2.0-or-later",
-        "Version": "0.1",
-        "Website": ""
+        "Version": "2.6",
+        "Website": "https://github.com/Cerberus9-dev/Raptor-OS"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }
