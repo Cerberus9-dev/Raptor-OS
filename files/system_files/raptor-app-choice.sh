@@ -158,6 +158,22 @@ APP_CATALOGUE=(
     "FALSE|CoreCtrl|org.corectrl.CoreCtrl|AMD GPU and CPU control — overclocking, fan curves, power limits"
     # ── Communication ──────────────────────────────────────────────────────
     "FALSE|Thunderbird|org.mozilla.Thunderbird|Email and calendar client"
+    # ── Terminal & Developer tools ─────────────────────────────────────────
+    "FALSE|btop|None|System resource monitor (install via: sudo rpm-ostree install btop)"
+    "FALSE|GitHub CLI (gh)|None|GitHub CLI tool (install via: sudo rpm-ostree install gh)"
+    "FALSE|Variety|None|Wallpaper manager (install via: sudo rpm-ostree install variety)"
+    # ── Media & Downloads ──────────────────────────────────────────────────
+    "FALSE|Parabolic|org.nickvision.tubeconverter|Download YouTube and other online videos"
+    "FALSE|Kooha|io.github.seadve.Kooha|Simple screen recorder (no OBS needed for basic capture)"
+    "FALSE|Clapper|com.github.rafostar.Clapper|Lightweight video player (GPU-accelerated)"
+    "FALSE|Amberol|io.bassi.Amberol|Simple music player"
+    # ── Utilities ──────────────────────────────────────────────────────────
+    "FALSE|Metadata Cleaner|fr.romainvigier.MetadataCleaner|Remove metadata from files before sharing"
+    "FALSE|Flatsweep|io.github.gmodena.flatsweep|Clean up leftover Flatpak app data"
+    "FALSE|Warp|app.drey.Warp|Fast local file transfer between devices"
+    "FALSE|Upscayl|org.upscayl.Upscayl|AI image upscaling (doubles image resolution)"
+    # ── Virtualisation ────────────────────────────────────────────────────
+    "FALSE|GNOME Boxes|org.gnome.Boxes|Simple VM manager — run Windows or other Linux in a window"
 )
 
 # ── Build zenity argument list ────────────────────────────────────────────────
@@ -217,7 +233,17 @@ for flatpak_id in "${TO_INSTALL[@]}"; do
     app_name="${ID_TO_NAME[${flatpak_id}]:-${flatpak_id}}"
     log "Installing ${app_name} (${flatpak_id})…"
 
-    if flatpak install -y --noninteractive flathub "${flatpak_id}" \
+    if [ "${flatpak_id}" = "None" ]; then
+        # RPM-only app — attempt via rpm-ostree
+        APP_LOWER="${app_name,,}"
+        if sudo rpm-ostree install --idempotent --allow-inactive "$APP_LOWER" \
+                >> /tmp/raptor-app-install.log 2>&1; then
+            log "OK (rpm-ostree): ${app_name}"
+        else
+            err "Note: ${app_name} — install after reboot: sudo rpm-ostree install ${APP_LOWER}"
+            FAILED+=("${app_name}")
+        fi
+    elif flatpak install -y --noninteractive flathub "${flatpak_id}" \
             >> /tmp/raptor-app-install.log 2>&1; then
         log "OK: ${app_name}"
     else
