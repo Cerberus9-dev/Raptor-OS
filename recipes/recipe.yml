@@ -45,7 +45,6 @@ modules:
       # System utilities
       - fastfetch
       - htop
-      - btop
       - bleachbit
       - filelight
       - p7zip
@@ -58,7 +57,6 @@ modules:
       - plasma-systemmonitor
       - gwenview
       - kcalc
-      - variety
 
       # Power management
       - power-profiles-daemon
@@ -84,19 +82,12 @@ modules:
 
       # Development — runtimes
       - git
-      - gh
       - nodejs
       - python3
       - python3-pip
       - python3-gobject
 
-      # Development — runtimes (keep: scripts depend on python3-gobject, nodejs)
-      - git
-      - gh
-      - nodejs
-      - python3
-      - python3-pip
-      - python3-gobject
+
 
       # Development — build tools (keep core: useful for game mods/compiling)
       - gcc
@@ -125,7 +116,7 @@ modules:
       #   podman, podman-compose          — container tools
       #   thunderbird                     — email (most use browser)
       #   variety                         — wallpaper manager
-      #   btop                            — redundant with htop + Mission Center
+      #   btop, variety                   — redundant; btop→optional, variety→optional
 
     remove:
       - tuned-ppd
