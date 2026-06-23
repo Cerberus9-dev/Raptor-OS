@@ -846,6 +846,31 @@ X-KDE-PluginInfo-EnabledByDefault=true
 BaseTheme=breezedark
 EOF
 
+# ── System-wide theme defaults (written at BUILD TIME) ────────────────────────
+# Writing /etc/xdg/plasmarc at build time makes RaptorOS the system default
+# before any user logs in. Without this, KDE starts with Breeze Dark and the
+# per-user service tries to override an already-active theme — often losing
+# the race against KDE's own session restore. With this file present, Plasma
+# reads RaptorOS as the configured theme from the very first session start.
+mkdir -p /etc/xdg
+cat << 'SYSPLASMARC' > /etc/xdg/plasmarc
+[Theme]
+name=RaptorOS
+SYSPLASMARC
+
+# Also write system-wide kdeglobals defaults for color scheme and icons
+cat << 'SYSKDEGLOBALS' > /etc/xdg/kdeglobals
+[General]
+ColorScheme=RaptorOS
+
+[Icons]
+Theme=breeze-dark
+
+[KDE]
+LookAndFeelPackage=org.kde.breezedark.desktop
+SingleClick=false
+SYSKDEGLOBALS
+
 # Plasma 6 uses KPackage format (metadata.json) for theme discovery.
 # Without this file Plasma 6 cannot locate the theme by its ID string —
 # kwriteconfig6 writes "RaptorOS" to plasmarc but Plasma finds no theme
@@ -1121,6 +1146,22 @@ plasma-apply-icon-theme "$ICON_THEME" 2>/dev/null || true
 # ── 4. Window decoration ──────────────────────────────────────────────────────
 kwc --file kwinrc --group "org.kde.kdecoration2" --key library org.kde.kwin.aurorae
 kwc --file kwinrc --group "org.kde.kdecoration2" --key theme "__aurorae__svg__RaptorOS"
+# Window button layout — Windows style: Minimize, Maximize, Close on the right
+# KDE codes: I=Minimize, A=Maximize, X=Close, M=AppMenu, _=Spacer
+kwc --file kwinrc --group "org.kde.kdecoration2" --key ButtonsOnLeft  "M"
+kwc --file kwinrc --group "org.kde.kdecoration2" --key ButtonsOnRight "IAX"
+
+# Window behaviour — closer to Windows defaults
+# Double-click titlebar maximises (Windows default)
+kwc --file kwinrc --group Windows --key TitlebarDoubleClickCommand Maximize
+# Click-to-raise (Windows always raises on click, not just titlebar)
+kwc --file kwinrc --group Windows --key ClickRaise true
+# Edge tiling — drag to screen edge to snap/tile (Windows Aero snap)
+kwc --file kwinrc --group Windows --key ElectricBorders 1
+kwc --file kwinrc --group Windows --key ElectricBorderMaximize true
+kwc --file kwinrc --group Windows --key ElectricBorderTiling true
+# Windows-like Alt+F4 always closes, no confirmation
+kwc --file kwinrc --group KDE --key AnimationSpeed 3
 
 # ── 5. Kvantum ────────────────────────────────────────────────────────────────
 mkdir -p "$HOME/.config/Kvantum"
@@ -1389,13 +1430,13 @@ After=plasma-plasmashell.service
 # absent from the systemd user service env. v4 sets all session env vars
 # explicitly and uses systemctl --user restart plasma-plasmashell.service
 # as the primary method (uses private socket, not D-Bus).
-# Delete ~/.local/share/raptor-hud-applied-v7 to re-run manually.
-ConditionPathExists=!%h/.local/share/raptor-hud-applied-v7
+# Delete ~/.local/share/raptor-hud-applied-v8 to re-run manually.
+ConditionPathExists=!%h/.local/share/raptor-hud-applied-v8
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v7'
+ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v8'
 RemainAfterExit=yes
 
 [Install]
