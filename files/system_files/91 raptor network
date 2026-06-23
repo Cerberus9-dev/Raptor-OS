@@ -10,7 +10,7 @@ net.ipv4.tcp_wmem           = 4096 262144 134217728
 net.ipv4.udp_rmem_min       = 8192
 net.ipv4.udp_wmem_min       = 8192
 
-# BBR congestion control + CAKEfiles/system_files/ qdisc (reduces bufferbloat under load)
+# BBR congestion control + CAKE qdisc (reduces bufferbloat under load)
 net.core.default_qdisc           = cake
 net.ipv4.tcp_congestion_control  = bbr
 
