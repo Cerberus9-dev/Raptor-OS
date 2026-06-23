@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # =============================================================================
 # Raptor Wallpaper Manager v1.0
