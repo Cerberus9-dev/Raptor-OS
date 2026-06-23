@@ -11,8 +11,8 @@ FROM ghcr.io/ublue-os/bazzite:stable
 
 # Image labels (OCI standard)
 LABEL org.opencontainers.image.title="Raptor OS" \
-      org.opencontainers.image.description="Gaming, development, and creative Bazzite-based custom image" \
-      org.opencontainers.image.url="https://github.com/cerberus9-dev/raptor-os" \
-      org.opencontainers.image.source="https://github.com/cerberus9-dev/raptor-os" \
-      org.opencontainers.image.vendor="cerberus9-dev" \
+      org.opencontainers.image.description="F-22 HUD-themed gaming Linux — Bazzite-based with automatic GPU optimisation, low-latency audio, and zero-terminal setup" \
+      org.opencontainers.image.url="https://github.com/Cerberus9-dev/Raptor-OS" \
+      org.opencontainers.image.source="https://github.com/Cerberus9-dev/Raptor-OS" \
+      org.opencontainers.image.vendor="Cerberus9-dev" \
       org.opencontainers.image.licenses="Apache-2.0"
