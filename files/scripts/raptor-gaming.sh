@@ -337,7 +337,9 @@ if systemctl is-active snapd &>/dev/null; then
     echo "✔ Stopped snapd"
 fi
 
-kbuildsycoca6 --invalidate 2>/dev/null || true
+# kbuildsycoca6 --invalidate removed: deletes the sycoca cache so the final
+# image ships with no cache, causing blank launcher categories on first login.
+# Cache is rebuilt at session start by the raptor-sycoca-rebuild.service autostart.
 balooctl6 suspend 2>/dev/null || balooctl suspend 2>/dev/null || true
 echo "✔ Suspended Baloo indexer"
 
