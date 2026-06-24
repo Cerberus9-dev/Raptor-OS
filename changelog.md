@@ -6,6 +6,51 @@
 - Custom Raptor OS logo
 - Better seamless fully custom wallpaper system like windows
 
+## [v2.6.6] - 2026-06-23 (Launcher Fix, Window Buttons, Firstboot Polish)
+
+### Fixed
+
+- **Application launcher blank category tabs** — `raptor-gaming.sh` was calling
+  `kbuildsycoca6 --invalidate` at container build time. `--invalidate` deletes
+  the sycoca service cache entirely, so the final image shipped with no cache.
+  On first login Plasma tried to rebuild it but the app launcher rendered before
+  the build completed, showing empty category pages. Removed the `--invalidate`
+  call and added an XDG autostart `.desktop` entry that runs
+  `kbuildsycoca6 --noincremental` with `X-KDE-autostart-phase=1` (before the
+  shell finishes loading) so the cache is always valid by the time the launcher
+  is first opened
+
+- **Window minimize/maximize/close buttons not applying** — `ButtonsOnLeft=M` /
+  `ButtonsOnRight=IAX` were written by the user service which fires after KWin
+  has already read its config. Added `/etc/xdg/kwinrc` written at build time
+  with the same button layout, matching the `/etc/xdg/plasmarc` fix from v2.6.4.
+  Window buttons (Minimize, Maximize, Close on the right; App Menu on the left)
+  are now applied from the very first login
+
+- **Browser firstboot dialog re-appears every session** — "Decide Later" button
+  did not write the stamp file, causing the dialog to re-appear on every login
+  until an explicit choice was made. Renamed to "Keep Firefox" and now writes the
+  stamp on dismiss, treating closure as "I want Firefox"
+
+- **Internet Archive ISO upload failing** — `ia configure --username="" --password=""`
+  was passing empty strings to the IA configurator, which created a corrupt
+  config file and caused authentication failures. IA S3-style uploads only need
+  the access key and secret key. Rewrote the config step to write
+  `~/.config/internetarchive/ia.ini` directly. Added `--checksum` (skip re-upload
+  of identical files, enabling safe re-runs), `--retries 10` (automatic retry for
+  large file chunks over flaky connections), `--no-derive` (skip IA's derivative
+  generation which is unnecessary for binary ISOs), and explicit `--remote-name`
+  to control the filename on IA regardless of the local build path. SHA256
+  checksum is now uploaded alongside the ISO automatically
+
+### Added
+
+- **More optional apps in firstboot picker**:
+  - *Privacy*: ProtonVPN, KeePassXC (offline password manager)
+  - *Entertainment*: FreeTube (ad-free YouTube client), Obsidian (linked markdown notes)
+  - *Gaming*: Cartridges (unified game library), Ryujinx (Switch emulator), RPCS3 (PS3 emulator)
+  - *Audio production*: Helvum (PipeWire patchbay), LMMS (music production), Ardour (DAW)
+
 ## [v2.6.5] - 2026-06-19 (Theme Fix, Mode Profile Corrections, Network Tuning)
 
 ### Fixed
