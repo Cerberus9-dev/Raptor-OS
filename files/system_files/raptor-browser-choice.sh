@@ -42,13 +42,14 @@ CHOICE=$(
         FALSE "Brave"   "Chromium-based, privacy-focused" \
         --width=440 --height=280 \
         --ok-label="Confirm" \
-        --cancel-label="Decide Later" \
+        --cancel-label="Keep Firefox" \
         2>/dev/null
 ) || true
 
 case "${CHOICE:-}" in
-    Firefox)
-        log "User selected Firefox."
+    Firefox|"")
+        # Empty = cancelled/closed dialog = keep Firefox as default
+        log "Firefox selected or dialog dismissed — keeping Firefox."
         xdg-settings set default-web-browser firefox.desktop 2>/dev/null \
             || xdg-settings set default-web-browser org.mozilla.firefox.desktop 2>/dev/null \
             || true
@@ -68,11 +69,6 @@ case "${CHOICE:-}" in
         fi
         xdg-settings set default-web-browser com.brave.Browser.desktop 2>/dev/null || true
         log "Brave installed and set as default."
-        ;;
-    "")
-        # User clicked "Decide Later" — do NOT write stamp; re-show next session.
-        log "Browser choice deferred by user."
-        exit 0
         ;;
     *)
         err "Unexpected choice: '${CHOICE}'"
