@@ -890,9 +890,17 @@ TitlebarDoubleClickCommand=Maximize
 ClickRaise=true
 ElectricBorderMaximize=true
 ElectricBorderTiling=true
+FocusPolicy=ClickToFocus
 
 [Compositing]
 AnimationSpeed=3
+# LatencyPolicy=0: Submit frames immediately without waiting for the next vblank
+# interval, minimising display latency at the cost of potential tearing on X11
+# (no effect on Wayland which handles VSync in the compositor itself).
+LatencyPolicy=0
+# HiddenPreviews=5: keep all window thumbnails in VRAM, not just visible windows.
+# Faster alt-tab preview and taskbar thumbnails.
+HiddenPreviews=5
 SYSKWINRC
 
 # Also write system-wide kdeglobals defaults for color scheme and icons
