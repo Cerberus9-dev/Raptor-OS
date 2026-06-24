@@ -17,6 +17,25 @@ set -e
 
 mkdir -p /usr/lib/raptor/hud
 
+# ── Sycoca autostart — rebuild menu cache early in session ────────────────────
+# Runs kbuildsycoca6 at session start BEFORE the app launcher is rendered.
+# This prevents blank categories from appearing when the cache is stale/absent.
+# Uses an autostart .desktop file so it runs in the user session context where
+# the user's cache directory (~/.cache/ksycoca6) is writable.
+mkdir -p /etc/xdg/autostart
+cat << 'SYCOCA_AUTOSTART' > /etc/xdg/autostart/raptor-sycoca-rebuild.desktop
+[Desktop Entry]
+Type=Application
+Name=Raptor OS Sycoca Rebuild
+Comment=Rebuild KDE service cache for correct app launcher categories
+Exec=/bin/bash -c 'kbuildsycoca6 --noincremental 2>/dev/null || kbuildsycoca5 --noincremental 2>/dev/null || true'
+Terminal=false
+Hidden=false
+X-KDE-autostart-phase=1
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+SYCOCA_AUTOSTART
+
 # ── raptor-set-wallpaper command ──────────────────────────────────────────────
 cat << 'WPEOF' > /usr/bin/raptor-set-wallpaper
 #!/bin/bash
@@ -857,6 +876,24 @@ cat << 'SYSPLASMARC' > /etc/xdg/plasmarc
 [Theme]
 name=RaptorOS
 SYSPLASMARC
+
+# Also write /etc/xdg/kwinrc at build time for system-wide window decoration defaults.
+# Without this, kwinrc button layout only applies after raptor-hud-apply.service runs
+# (which is AFTER kwin has already read its config and drawn window decorations).
+cat << 'SYSKWINRC' > /etc/xdg/kwinrc
+[org.kde.kdecoration2]
+ButtonsOnLeft=M
+ButtonsOnRight=IAX
+
+[Windows]
+TitlebarDoubleClickCommand=Maximize
+ClickRaise=true
+ElectricBorderMaximize=true
+ElectricBorderTiling=true
+
+[Compositing]
+AnimationSpeed=3
+SYSKWINRC
 
 # Also write system-wide kdeglobals defaults for color scheme and icons
 cat << 'SYSKDEGLOBALS' > /etc/xdg/kdeglobals
