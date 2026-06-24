@@ -174,6 +174,21 @@ APP_CATALOGUE=(
     "FALSE|Upscayl|org.upscayl.Upscayl|AI image upscaling (doubles image resolution)"
     # ── Virtualisation ────────────────────────────────────────────────────
     "FALSE|GNOME Boxes|org.gnome.Boxes|Simple VM manager — run Windows or other Linux in a window"
+    # ── Privacy & Security ─────────────────────────────────────────────────
+    "FALSE|ProtonVPN|com.protonvpn.www|Privacy-first VPN from the makers of ProtonMail"
+    "FALSE|KeePassXC|org.keepassxc.KeePassXC|Offline password manager — no cloud required"
+    # ── Entertainment & Media ──────────────────────────────────────────────
+    "FALSE|FreeTube|io.freetubeapp.FreeTube|YouTube client with no ads and no tracking"
+    # ── Note-taking ────────────────────────────────────────────────────────
+    "FALSE|Obsidian|md.obsidian.Obsidian|Markdown note-taking with linked notes (second brain)"
+    # ── Gaming ────────────────────────────────────────────────────────────
+    "FALSE|Cartridges|page.kramo.Cartridges|Game library that aggregates Steam, Heroic, Bottles and more"
+    "FALSE|Ryujinx|org.ryujinx.Ryujinx|Nintendo Switch emulator"
+    "FALSE|RPCS3|net.rpcs3.RPCS3|PlayStation 3 emulator"
+    # ── Audio Production ──────────────────────────────────────────────────
+    "FALSE|Helvum|org.freedesktop.Helvum|PipeWire patchbay — visually connect audio/MIDI devices"
+    "FALSE|LMMS|io.lmms.LMMS|Music production — beats, melodies, samples"
+    "FALSE|Ardour|org.ardour.Ardour|Professional audio workstation (recording, mixing, mastering)"
 )
 
 # ── Build zenity argument list ────────────────────────────────────────────────
