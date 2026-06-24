@@ -425,6 +425,15 @@ vm.max_map_count = 2147483642
 # bursty allocation patterns common in games.
 vm.min_free_kbytes = 131072
 
+# ZRAM page-cluster: read 1 page at a time from swap (default=3 reads 8 pages).
+# Each ZRAM page must be decompressed individually — reading 8 when only 1
+# is needed wastes CPU time. Setting to 0 means single-page reads.
+vm.page-cluster = 0
+
+# Proactive memory compaction: reduce fragmentation continuously in the
+# background rather than in a large stall-inducing burst. 20 = moderate.
+vm.compaction_proactiveness = 20
+
 # Disable watermark boost — the default (250%) causes sudden large reclaim
 # bursts that show up as gaming stutters. 0 = reclaim gradually instead.
 vm.watermark_boost_factor = 0
