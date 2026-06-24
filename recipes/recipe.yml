@@ -72,6 +72,14 @@ modules:
       # management, spell-check dictionaries) that add significant size to
       # every install regardless of whether the user ever opens them.
 
+      # Creative (lightweight compared to full GIMP/Inkscape/Darktable dependency trees)
+      - krita
+
+      # CPU interrupt distribution — spreads hardware IRQs across all cores.
+      # Prevents a single core from handling all NIC/USB/audio interrupts while
+      # a game is pinned to it, reducing jitter under load.
+      - irqbalance
+
       # Gaming
       - gamemode
       - mangohud
@@ -89,10 +97,9 @@ modules:
 
 
 
-      # Development — build tools (keep core: useful for game mods/compiling)
-      - gcc
-      - make
-      - cmake
+      # Development — build tools moved to optional firstboot picker.
+      # Most gaming users never compile code; gcc alone adds ~80 MB.
+      # Available via: sudo rpm-ostree install gcc make cmake
       # ninja-build, meson → optional picker (build-system tools, niche)
 
       # GTK / theming
@@ -137,6 +144,7 @@ modules:
         # System utilities — always present
         - io.missioncenter.MissionCenter # GPU/CPU/RAM monitor
         - com.github.tchx84.Flatseal    # Flatpak permission manager
+        - com.vscodium.codium           # VSCodium — open-source VS Code (no telemetry)
 
   # ── Kernel boot arguments ─────────────────────────────────────────────────────
   # split_lock_detect=off   — prevents costly split-lock penalties in game loops
