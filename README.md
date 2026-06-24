@@ -73,7 +73,7 @@ Two dialogs appear on first login:
 | Category | Apps |
 |---|---|
 | **Communication** | Telegram, Signal, Slack, Zoom, Thunderbird |
-| **Productivity** | VSCodium, ONLYOFFICE, Bitwarden, Joplin, MarkText, Calibre, Obsidian |
+| **Productivity** | ✓ VSCodium, ONLYOFFICE, Bitwarden, Joplin, MarkText, Calibre, Obsidian |
 | **Office** | LibreOffice |
 | **Creative** | GIMP, Inkscape, Krita, Darktable, Blender, Kdenlive, Shotcut, OBS Studio, Audacity, Boatswain |
 | **Development** | Godot Engine, GitHub Desktop, Pods |
