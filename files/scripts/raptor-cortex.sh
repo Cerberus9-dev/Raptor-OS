@@ -342,6 +342,14 @@ case "$ACTION" in
         # Reclaim ~1.5 GiB from background apps before the game starts —
         # frees real RAM the game can use, not just kernel caches.
         _reclaim_user_slice 1610612736
+        # irqbalance: switch to per-CPU interrupt affinity for gaming.
+        # Stops irqbalance from moving NIC/audio IRQs away from the CPU
+        # the game is running on mid-frame.
+        systemctl stop irqbalance.service 2>/dev/null || true
+        # Set /dev/cpu_dma_latency=0 to disable CPU deep sleep during gaming.
+        # Deep C-states add ~100-300µs wake latency; disabling them keeps the
+        # CPU at C1 or shallower, reducing input and audio latency.
+        echo 0 | tee /dev/cpu_dma_latency >/dev/null 2>/dev/null || true
         BACKGROUND_PROCS=(
             "tracker-miner" "tracker-store" "tracker3"
             "baloo_file" "baloo_file_extractor" "akonadi"
@@ -378,6 +386,8 @@ case "$ACTION" in
         done
         balooctl6 resume 2>/dev/null || balooctl resume 2>/dev/null || true
         systemctl start snapd.service  2>/dev/null || true
+        # Restart irqbalance so it can redistribute IRQs across cores normally
+        systemctl start irqbalance.service 2>/dev/null || true
         echo 500 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
         ;;
 
