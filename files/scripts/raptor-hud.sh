@@ -13,7 +13,7 @@ set -e
 
 # ── Palette reference ─────────────────────────────────────────────────────────
 # Base:    #0d0f12  Surface: #151a20  Panel:   #1c2330  Border:  #2a3444
-# Accent:  #1e90ff  Warning: #f5a623  Success: #2ec27e  Text:    #c8d6e8
+# Accent:  #33FF33  Warning: #f5a623  Success: #2ec27e  Text:    #c8d6e8
 
 mkdir -p /usr/lib/raptor/hud
 
@@ -151,11 +151,11 @@ IntensityEffect=0
 [Colors:Button]
 BackgroundAlternate=30,42,58
 BackgroundNormal=28,35,48
-DecorationFocus=30,144,255
-DecorationHover=30,144,255
-ForegroundActive=30,144,255
+DecorationFocus=51,255,51
+DecorationHover=51,255,51
+ForegroundActive=51,255,51
 ForegroundInactive=90,106,126
-ForegroundLink=30,144,255
+ForegroundLink=51,255,51
 ForegroundNegative=220,50,50
 ForegroundNeutral=245,166,35
 ForegroundNormal=200,214,232
@@ -165,11 +165,11 @@ ForegroundVisited=140,100,220
 [Colors:Complementary]
 BackgroundAlternate=20,28,40
 BackgroundNormal=13,15,18
-DecorationFocus=30,144,255
-DecorationHover=30,144,255
-ForegroundActive=30,144,255
+DecorationFocus=51,255,51
+DecorationHover=51,255,51
+ForegroundActive=51,255,51
 ForegroundInactive=90,106,126
-ForegroundLink=30,144,255
+ForegroundLink=51,255,51
 ForegroundNegative=220,50,50
 ForegroundNeutral=245,166,35
 ForegroundNormal=200,214,232
@@ -179,11 +179,11 @@ ForegroundVisited=140,100,220
 [Colors:Header]
 BackgroundAlternate=21,26,32
 BackgroundNormal=21,26,32
-DecorationFocus=30,144,255
-DecorationHover=30,144,255
-ForegroundActive=30,144,255
+DecorationFocus=51,255,51
+DecorationHover=51,255,51
+ForegroundActive=51,255,51
 ForegroundInactive=90,106,126
-ForegroundLink=30,144,255
+ForegroundLink=51,255,51
 ForegroundNegative=220,50,50
 ForegroundNeutral=245,166,35
 ForegroundNormal=200,214,232
@@ -191,13 +191,13 @@ ForegroundPositive=46,194,126
 ForegroundVisited=140,100,220
 
 [Colors:Selection]
-BackgroundAlternate=20,100,200
-BackgroundNormal=30,144,255
-DecorationFocus=30,144,255
-DecorationHover=30,144,255
+BackgroundAlternate=15,60,15
+BackgroundNormal=30,90,30
+DecorationFocus=51,255,51
+DecorationHover=51,255,51
 ForegroundActive=255,255,255
 ForegroundInactive=180,200,220
-ForegroundLink=180,220,255
+ForegroundLink=150,255,150
 ForegroundNegative=220,50,50
 ForegroundNeutral=245,166,35
 ForegroundNormal=255,255,255
@@ -207,11 +207,11 @@ ForegroundVisited=200,170,255
 [Colors:Tooltip]
 BackgroundAlternate=21,26,32
 BackgroundNormal=13,15,18
-DecorationFocus=30,144,255
-DecorationHover=30,144,255
-ForegroundActive=30,144,255
+DecorationFocus=51,255,51
+DecorationHover=51,255,51
+ForegroundActive=51,255,51
 ForegroundInactive=90,106,126
-ForegroundLink=30,144,255
+ForegroundLink=51,255,51
 ForegroundNegative=220,50,50
 ForegroundNeutral=245,166,35
 ForegroundNormal=200,214,232
@@ -221,11 +221,11 @@ ForegroundVisited=140,100,220
 [Colors:View]
 BackgroundAlternate=18,24,32
 BackgroundNormal=13,15,18
-DecorationFocus=30,144,255
-DecorationHover=30,144,255
-ForegroundActive=30,144,255
+DecorationFocus=51,255,51
+DecorationHover=51,255,51
+ForegroundActive=51,255,51
 ForegroundInactive=90,106,126
-ForegroundLink=30,144,255
+ForegroundLink=51,255,51
 ForegroundNegative=220,50,50
 ForegroundNeutral=245,166,35
 ForegroundNormal=200,214,232
@@ -235,11 +235,11 @@ ForegroundVisited=140,100,220
 [Colors:Window]
 BackgroundAlternate=21,26,32
 BackgroundNormal=28,35,48
-DecorationFocus=30,144,255
-DecorationHover=30,144,255
-ForegroundActive=30,144,255
+DecorationFocus=51,255,51
+DecorationHover=51,255,51
+ForegroundActive=51,255,51
 ForegroundInactive=90,106,126
-ForegroundLink=30,144,255
+ForegroundLink=51,255,51
 ForegroundNegative=220,50,50
 ForegroundNeutral=245,166,35
 ForegroundNormal=200,214,232
@@ -256,7 +256,7 @@ contrast=5
 
 [WM]
 activeBackground=21,26,32
-activeBlend=30,144,255
+activeBlend=51,255,51
 activeForeground=200,214,232
 inactiveBackground=13,15,18
 inactiveBlend=42,52,68
@@ -313,8 +313,8 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
   </defs>
   <g id="decoration">
     <rect width="100" height="30" fill="url(#titlebar-active)"/>
-    <rect y="29" width="100" height="1" fill="#1e90ff" opacity="0.7"/>
-    <rect width="2" height="30" fill="#1e90ff" opacity="0.5"/>
+    <rect y="29" width="100" height="1" fill="#33FF33" opacity="0.7"/>
+    <rect width="2" height="30" fill="#33FF33" opacity="0.5"/>
   </g>
   <g id="decoration-inactive">
     <rect width="100" height="30" fill="url(#titlebar-inactive)"/>
@@ -333,7 +333,7 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
   </g>
   <g id="maximize">
     <rect width="18" height="18" rx="1" fill="#1c2330"/>
-    <rect x="4" y="4" width="10" height="10" fill="none" stroke="#1e90ff" stroke-width="1.5"/>
+    <rect x="4" y="4" width="10" height="10" fill="none" stroke="#33FF33" stroke-width="1.5"/>
   </g>
   <g id="maximize-hover">
     <rect width="18" height="18" rx="1" fill="#1e4a7a"/>
@@ -341,7 +341,7 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
   </g>
   <g id="minimize">
     <rect width="18" height="18" rx="1" fill="#1c2330"/>
-    <line x1="4" y1="13" x2="14" y2="13" stroke="#1e90ff" stroke-width="1.5" stroke-linecap="square"/>
+    <line x1="4" y1="13" x2="14" y2="13" stroke="#33FF33" stroke-width="1.5" stroke-linecap="square"/>
   </g>
   <g id="minimize-hover">
     <rect width="18" height="18" rx="1" fill="#1e4a7a"/>
@@ -940,51 +940,107 @@ EOF
 
 cat << 'SVGEOF' > /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <!--
+    Raptor OS HUD panel background — F-22 cockpit aesthetic.
+    Nine-slice layout: topleft/top/topright/left/center/right/bottomleft/bottom/bottomright
+    Panel sits at the BOTTOM of the screen; the 'top' element is the visible edge facing
+    the desktop — this is where the neon green glow lives.
+
+    All accent/glow colours: #33FF33 (neon green, RGB 51,255,51)
+    Panel body: #0a0e12 (near-black with a hint of blue-green)
+    hint-stretch-borders: tells Plasma to stretch top/bottom/left/right elements
+  -->
   <defs>
+    <!-- Neon green top-edge glow: bright at y=0, fades into the dark panel body -->
     <linearGradient id="topglow" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#1e90ff" stop-opacity="0.55"/>
-      <stop offset="18%"  stop-color="#1e90ff" stop-opacity="0.12"/>
-      <stop offset="100%" stop-color="#0d0f12" stop-opacity="0"/>
+      <stop offset="0%"   stop-color="#33FF33" stop-opacity="0.80"/>
+      <stop offset="6%"   stop-color="#33FF33" stop-opacity="0.45"/>
+      <stop offset="20%"  stop-color="#1a3a1a" stop-opacity="0.18"/>
+      <stop offset="55%"  stop-color="#0a0e12" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#0a0e12" stop-opacity="0.00"/>
     </linearGradient>
-    <radialGradient id="radar-sweep" cx="50%" cy="120%" r="80%">
-      <stop offset="0%"  stop-color="#00ff41" stop-opacity="0.07"/>
-      <stop offset="60%" stop-color="#00ff41" stop-opacity="0.02"/>
-      <stop offset="100%" stop-color="#00ff41" stop-opacity="0"/>
+    <!-- Subtle green inner body glow (very faint, just enough to break the flat look) -->
+    <radialGradient id="bodyglow" cx="50%" cy="0%" r="70%">
+      <stop offset="0%"   stop-color="#33FF33" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#33FF33" stop-opacity="0.00"/>
     </radialGradient>
+    <!-- Corner edge gradient for the left and right vertical lines -->
+    <linearGradient id="vlineglow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#33FF33" stop-opacity="0.70"/>
+      <stop offset="30%"  stop-color="#33FF33" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#33FF33" stop-opacity="0.00"/>
+    </linearGradient>
   </defs>
+
+  <!-- Plasma hints — stretch borders, tile center -->
   <rect id="hint-stretch-borders" x="0" y="0" width="1" height="1" fill="none"/>
   <rect id="hint-tile-center"     x="0" y="0" width="1" height="1" fill="none"/>
+
+  <!-- ── topleft corner ──────────────────────────────────────────────────── -->
   <g id="topleft">
-    <rect x="0" y="0" width="24" height="48" fill="#0d0f12"/>
-    <polygon points="0,0 24,0 0,24" fill="#1c2330"/>
-    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
-    <line x1="0" y1="0" x2="0"  y2="48" stroke="#1e90ff" stroke-width="0.5" opacity="0.4"/>
+    <!-- Dark body -->
+    <rect x="0" y="0" width="24" height="48" fill="#0a0e12" opacity="0.97"/>
+    <!-- Faint corner bevel -->
+    <polygon points="0,0 20,0 0,20" fill="#111a12" opacity="0.6"/>
+    <!-- Green top edge line -->
+    <line x1="0" y1="0" x2="24" y2="0" stroke="#33FF33" stroke-width="1.5" opacity="0.85"/>
+    <!-- Green left-side vertical glow line -->
+    <line x1="0" y1="0" x2="0"  y2="48" stroke="#33FF33" stroke-width="0.8"
+          stroke-opacity="0.40"/>
   </g>
+
+  <!-- ── topright corner ─────────────────────────────────────────────────── -->
   <g id="topright">
-    <rect x="0" y="0" width="24" height="48" fill="#0d0f12"/>
-    <polygon points="0,0 24,0 24,24" fill="#1c2330"/>
-    <line x1="0" y1="0" x2="24" y2="0"  stroke="#1e90ff" stroke-width="1"   opacity="0.8"/>
-    <line x1="24" y1="0" x2="24" y2="48" stroke="#1e90ff" stroke-width="0.5" opacity="0.4"/>
+    <rect x="0" y="0" width="24" height="48" fill="#0a0e12" opacity="0.97"/>
+    <polygon points="4,0 24,0 24,20" fill="#111a12" opacity="0.6"/>
+    <line x1="0"  y1="0" x2="24" y2="0"  stroke="#33FF33" stroke-width="1.5" opacity="0.85"/>
+    <line x1="24" y1="0" x2="24" y2="48" stroke="#33FF33" stroke-width="0.8"
+          stroke-opacity="0.40"/>
   </g>
-  <g id="bottomleft"><rect x="0" y="0" width="24" height="4" fill="#0d0f12"/></g>
-  <g id="bottomright"><rect x="0" y="0" width="24" height="4" fill="#0d0f12"/></g>
+
+  <!-- ── bottomleft / bottomright (no glow — bottom edge faces away) ──── -->
+  <g id="bottomleft">
+    <rect x="0" y="0" width="24" height="4" fill="#0a0e12" opacity="0.97"/>
+  </g>
+  <g id="bottomright">
+    <rect x="0" y="0" width="24" height="4" fill="#0a0e12" opacity="0.97"/>
+  </g>
+
+  <!-- ── top (main glow edge — stretched horizontally by Plasma) ──────── -->
   <g id="top">
-    <rect x="0" y="0" width="1" height="48" fill="#0d0f12"/>
+    <!-- Dark panel body -->
+    <rect x="0" y="0" width="1" height="48" fill="#0a0e12" opacity="0.97"/>
+    <!-- Green glow fading down from the top edge -->
     <rect x="0" y="0" width="1" height="48" fill="url(#topglow)"/>
-    <line x1="0" y1="0" x2="1" y2="0" stroke="#1e90ff" stroke-width="1.5" opacity="0.85"/>
+    <!-- Bright green 1.5px hot-line at the very top edge -->
+    <line x1="0" y1="0.75" x2="1" y2="0.75"
+          stroke="#33FF33" stroke-width="1.5" opacity="0.90"/>
+    <!-- Subtle body glow -->
+    <rect x="0" y="0" width="1" height="48" fill="url(#bodyglow)"/>
   </g>
-  <g id="bottom"><rect x="0" y="0" width="1" height="4" fill="#080a0c"/></g>
+
+  <!-- ── bottom (no glow) ───────────────────────────────────────────────── -->
+  <g id="bottom">
+    <rect x="0" y="0" width="1" height="4" fill="#080a0c" opacity="0.97"/>
+  </g>
+
+  <!-- ── left / right side edges ──────────────────────────────────────── -->
   <g id="left">
-    <rect x="0" y="0" width="24" height="1" fill="#0d0f12"/>
-    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
+    <rect x="0" y="0" width="24" height="1" fill="#0a0e12" opacity="0.97"/>
+    <line x1="0" y1="0" x2="0" y2="1"
+          stroke="#33FF33" stroke-width="0.8" opacity="0.40"/>
   </g>
   <g id="right">
-    <rect x="0" y="0" width="24" height="1" fill="#0d0f12"/>
-    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
+    <rect x="0" y="0" width="24" height="1" fill="#0a0e12" opacity="0.97"/>
+    <line x1="24" y1="0" x2="24" y2="1"
+          stroke="#33FF33" stroke-width="0.8" opacity="0.40"/>
   </g>
+
+  <!-- ── center (main panel body — stretched in both axes) ─────────────── -->
   <g id="center">
-    <rect x="0" y="0" width="1" height="48" fill="#0d0f12"/>
-    <rect x="0" y="0" width="1" height="48" fill="url(#radar-sweep)"/>
+    <rect x="0" y="0" width="1" height="48" fill="#0a0e12" opacity="0.97"/>
+    <!-- Very faint body glow -->
+    <rect x="0" y="0" width="1" height="48" fill="url(#bodyglow)"/>
   </g>
 </svg>
 SVGEOF
@@ -1104,7 +1160,7 @@ Item {
                 ctx.fillStyle = grad
                 ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2); ctx.fill()
 
-                ctx.fillStyle   = "rgba(30,144,255," + bb[bi] + ")"
+                ctx.fillStyle   = "rgba(51,255,51," + bb[bi] + ")"
                 ctx.beginPath(); ctx.arc(bx, by, 1.5, 0, Math.PI * 2); ctx.fill()
             }
         }
@@ -1120,7 +1176,7 @@ Item {
         }
         spacing: 1
         Text { text: "HDG"; color: "#3a5060"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1.5 }
-        Text { text: "270°"; color: "#1e90ff"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
+        Text { text: "270°"; color: "#33FF33"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
         Text { text: "ALT"; color: "#3a5060"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1.5 }
         Text { text: "FL350"; color: "#f5a623"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
     }
@@ -1266,7 +1322,7 @@ cat << 'EOF' > /usr/share/themes/RaptorOS-GTK/gtk-3.0/gtk.css
 @define-color fg_color #c8d6e8;
 @define-color base_color #0d0f12;
 @define-color text_color #c8d6e8;
-@define-color selected_bg_color #1e90ff;
+@define-color selected_bg_color #33FF33;
 @define-color selected_fg_color #ffffff;
 @define-color tooltip_bg_color #0d0f12;
 @define-color tooltip_fg_color #c8d6e8;
@@ -1274,11 +1330,11 @@ cat << 'EOF' > /usr/share/themes/RaptorOS-GTK/gtk-3.0/gtk.css
 @define-color warning_color #f5a623;
 @define-color success_color #2ec27e;
 @define-color error_color #dc3232;
-@define-color accent #1e90ff;
+@define-color accent #33FF33;
 
 * { -gtk-icon-style: symbolic; }
 window, .background { background-color: @bg_color; color: @fg_color; }
-headerbar { background: linear-gradient(to bottom, #1c2330, #151a20); border-bottom: 1px solid #1e90ff; padding: 4px 8px; min-height: 36px; }
+headerbar { background: linear-gradient(to bottom, #1c2330, #151a20); border-bottom: 1px solid #33FF33; padding: 4px 8px; min-height: 36px; }
 headerbar .title { font-weight: 600; color: @fg_color; letter-spacing: 0.04em; }
 button { background: #1c2330; border: 1px solid @borders; color: @fg_color; border-radius: 2px; padding: 4px 12px; transition: all 120ms ease; }
 button:hover { background: #1e4a7a; border-color: @accent; color: white; }
@@ -1345,7 +1401,7 @@ mid.light.color=#1e2d3e
 mid.color=#151a20
 dark.color=#0a0c0f
 shadow.color=#000000
-highlight.color=#1e90ff
+highlight.color=#33FF33
 inactive.highlight.color=#2a3444
 text.color=#c8d6e8
 window.text.color=#c8d6e8
@@ -1353,7 +1409,7 @@ button.text.color=#c8d6e8
 disabled.text.color=#5a6a7e
 tooltip.base.color=#0d0f12
 tooltip.text.color=#c8d6e8
-link.color=#1e90ff
+link.color=#33FF33
 link.visited.color=#8c64dc
 progress.indicator.text.color=#ffffff
 
@@ -1429,7 +1485,7 @@ Color=245,166,35
 Color=30,100,200
 
 [Color4Intense]
-Color=30,144,255
+Color=0,200,200
 
 [Color5]
 Color=100,60,180
@@ -1475,13 +1531,13 @@ After=plasma-plasmashell.service
 # absent from the systemd user service env. v4 sets all session env vars
 # explicitly and uses systemctl --user restart plasma-plasmashell.service
 # as the primary method (uses private socket, not D-Bus).
-# Delete ~/.local/share/raptor-hud-applied-v8 to re-run manually.
-ConditionPathExists=!%h/.local/share/raptor-hud-applied-v8
+# Delete ~/.local/share/raptor-hud-applied-v9 to re-run manually.
+ConditionPathExists=!%h/.local/share/raptor-hud-applied-v9
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v8'
+ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v9'
 RemainAfterExit=yes
 
 [Install]
