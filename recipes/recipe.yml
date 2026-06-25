@@ -140,11 +140,11 @@ modules:
         - dev.vencord.Vesktop            # Discord replacement (mandatory)
         - com.heroicgameslauncher.hgl    # Epic/GOG/Amazon game launcher
         - net.davidotek.pupgui2          # ProtonUp-Qt
-        - com.usebottles.bottles         # Wine/DXVK app manager
         # System utilities — always present
         - io.missioncenter.MissionCenter # GPU/CPU/RAM monitor
         - com.github.tchx84.Flatseal    # Flatpak permission manager
         - com.vscodium.codium           # VSCodium — open-source VS Code (no telemetry)
+        - org.videolan.VLC              # VLC — plays any media format, no codec hunting
 
   # ── Kernel boot arguments ─────────────────────────────────────────────────────
   # split_lock_detect=off   — prevents costly split-lock penalties in game loops
