@@ -568,56 +568,111 @@ EOF
 # ── MangoHud: Raptor OS themed HUD config ─────────────────────────────────────
 mkdir -p /etc/mangohud
 cat << 'MANGOCFG' > /etc/mangohud/MangoHud.conf
-# ── Raptor OS MangoHud default ────────────────────────────────────────────────
+# ── Raptor OS MangoHud — F-22 HUD palette ─────────────────────────────────────
+# Toggle overlay:  Shift_R + F12
+# Toggle FPS cap:  Shift_R + F1
+# Log metrics:     Shift_R + F2
+
 toggle_hud=Shift_R+F12
 toggle_fps_limit=Shift_R+F1
+toggle_logging=Shift_R+F2
+reload_cfg=Shift_R+F4
+
+# ── Layout ────────────────────────────────────────────────────────────────────
 position=top-left
 legacy_layout=false
 hud_compact=false
-round_corners=6
-fps
-frametime
-frame_timing=1
+round_corners=4
+table_columns=3
+font_size=18
+font_size_text=14
+font_file=/usr/share/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf
+text_outline=true
+text_outline_thickness=1
+
+# ── GPU metrics ───────────────────────────────────────────────────────────────
 gpu_stats
 gpu_temp
+gpu_junction_temp
 gpu_core_clock
 gpu_mem_clock
+gpu_mem_used
 gpu_power
 gpu_load_change
+throttling_status
+vram
+
+# ── CPU metrics ───────────────────────────────────────────────────────────────
 cpu_stats
 cpu_temp
 cpu_mhz
+cpu_power
+
+# ── System ────────────────────────────────────────────────────────────────────
 ram
-vram
+swap
+io_read
+io_write
+gamemode
 wine
+vulkan_driver
 engine_version
+arch
+os
+kernel
+
+# ── FPS / Frametimes ─────────────────────────────────────────────────────────
+fps
 fps_color_change=1
-fps_value=45,60
-fps_color=FF4040,F5C211,33FF33
+fps_value=30,60
+fps_color=FF3333,F5C211,33FF33
+frame_timing=1
+frametime
+histogram
+show_fps_limit
+
+# ── Colours (Raptor OS F-22 palette) ─────────────────────────────────────────
 background_color=020F12
-background_alpha=0.55
-text_color=E8F4F8
-gpu_color=00D4FF
-cpu_color=33FF33
+background_alpha=0.60
+text_color=C8E8C8
+gpu_color=33FF33
+cpu_color=00E5C8
 memory_color=A8FF78
 engine_color=F5A623
 frametime_color=00E5FF
+wine_color=C890FF
+vram_color=33FF33
+media_player_color=33FF33
+battery_color=F5A623
 text_outline=true
-font_size=20
-font_file=/usr/share/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf
+
+# ── FPS cap (0 = uncapped; override per-game via MANGOHUD_CONFIG) ─────────────
 fps_limit=0
+fps_limit_method=early
+
+# ── Logging (output to ~/mangohud_logs/) ─────────────────────────────────────
+log_interval=100
+output_folder=/home/$USER/mangohud_logs
 MANGOCFG
 
 # ── Gamemode: full configuration ──────────────────────────────────────────────
 cat << 'GAMEMODE' > /etc/gamemode.ini
 [general]
+# Poll for dead game processes every 5 seconds
 reaper_freq=5
+# Switch to performance CPU governor when game starts
 desired_governor=performance
+# iGPU uses powersave when dGPU is in use
 igpu_desiredgov=powersave
+# Detect GPU automatically
 gpu_device=auto
+# Restore to powersave/schedutil when game exits
 defaultgov=powersave
+# Grant soft real-time priority to game threads if supported
 softrealtime=auto
+# Renice the game process — lower value = higher priority (valid range -20 to 19)
 renice=10
+# Stop the screensaver / display blanking while a game is running
 inhibit_screensaver=1
 
 [filter]
@@ -625,16 +680,28 @@ whitelist=
 blacklist=
 
 [gpu]
+# Enable GPU optimisations — user accepts responsibility for any side effects
 apply_gpu_optimisations=accept-responsibility
 gpu_device=0
+# AMD: force high performance power level for the duration of the game session
 amd_performance_level=high
+# NVIDIA: persistence mode (prevents GPU going to sleep between frames)
+nv_powermizer_mode=1
 
 [cpu]
+# Do not park or pin cores — let the scheduler handle affinity freely
 park_cores=no
 pin_cores=no
 
 [supervisor]
-supervisor_whitelist=steam,heroic,lutris,bottles
+# These launchers can start and stop gamemode on behalf of child processes
+supervisor_whitelist=steam,heroic,lutris,bottles,gamescope
+
+[script]
+# Custom scripts run when gamemode activates / deactivates.
+# raptor-cortex background trim runs via the Cortex UI — not duplicated here.
+start=
+end=
 GAMEMODE
 
 # ── Input device udev rules ───────────────────────────────────────────────────
