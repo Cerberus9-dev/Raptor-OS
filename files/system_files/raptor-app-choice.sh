@@ -112,7 +112,7 @@ fi
 # ── App catalogue ─────────────────────────────────────────────────────────────
 # Format: "PRESELECT|DISPLAY_NAME|FLATPAK_ID|DESCRIPTION"
 # Only list apps NOT already installed by the default Flatpak list in recipe.yml.
-# Mandatory defaults (Vesktop, Heroic, ProtonUp, Bottles, Flatseal, MissionCenter)
+# Mandatory defaults (Vesktop, Heroic, ProtonUp, VSCodium, VLC, Flatseal, MissionCenter)
 # are never shown here — they are always installed.
 APP_CATALOGUE=(
     # ── Communication ──────────────────────────────────────────────────────
@@ -145,11 +145,11 @@ APP_CATALOGUE=(
     "FALSE|GitHub Desktop|io.github.shiftey.Desktop|Git GUI for GitHub repos"
     "FALSE|Pods|com.github.marhkb.Pods|Podman/Docker container GUI"
     # ── Gaming & Media ─────────────────────────────────────────────────────
+    "FALSE|Bottles|com.usebottles.bottles|Run Windows apps and games via Wine/DXVK — isolated per-bottle environments"
     "FALSE|Lutris|net.lutris.Lutris|Game launcher for Linux, Wine, emulators"
     "FALSE|Protontricks|com.github.Matoking.protontricks|Configure Steam/Proton games — install DirectX, runtimes, VC++, etc."
     "FALSE|Spotify|com.spotify.Client|Music and podcast streaming"
     "FALSE|Plex|tv.plex.PlexDesktop|Media server desktop client"
-    "FALSE|VLC|org.videolan.VLC|Plays virtually any media format/codec"
     # ── Audio ──────────────────────────────────────────────────────────────
     "FALSE|EasyEffects|com.github.wwmm.easyeffects|Headset EQ, bass boost, noise reduction via PipeWire"
     # ── System tools ───────────────────────────────────────────────────────
