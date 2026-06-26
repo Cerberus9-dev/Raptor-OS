@@ -6,13 +6,6 @@ name: Build Raptor OS ISO
 #
 # How to trigger:
 #   GitHub → Actions → "Build Raptor OS ISO" → Run workflow
-#
-# Required secrets (Settings → Secrets → Actions):
-#   IA_ACCESS_KEY  — Internet Archive S3 access key
-#   IA_SECRET_KEY  — Internet Archive S3 secret key
-#   IA_IDENTIFIER  — Internet Archive item identifier (e.g. raptor-os_202506)
-#
-# Get IA S3 credentials at: https://archive.org/account/s3.php
 
 on:
   workflow_dispatch:
@@ -21,14 +14,10 @@ on:
         description: "Image tag to build ISO from"
         required: false
         default: "latest"
-      upload_to_ia:
-        description: "Upload finished ISO to Internet Archive"
-        type: boolean
-        default: true
 
 concurrency:
   group: iso-build
-  cancel-in-progress: false   # never cancel a running ISO build mid-way
+  cancel-in-progress: false
 
 jobs:
   build-iso:
@@ -39,8 +28,6 @@ jobs:
       packages: read
 
     steps:
-      # ── Free disk space ─────────────────────────────────────────────────────
-      # ISO builds + osbuild workspace can exceed 12 GB. Free unused toolchains.
       - name: Free disk space
         run: |
           sudo rm -rf \
@@ -56,7 +43,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Build ISO ───────────────────────────────────────────────────────────
       - name: Build ISO
         uses: jasonn3/build-container-installer@v1
         id: build
@@ -68,104 +54,22 @@ jobs:
           variant: Kinoite
           iso_name: raptor-os-${{ github.event.inputs.version_tag }}.iso
 
-      # ── Verify the ISO was built ─────────────────────────────────────────────
-      - name: Verify ISO exists
+      - name: Verify ISO
         run: |
           ISO_PATH="${{ steps.build.outputs.iso_path }}"
           if [ ! -f "$ISO_PATH" ]; then
             echo "ERROR: ISO not found at $ISO_PATH"
             exit 1
           fi
-          ISO_SIZE=$(du -sh "$ISO_PATH" | cut -f1)
-          echo "ISO built: $ISO_PATH ($ISO_SIZE)"
-          # Generate SHA256 checksum
+          echo "ISO: $ISO_PATH ($(du -sh "$ISO_PATH" | cut -f1))"
           sha256sum "$ISO_PATH" | tee "${ISO_PATH}.sha256"
 
-      # ── Upload to GitHub Artifacts (14-day, for immediate testing) ──────────
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
-          name: raptor-os-iso-${{ github.run_number }}
+          name: raptor-os-${{ github.event.inputs.version_tag }}-${{ github.run_number }}
           retention-days: 14
           if-no-files-found: error
           path: |
             ${{ steps.build.outputs.iso_path }}
             ${{ steps.build.outputs.iso_path }}.sha256
-
-      # ── Upload to Internet Archive ──────────────────────────────────────────
-      # The ISO is ~6-8 GB. internetarchive CLI uses the IA S3 API which supports
-      # multi-part uploads and automatic resume on failure. Using --retries 10
-      # means each chunk retries up to 10 times before the upload fails.
-      - name: Install internetarchive CLI
-        if: github.event.inputs.upload_to_ia == 'true'
-        run: |
-          pip install internetarchive --quiet
-          ia --version
-
-      - name: Configure IA credentials
-        if: github.event.inputs.upload_to_ia == 'true'
-        env:
-          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
-          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
-        run: |
-          # Write credentials directly to the config file.
-          # Do NOT use `ia configure` with empty --username/--password flags —
-          # that creates a corrupt config. IA S3 uploads only need access+secret key.
-          mkdir -p ~/.config/internetarchive
-          cat > ~/.config/internetarchive/ia.ini << IACONF
-          [s3]
-          access = ${IA_ACCESS_KEY}
-          secret = ${IA_SECRET_KEY}
-          IACONF
-          # Verify credentials work before attempting upload
-          ia list "${{ secrets.IA_IDENTIFIER }}" >/dev/null 2>&1 \
-            && echo "✓ IA credentials valid, item accessible" \
-            || echo "ℹ Item may not exist yet — will be created on upload"
-
-      - name: Upload to Internet Archive
-        if: github.event.inputs.upload_to_ia == 'true'
-        env:
-          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
-          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
-        run: |
-          ISO_PATH="${{ steps.build.outputs.iso_path }}"
-          ISO_NAME=$(basename "$ISO_PATH")
-          SHA_PATH="${ISO_PATH}.sha256"
-          IDENTIFIER="${{ secrets.IA_IDENTIFIER }}"
-          DATE=$(date +%Y-%m-%d)
-          TAG="${{ github.event.inputs.version_tag }}"
-
-          echo "Uploading $ISO_NAME ($(du -sh "$ISO_PATH" | cut -f1)) to archive.org/$IDENTIFIER"
-
-          # Upload the ISO.
-          # --checksum: only re-uploads if the remote file differs (safe to re-run).
-          # --retries 10: each chunk retries 10x before failing.
-          # --no-derive: skip IA's derivative generation (saves processing time on binary files).
-          # --remote-name: set explicit filename on IA regardless of local path.
-          ia upload "$IDENTIFIER" \
-            "$ISO_PATH" \
-            --remote-name="$ISO_NAME" \
-            --metadata="title:Raptor OS ${TAG} — Gaming Linux (${DATE})" \
-            --metadata="description:Raptor OS gaming Linux distribution based on Bazzite. F-22 HUD theme, automatic GPU optimisation, and zero-terminal setup experience. Version: ${TAG}" \
-            --metadata="subject:Linux;Gaming;KDE;Bazzite;Fedora;Immutable" \
-            --metadata="creator:Cerberus9-dev" \
-            --metadata="mediatype:software" \
-            --metadata="licenseurl:https://github.com/Cerberus9-dev/Raptor-OS/blob/main/LICENSE" \
-            --checksum \
-            --retries 10 \
-            --no-derive \
-            --verbose
-
-          # Upload the SHA256 checksum file alongside the ISO
-          ia upload "$IDENTIFIER" \
-            "$SHA_PATH" \
-            --remote-name="${ISO_NAME}.sha256" \
-            --checksum \
-            --retries 5 \
-            --no-derive
-
-          echo ""
-          echo "✓ Upload complete"
-          echo "  ISO:      https://archive.org/download/${IDENTIFIER}/${ISO_NAME}"
-          echo "  SHA256:   https://archive.org/download/${IDENTIFIER}/${ISO_NAME}.sha256"
-          echo "  Item:     https://archive.org/details/${IDENTIFIER}"
