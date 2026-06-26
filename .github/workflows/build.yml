@@ -57,7 +57,7 @@ jobs:
           df -h
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       # ── Prepare file context ─────────────────────────────────────────────────
       # BlueBuild mounts this directory into the build container.
