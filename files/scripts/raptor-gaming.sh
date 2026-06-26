@@ -236,7 +236,11 @@ setup_brave_optimizations() {
 # Raptor OS: Brave / Chromium performance flags
 # Note: --use-gl=desktop is intentionally absent — it conflicts with
 # --enable-features=UseOzonePlatform on Wayland and causes rendering issues.
---enable-features=VaapiVideoDecoder,VaapiVideoEncoder,CanvasOopRasterization,UseOzonePlatform,WebRTCPipeWireCapturer,Vulkan,DefaultANGLEVulkan,VulkanFromANGLE,ParallelDownloading,OverlayScrollbar,BackForwardCache,LightweightNoStatePrefetch
+# Flags updated 2026 — removed deprecated entries:
+#   CanvasOopRasterization (removed Chromium ~v112)
+#   OverlayScrollbar       (removed Chromium ~v108)
+#   LightweightNoStatePrefetch (deprecated ~v116)
+--enable-features=VaapiVideoDecoder,VaapiVideoEncoder,UseOzonePlatform,WebRTCPipeWireCapturer,Vulkan,DefaultANGLEVulkan,VulkanFromANGLE,ParallelDownloading,BackForwardCache
 --disable-features=UseChromeOSDirectVideoDecoder
 --enable-accelerated-video-decode
 --enable-accelerated-video-encode
@@ -652,7 +656,7 @@ fps_limit_method=early
 
 # ── Logging (output to ~/mangohud_logs/) ─────────────────────────────────────
 log_interval=100
-output_folder=/home/$USER/mangohud_logs
+output_folder=$HOME/mangohud_logs
 MANGOCFG
 
 # ── Gamemode: full configuration ──────────────────────────────────────────────
