@@ -600,6 +600,30 @@ class RaptorUpdateWindow(Adw.ApplicationWindow):
         return False  # do not repeat
 
     def _do_reboot(self):
+        # Clear the sycoca cache and deployment hash BEFORE rebooting.
+        # The new OSTree deployment activates during the reboot; if the
+        # stale cache is still on disk when Plasma starts after the reboot,
+        # Kickoff shows blank categories. Wiping it here guarantees the
+        # sycoca-rebuild.sh autostart will do a full clean rebuild.
+        try:
+            import glob, os
+            cache_dir = os.path.expanduser('~/.cache')
+            for f in glob.glob(os.path.join(cache_dir, 'ksycoca6_*')) + \
+                     glob.glob(os.path.join(cache_dir, 'ksycoca5_*')):
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+            # Remove the deployment hash so sycoca-rebuild.sh forces a
+            # full --noincremental rebuild on next login regardless.
+            deploy_hash = os.path.join(cache_dir, 'raptor-deploy-hash')
+            if os.path.exists(deploy_hash):
+                os.remove(deploy_hash)
+            GLib.idle_add(self._append_log,
+                '\nSycoca cache cleared — app launcher will rebuild on next login.\n')
+        except Exception as e:
+            GLib.idle_add(self._append_log, f'\nWarning: could not clear sycoca cache: {e}\n')
+
         try:
             proc = run_privileged(REBOOT_HELPER)
             try:
