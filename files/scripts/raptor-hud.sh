@@ -3,12 +3,6 @@ set -e
 
 # =============================================================================
 # Raptor HUD v4.2 — F-22 Themed KDE Plasma Shell
-# FIXES:
-#   • Removed nitrogen entirely — wallpaper now uses plasma-apply-wallpaperimage
-#     with qdbus fallback (works natively in KDE Wayland + X11)
-#   • Panel layout switched from kwriteconfig5 piecemeal writes to a proper
-#     plasma-layout-template layout.js — reliable on first boot
-#   • mkdir -p before metadata.json heredoc
 # =============================================================================
 
 # ── Palette reference ─────────────────────────────────────────────────────────
@@ -23,12 +17,66 @@ mkdir -p /usr/lib/raptor/hud
 # Uses an autostart .desktop file so it runs in the user session context where
 # the user's cache directory (~/.cache/ksycoca6) is writable.
 mkdir -p /etc/xdg/autostart
+# Write the sycoca rebuild script separately so it can contain complex logic
+mkdir -p /usr/lib/raptor
+cat << 'SYCOCASCRIPT' > /usr/lib/raptor/sycoca-rebuild.sh
+#!/bin/bash
+# Raptor OS: sycoca rebuild on session start.
+#
+# Problem: when rpm-ostree activates a new deployment and the user reboots,
+# the sycoca database (~/.cache/ksycoca6_*) was built against the OLD
+# deployment's file paths. Plasma starts and reads the stale cache before
+# any user-level autostart fires — Kickoff shows blank categories and
+# resets to Favourites.
+#
+# Fix: compare the current OSTree deployment checksum to the last one we
+# saw. If it changed (i.e. an update was applied), delete the stale cache
+# so kbuildsycoca6 starts completely fresh. If it's the same deployment,
+# a fast incremental check is sufficient.
+
+set -euo pipefail
+
+CACHE_DIR="${HOME}/.cache"
+DEPLOY_HASH_FILE="${CACHE_DIR}/raptor-deploy-hash"
+
+# Get the current OSTree deployment checksum (first 16 chars is enough)
+CURRENT_DEPLOY=$(
+    rpm-ostree status --json 2>/dev/null \
+    | python3 -c "
+import json,sys
+try:
+    d = json.load(sys.stdin)
+    print(d['deployments'][0]['checksum'][:16])
+except Exception:
+    print('unknown')
+" 2>/dev/null || echo "unknown"
+)
+
+STORED_DEPLOY=$(cat "${DEPLOY_HASH_FILE}" 2>/dev/null || echo "")
+
+if [ "$CURRENT_DEPLOY" != "$STORED_DEPLOY" ]; then
+    # New OSTree deployment detected — the old sycoca is invalid.
+    # Delete it so kbuildsycoca6 builds a completely fresh database.
+    rm -f "${CACHE_DIR}"/ksycoca6_* "${CACHE_DIR}"/ksycoca5_* 2>/dev/null || true
+    kbuildsycoca6 --noincremental 2>/dev/null \
+        || kbuildsycoca5 --noincremental 2>/dev/null \
+        || true
+    # Record this deployment so we don't full-rebuild next session
+    echo "${CURRENT_DEPLOY}" > "${DEPLOY_HASH_FILE}"
+    logger -t raptor-sycoca "Full rebuild after deployment change: ${STORED_DEPLOY:-none} → ${CURRENT_DEPLOY}"
+else
+    # Same deployment — sycoca is already valid; fast incremental check only
+    kbuildsycoca6 2>/dev/null || true
+fi
+SYCOCASCRIPT
+chmod +x /usr/lib/raptor/sycoca-rebuild.sh
+
 cat << 'SYCOCA_AUTOSTART' > /etc/xdg/autostart/raptor-sycoca-rebuild.desktop
 [Desktop Entry]
 Type=Application
 Name=Raptor OS Sycoca Rebuild
-Comment=Rebuild KDE service cache for correct app launcher categories
-Exec=/bin/bash -c 'kbuildsycoca6 --noincremental 2>/dev/null || kbuildsycoca5 --noincremental 2>/dev/null || true'
+Comment=Rebuild KDE service cache after OS updates (prevents blank app launcher categories)
+Exec=/usr/lib/raptor/sycoca-rebuild.sh
 Terminal=false
 Hidden=false
 X-KDE-autostart-phase=1
