@@ -3,8 +3,8 @@
 
 A custom Bazzite-based Linux distribution built for gaming performance — F-22 HUD-inspired KDE theme, automatic GPU optimisation, low-latency audio, and a zero-terminal firstboot experience.
 
-> ⚠️ **HEAVY W.I.P — Feedback appreciated!**
-> ℹ️ **This is NOT a live OS.** Requires a separate drive, replacing your current OS, or dual booting. Minimum 40–50 GB free for dual boot. Can be run in a VM first for testing.
+>  **HEAVY W.I.P, Feedback appreciated!**
+>  **This is NOT a live OS.** Requires a separate drive, replacing your current OS, or dual booting. Minimum 40–50 GB free for dual boot. Can be run in a VM first for testing.
 
 ---
 
