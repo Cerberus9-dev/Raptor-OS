@@ -925,6 +925,25 @@ cat << 'SYSPLASMARC' > /etc/xdg/plasmarc
 name=RaptorOS
 SYSPLASMARC
 
+# ── Baloo: filename-only indexing, 1-thread, low priority ─────────────────────
+# Baloo is KDE's file indexer. Full-text search (indexing file CONTENT) is the
+# biggest RAM and CPU offender — it loads each file into memory to extract text.
+# For a gaming desktop, filename-only search is sufficient and uses a fraction
+# of the RAM. Limiting to 1 thread prevents it from competing with game I/O.
+mkdir -p /etc/xdg
+cat << 'BALOORCEOF' > /etc/xdg/baloofilerc
+[Basic Settings]
+Indexing-Enabled=true
+Only from Cache=false
+
+[General]
+# Disable full-text content indexing — filename search only
+exclude filters=*~,*.part,*.tmp,*.log,*.o,*.la,*.lo,*.loT,*.moc,moc_*.cpp,qrc_*.cpp,ui_*.h,cmake_install.cmake,CMakeCache.txt,CTestTestfile.cmake,libtool,config.status,confdefs.h,autom4te,conftest,confstat,Makefile.am,*.gcode,.hg,.git,.svn,.bzr,_darcs,.deps,.libs,.sconf_temp,.DS_Store,socket_*
+dbPath[$e]=$HOME/.local/share/baloo
+# 1 thread: prevents Baloo from competing with game loading/shader compilation
+max threads=1
+BALOORCEOF
+
 # Also write /etc/xdg/kwinrc at build time for system-wide window decoration defaults.
 # Without this, kwinrc button layout only applies after raptor-hud-apply.service runs
 # (which is AFTER kwin has already read its config and drawn window decorations).
@@ -946,9 +965,11 @@ AnimationSpeed=3
 # interval, minimising display latency at the cost of potential tearing on X11
 # (no effect on Wayland which handles VSync in the compositor itself).
 LatencyPolicy=0
-# HiddenPreviews=5: keep all window thumbnails in VRAM, not just visible windows.
-# Faster alt-tab preview and taskbar thumbnails.
-HiddenPreviews=5
+# HiddenPreviews=4: keep window thumbnails for visible/taskbar-hovered windows
+# only. Value 5 (all windows including minimised) was wasting 100-300 MB of
+# RAM depending on how many windows were open. 4 is the KDE default and is
+# sufficient for snappy taskbar hover previews without the memory cost.
+HiddenPreviews=4
 SYSKWINRC
 
 # Also write system-wide kdeglobals defaults for color scheme and icons
@@ -1603,4 +1624,64 @@ echo "RAPTOR_HUD_READY"
 echo ""
 echo "To set your wallpaper (persists across logins):"
 echo "  raptor-set-wallpaper /path/to/image.jpg"
-echo "  — or search 'Set Wallpaper' in the app menu"
+echo "  — or search 'Set Wallpaper' in the app menu"#!/bin/bash
+set -e
+
+# =============================================================================
+# Raptor HUD v4.2 — F-22 Themed KDE Plasma Shell
+# =============================================================================
+
+# ── Palette reference ─────────────────────────────────────────────────────────
+# Base:    #0d0f12  Surface: #151a20  Panel:   #1c2330  Border:  #2a3444
+# Accent:  #33FF33  Warning: #f5a623  Success: #2ec27e  Text:    #c8d6e8
+
+mkdir -p /usr/lib/raptor/hud
+
+# ── Sycoca autostart — rebuild menu cache early in session ────────────────────
+# Runs kbuildsycoca6 at session start BEFORE the app launcher is rendered.
+# This prevents blank categories from appearing when the cache is stale/absent.
+# Uses an autostart .desktop file so it runs in the user session context where
+# the user's cache directory (~/.cache/ksycoca6) is writable.
+mkdir -p /etc/xdg/autostart
+# Write the sycoca rebuild script separately so it can contain complex logic
+mkdir -p /usr/lib/raptor
+cat << 'SYCOCASCRIPT' > /usr/lib/raptor/sycoca-rebuild.sh
+#!/bin/bash
+# Raptor OS: sycoca rebuild on session start.
+#
+# Problem: when rpm-ostree activates a new deployment and the user reboots,
+# the sycoca database (~/.cache/ksycoca6_*) was built against the OLD
+# deployment's file paths. Plasma starts and reads the stale cache before
+# any user-level autostart fires — Kickoff shows blank categories and
+# resets to Favourites.
+#
+# Fix: compare the current OSTree deployment checksum to the last one we
+# saw. If it changed (i.e. an update was applied), delete the stale cache
+# so kbuildsycoca6 starts completely fresh. If it's the same deployment,
+# a fast incremental check is sufficient.
+
+set -euo pipefail
+
+CACHE_DIR="${HOME}/.cache"
+DEPLOY_HASH_FILE="${CACHE_DIR}/raptor-deploy-hash"
+
+# Get the current OSTree deployment checksum (first 16 chars is enough)
+CURRENT_DEPLOY=$(
+    rpm-ostree status --json 2>/dev/null \
+    | python3 -c "
+import json,sys
+try:
+    d = json.load(sys.stdin)
+    print(d['deployments'][0]['checksum'][:16])
+except Exception:
+    print('unknown')
+" 2>/dev/null || echo "unknown"
+)
+
+STORED_DEPLOY=$(cat "${DEPLOY_HASH_FILE}" 2>/dev/null || echo "")
+
+if [ "$CURRENT_DEPLOY" != "$STORED_DEPLOY" ]; then
+    # New OSTree deployment detected — the old sycoca is invalid.
+    # Delete it so kbuildsycoca6 builds a completely fresh database.
+    rm -f "${CACHE_DIR}"/ksycoca6_* "${CACHE_DIR}"/ksycoca5_* 2>/dev/null || true
+    kbuildsycoca6 --noincremental 2>/dev/null \
