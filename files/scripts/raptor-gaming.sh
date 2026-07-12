@@ -507,7 +507,40 @@ MemoryHigh=48M
 MemoryMax=96M
 DROP
 
+cat << 'DROP' > /etc/systemd/user/kwalletd6.service.d/raptor-memcap.conf
+# KWallet password manager daemon — cap to 48 MB; rarely needs more.
+[Service]
+MemoryHigh=48M
+MemoryMax=96M
+DROP
+
+mkdir -p /etc/systemd/user/kwalletd6.service.d
+
 echo "Memory caps installed for background services."
+
+# ── Mask services that waste RAM on a gaming desktop ─────────────────────────
+#
+# Akonadi: KDE PIM database server — runs on every login by default even with
+# no PIM apps (KMail, KOrganizer, Kontact) installed. Starts an SQLite server
+# + multiple agents, using 200-500 MB of RAM. Gaming users do not need this.
+# Re-enable with: systemctl --user unmask akonadiserver.service
+mkdir -p /etc/systemd/user
+ln -sf /dev/null /etc/systemd/user/akonadiserver.service
+ln -sf /dev/null /etc/systemd/user/akonadi.service           2>/dev/null || true
+
+# tracker-miner-fs-3: GNOME file indexer — completely redundant alongside
+# KDE Baloo which already indexes the same files. Two indexers fighting over
+# the same directories wastes ~60-100 MB RAM and CPU disk I/O.
+# Re-enable with: systemctl --user unmask tracker-miner-fs-3.service
+ln -sf /dev/null /etc/systemd/user/tracker-miner-fs-3.service
+ln -sf /dev/null /etc/systemd/user/tracker-store-3.service    2>/dev/null || true
+
+# plasma-browser-integration: adds ~80 MB for browser tab title syncing.
+# Most users do not need browser-to-plasma integration; disable by default.
+# Re-enable with: systemctl --user unmask plasma-browser-integration.service
+ln -sf /dev/null /etc/systemd/user/plasma-browser-integration.service 2>/dev/null || true
+
+echo "Heavy background services masked (Akonadi, tracker-miner-fs, browser-integration)."
 
 # ── journald: cap in-memory/disk usage ────────────────────────────────────────
 # journald keeps a chunk of recent logs in a tmpfs-backed runtime journal
