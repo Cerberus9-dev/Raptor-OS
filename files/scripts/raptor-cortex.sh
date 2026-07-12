@@ -620,6 +620,98 @@ def get_cpu_boost():
         return None
 
 
+def get_cpu_temp():
+    """Return CPU temperature in °C, or None if unavailable."""
+    # Try x86_pkg_temp first (most accurate on Intel/AMD)
+    for zone in sorted(os.listdir("/sys/class/thermal")):
+        path = f"/sys/class/thermal/{zone}"
+        try:
+            with open(f"{path}/type") as f:
+                t = f.read().strip()
+            if t in ("x86_pkg_temp", "k10temp", "acpitz", "cpu-thermal"):
+                with open(f"{path}/temp") as f:
+                    return int(f.read().strip()) // 1000
+        except Exception:
+            continue
+    # Fall back: first thermal zone that looks sane
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp") as f:
+            t = int(f.read().strip()) // 1000
+            return t if 10 < t < 120 else None
+    except Exception:
+        return None
+
+
+def get_gpu_temp():
+    """Return GPU temperature in °C from hwmon or AMD sysfs."""
+    # AMD: check hwmon for devices advertising 'amdgpu'
+    try:
+        for hwmon in sorted(os.listdir("/sys/class/hwmon")):
+            name_path = f"/sys/class/hwmon/{hwmon}/name"
+            with open(name_path) as f:
+                name = f.read().strip()
+            if name in ("amdgpu", "radeon"):
+                for label_cand in ("temp1_input", "temp2_input"):
+                    tp = f"/sys/class/hwmon/{hwmon}/{label_cand}"
+                    if os.path.exists(tp):
+                        with open(tp) as f:
+                            return int(f.read().strip()) // 1000
+    except Exception:
+        pass
+    # NVIDIA: try nvidia-smi
+    try:
+        r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=2
+        )
+        if r.returncode == 0:
+            return int(r.stdout.strip())
+    except Exception:
+        pass
+    return None
+
+
+def get_cpu_freq_mhz():
+    """Return current CPU frequency in MHz (core 0), or None."""
+    try:
+        with open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq") as f:
+            return int(f.read().strip()) // 1000
+    except Exception:
+        return None
+
+
+def load_persistent_settings():
+    """Load persistent Cortex settings from ~/.config/raptor-cortex-settings.json."""
+    defaults = {
+        "auto_apply_mode_on_boot": True,
+        "auto_performance_on_game": False,
+        "auto_restore_after_game": False,
+        "sched_cleanup_enabled": False,
+        "sched_cleanup_interval_min": 30,
+    }
+    settings_file = os.path.expanduser("~/.config/raptor-cortex-settings.json")
+    try:
+        import json
+        with open(settings_file) as f:
+            loaded = json.load(f)
+        defaults.update(loaded)
+    except Exception:
+        pass
+    return defaults
+
+
+def save_persistent_settings(settings: dict):
+    """Save persistent Cortex settings."""
+    import json
+    settings_file = os.path.expanduser("~/.config/raptor-cortex-settings.json")
+    try:
+        os.makedirs(os.path.dirname(settings_file), exist_ok=True)
+        with open(settings_file, "w") as f:
+            json.dump(settings, f, indent=2)
+    except Exception as e:
+        print(f"[cortex] Could not save settings: {e}", file=sys.stderr)
+
+
 def load_cortex_config():
     patterns = set()
     try:
@@ -666,8 +758,10 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self._running = False
         self._suspended_now = []
         self._cortex_patterns = load_cortex_config()
-        # Read the persisted mode so the UI always reflects reality
+        # Read the persisted mode and persistent settings
         self._current_mode = detect_system_mode()
+        self._settings = load_persistent_settings()
+        self._sched_cleanup_id = None   # GLib timer handle
         self._mode_btns = {}
         self._toast_overlay = None
         self._build_ui()
@@ -733,6 +827,24 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self.boost_label.add_css_class("dim-label")
         self.boost_row.add_suffix(self.boost_label)
         stats_group.add(self.boost_row)
+
+        self.cpu_temp_row = Adw.ActionRow(title="CPU Temperature")
+        self.cpu_temp_label = Gtk.Label(label="…")
+        self.cpu_temp_label.add_css_class("dim-label")
+        self.cpu_temp_row.add_suffix(self.cpu_temp_label)
+        stats_group.add(self.cpu_temp_row)
+
+        self.gpu_temp_row = Adw.ActionRow(title="GPU Temperature")
+        self.gpu_temp_label = Gtk.Label(label="…")
+        self.gpu_temp_label.add_css_class("dim-label")
+        self.gpu_temp_row.add_suffix(self.gpu_temp_label)
+        stats_group.add(self.gpu_temp_row)
+
+        self.cpu_freq_row = Adw.ActionRow(title="CPU Frequency")
+        self.cpu_freq_label = Gtk.Label(label="…")
+        self.cpu_freq_label.add_css_class("dim-label")
+        self.cpu_freq_row.add_suffix(self.cpu_freq_label)
+        stats_group.add(self.cpu_freq_row)
 
         mode_group = Adw.PreferencesGroup(title="Performance Mode")
         mode_group.set_description(
@@ -821,6 +933,105 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self.sus_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.sus_group.add(self.sus_box)
 
+        # ── Quick Actions ──────────────────────────────────────────────────────
+        quick_group = Adw.PreferencesGroup(title="Quick Actions")
+        quick_group.set_description(
+            "One-click presets for common scenarios. Effects are immediate.")
+        content.append(quick_group)
+
+        boost_row = Adw.ActionRow(title="Pre-Game Boost")
+        boost_row.set_subtitle(
+            "Switch to Performance mode, drop caches, reclaim ~1.5 GB from browser/Discord")
+        boost_row.set_activatable(True)
+        boost_row.connect("activated", self._on_pregame_boost)
+        boost_icon = Gtk.Image.new_from_icon_name("media-playback-start-symbolic")
+        boost_icon.set_pixel_size(18)
+        boost_row.add_prefix(boost_icon)
+        quick_group.add(boost_row)
+
+        restore_row = Adw.ActionRow(title="Restore Desktop")
+        restore_row.set_subtitle(
+            "Switch back to Balanced, resume all suspended services")
+        restore_row.set_activatable(True)
+        restore_row.connect("activated", self._on_restore_desktop)
+        rest_icon = Gtk.Image.new_from_icon_name("go-home-symbolic")
+        rest_icon.set_pixel_size(18)
+        restore_row.add_prefix(rest_icon)
+        quick_group.add(restore_row)
+
+        shader_row = Adw.ActionRow(title="Clear Shader Cache")
+        shader_row.set_subtitle(
+            "Delete Mesa, DXVK, and Steam shader caches — fixes visual glitches, "
+            "frees disk space (shaders rebuild on next game launch)")
+        shader_row.set_activatable(True)
+        shader_row.connect("activated", self._on_clear_shaders)
+        shader_icon = Gtk.Image.new_from_icon_name("edit-clear-all-symbolic")
+        shader_icon.set_pixel_size(18)
+        shader_row.add_prefix(shader_icon)
+        quick_group.add(shader_row)
+
+        # ── Persistent Settings ────────────────────────────────────────────────
+        persist_group = Adw.PreferencesGroup(title="Persistent Settings")
+        persist_group.set_description(
+            "These settings survive reboots and are applied automatically.")
+        content.append(persist_group)
+
+        self.boot_mode_row = Adw.SwitchRow()
+        self.boot_mode_row.set_title("Apply selected mode on every boot")
+        self.boot_mode_row.set_subtitle(
+            "Restores the Performance/Balanced/Power Saving mode after each reboot")
+        self.boot_mode_row.set_active(self._settings.get("auto_apply_mode_on_boot", True))
+        self.boot_mode_row.connect("notify::active", self._on_setting_toggle, "auto_apply_mode_on_boot")
+        persist_group.add(self.boot_mode_row)
+
+        self.auto_perf_row = Adw.SwitchRow()
+        self.auto_perf_row.set_title("Auto-switch to Performance when game starts")
+        self.auto_perf_row.set_subtitle(
+            "Watches gamemode — when a game launches Cortex switches to Performance automatically")
+        self.auto_perf_row.set_active(self._settings.get("auto_performance_on_game", False))
+        self.auto_perf_row.connect("notify::active", self._on_setting_toggle, "auto_performance_on_game")
+        persist_group.add(self.auto_perf_row)
+
+        self.auto_restore_row = Adw.SwitchRow()
+        self.auto_restore_row.set_title("Restore Balanced mode after game exits")
+        self.auto_restore_row.set_subtitle(
+            "Automatically switches back to Balanced when the game process ends")
+        self.auto_restore_row.set_active(self._settings.get("auto_restore_after_game", False))
+        self.auto_restore_row.connect("notify::active", self._on_setting_toggle, "auto_restore_after_game")
+        persist_group.add(self.auto_restore_row)
+
+        # ── Scheduled Cleanup ─────────────────────────────────────────────────
+        sched_group = Adw.PreferencesGroup(title="Scheduled Memory Cleanup")
+        sched_group.set_description(
+            "Automatically run memory optimization in the background on a timer. "
+            "Useful for long gaming sessions where browser memory grows over time.")
+        content.append(sched_group)
+
+        self.sched_enable_row = Adw.SwitchRow()
+        self.sched_enable_row.set_title("Enable scheduled cleanup")
+        self.sched_enable_row.set_subtitle("Runs the enabled optimization options above on a timer")
+        self.sched_enable_row.set_active(self._settings.get("sched_cleanup_enabled", False))
+        self.sched_enable_row.connect("notify::active", self._on_sched_toggle)
+        sched_group.add(self.sched_enable_row)
+
+        self.sched_interval_row = Adw.SpinRow.new_with_range(5, 120, 5)
+        self.sched_interval_row.set_title("Cleanup interval (minutes)")
+        self.sched_interval_row.set_subtitle("How often to run the automatic cleanup")
+        self.sched_interval_row.set_value(self._settings.get("sched_cleanup_interval_min", 30))
+        self.sched_interval_row.set_sensitive(self._settings.get("sched_cleanup_enabled", False))
+        self.sched_interval_row.connect("changed", self._on_sched_interval_changed)
+        sched_group.add(self.sched_interval_row)
+
+        self.sched_status_row = Adw.ActionRow(title="Next cleanup")
+        self.sched_status_label = Gtk.Label(label="Disabled")
+        self.sched_status_label.add_css_class("dim-label")
+        self.sched_status_row.add_suffix(self.sched_status_label)
+        sched_group.add(self.sched_status_row)
+
+        # Start timer if it was enabled last session
+        if self._settings.get("sched_cleanup_enabled", False):
+            self._start_sched_cleanup()
+
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         btn_box.set_halign(Gtk.Align.CENTER)
         content.append(btn_box)
@@ -839,6 +1050,145 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
 
         self.spinner = Gtk.Spinner()
         btn_box.append(self.spinner)
+
+    # ── Quick Action handlers ──────────────────────────────────────────────────
+
+    def _on_pregame_boost(self, row):
+        """One click: Performance mode + cache drop + 1.5 GB cgroup reclaim."""
+        self._on_mode_switch(None, "performance")
+        opts = {"caches": True, "compact": False, "zram": False,
+                "swap": False, "oom": True, "deep": False, "thp": False, "cpu": False}
+        before, total = mem_used_mb()
+        threading.Thread(
+            target=self._do_optimize, args=(opts, before, total), daemon=True
+        ).start()
+        toast = Adw.Toast.new("Pre-Game Boost applied — Performance mode active")
+        toast.set_timeout(3)
+        self._toast_overlay.add_toast(toast)
+
+    def _on_restore_desktop(self, row):
+        """Switch to Balanced + resume all suspended services."""
+        self._on_mode_switch(None, "balanced")
+        threading.Thread(target=self._resume_services, daemon=True).start()
+        toast = Adw.Toast.new("Desktop restored — Balanced mode, all services resumed")
+        toast.set_timeout(3)
+        self._toast_overlay.add_toast(toast)
+
+    def _resume_services(self):
+        subprocess.run(["sudo", HELPER, "resume-background"], capture_output=True)
+        GLib.idle_add(self.resume_btn.set_sensitive, False)
+
+    def _on_clear_shaders(self, row):
+        """Clear Mesa, DXVK, and Steam shader caches."""
+        import shutil, glob
+        home = os.path.expanduser("~")
+        targets = [
+            f"{home}/.cache/mesa_shader_cache",
+            f"{home}/.cache/mesa_shader_cache_db",
+            f"{home}/.cache/radv_cache",
+            f"{home}/.cache/amdvlk",
+            f"{home}/.local/share/vulkan/implicit_layer.d",
+        ]
+        # DXVK state caches
+        targets += glob.glob(f"{home}/.local/share/Steam/steamapps/shadercache/**/*",
+                             recursive=True)
+        freed_mb = 0
+        removed = 0
+        for t in targets:
+            try:
+                if os.path.isdir(t):
+                    size = sum(
+                        os.path.getsize(os.path.join(dp, f))
+                        for dp, _, fns in os.walk(t) for f in fns
+                    ) // (1024 * 1024)
+                    shutil.rmtree(t, ignore_errors=True)
+                    freed_mb += size
+                    removed += 1
+                elif os.path.isfile(t):
+                    freed_mb += os.path.getsize(t) // (1024 * 1024)
+                    os.remove(t)
+                    removed += 1
+            except Exception:
+                pass
+        msg = f"Shader cache cleared — {freed_mb} MB freed ({removed} directories removed)"
+        GLib.idle_add(self._show_toast, msg)
+
+    def _show_toast(self, msg):
+        toast = Adw.Toast.new(msg)
+        toast.set_timeout(4)
+        self._toast_overlay.add_toast(toast)
+
+    # ── Persistent Settings handlers ───────────────────────────────────────────
+
+    def _on_setting_toggle(self, row, _param, key):
+        self._settings[key] = row.get_active()
+        threading.Thread(
+            target=save_persistent_settings, args=(self._settings,), daemon=True
+        ).start()
+
+    # ── Scheduled Cleanup handlers ─────────────────────────────────────────────
+
+    def _on_sched_toggle(self, row, _param):
+        enabled = row.get_active()
+        self._settings["sched_cleanup_enabled"] = enabled
+        self.sched_interval_row.set_sensitive(enabled)
+        threading.Thread(
+            target=save_persistent_settings, args=(self._settings,), daemon=True
+        ).start()
+        if enabled:
+            self._start_sched_cleanup()
+        else:
+            self._stop_sched_cleanup()
+            GLib.idle_add(self.sched_status_label.set_text, "Disabled")
+
+    def _on_sched_interval_changed(self, row):
+        interval = int(row.get_value())
+        self._settings["sched_cleanup_interval_min"] = interval
+        threading.Thread(
+            target=save_persistent_settings, args=(self._settings,), daemon=True
+        ).start()
+        if self._settings.get("sched_cleanup_enabled", False):
+            self._stop_sched_cleanup()
+            self._start_sched_cleanup()
+
+    def _start_sched_cleanup(self):
+        self._stop_sched_cleanup()
+        interval_min = self._settings.get("sched_cleanup_interval_min", 30)
+        interval_ms  = interval_min * 60 * 1000
+        self._sched_cleanup_id = GLib.timeout_add(interval_ms, self._run_sched_cleanup)
+        GLib.idle_add(
+            self.sched_status_label.set_text,
+            f"Every {interval_min} min — next in {interval_min} min"
+        )
+
+    def _stop_sched_cleanup(self):
+        if self._sched_cleanup_id is not None:
+            GLib.source_remove(self._sched_cleanup_id)
+            self._sched_cleanup_id = None
+
+    def _run_sched_cleanup(self):
+        """Called by GLib timer — run the enabled optimize options silently."""
+        opts = {
+            "caches":  self.opt_caches.get_active(),
+            "compact": self.opt_compact.get_active(),
+            "zram":    self.opt_zram.get_active(),
+            "swap":    False,   # never auto-swap-flush
+            "oom":     self.opt_oom.get_active(),
+            "deep":    False,   # never auto deep-clean
+            "thp":     False,
+            "cpu":     False,
+        }
+        before, total = mem_used_mb()
+        threading.Thread(
+            target=self._do_optimize, args=(opts, before, total), daemon=True
+        ).start()
+        interval_min = self._settings.get("sched_cleanup_interval_min", 30)
+        GLib.idle_add(
+            self.sched_status_label.set_text,
+            f"Every {interval_min} min — running now…"
+        )
+        # Re-schedule (return True keeps the timer alive)
+        return True
 
     def _update_mode_banner(self):
         label, desc, _, _ = PERFORMANCE_MODES[self._current_mode]
@@ -946,7 +1296,25 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
             self.zram_label.set_text("Not active")
 
         boost = get_cpu_boost()
-        self.boost_label.set_text("Enabled" if boost else "Disabled" if boost is not None else "N/A")
+        self.boost_label.set_text("Enabled ✓" if boost else "Disabled" if boost is not None else "N/A")
+
+        cpu_t = get_cpu_temp()
+        self.cpu_temp_label.set_text(f"{cpu_t} °C" if cpu_t is not None else "N/A")
+        self.cpu_temp_label.set_css_classes(
+            ["error"] if cpu_t and cpu_t > 90
+            else ["warning"] if cpu_t and cpu_t > 75
+            else ["dim-label"])
+
+        gpu_t = get_gpu_temp()
+        self.gpu_temp_label.set_text(f"{gpu_t} °C" if gpu_t is not None else "N/A")
+        self.gpu_temp_label.set_css_classes(
+            ["error"] if gpu_t and gpu_t > 95
+            else ["warning"] if gpu_t and gpu_t > 80
+            else ["dim-label"])
+
+        freq = get_cpu_freq_mhz()
+        self.cpu_freq_label.set_text(
+            f"{freq} MHz ({freq/1000:.2f} GHz)" if freq else "N/A")
         return True
 
     def on_optimize(self, btn):
