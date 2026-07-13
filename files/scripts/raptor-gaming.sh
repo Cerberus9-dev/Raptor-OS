@@ -1,14 +1,14 @@
 #!/bin/bash
 set -oue pipefail
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════[...]
 # Raptor OS — Gaming & System Optimization  v2.6
 # Covers: app launcher configs (Lutris, Steam), browser hardening (Firefox,
 #         Brave), background process trimmer, I/O scheduler tuning, MangoHud
 #         theme, gamemode.ini, input udev rules, fastfetch config, network
 #         sysctl, DNS, journald caps, ModemManager masking, and systemd
 #         cgroup memory caps for background services.
-# ═══════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════��[...]
 
 # ── Ensure required directories exist ─────────────────────────────────────────
 mkdir -p /usr/local/bin \
@@ -16,7 +16,7 @@ mkdir -p /usr/local/bin \
          /usr/lib/raptor \
          /usr/lib/systemd/system
 
-# ── Lutris ─────────────────────────────────────────────────────────────────────
+# ── Lutris ────────────────────────────────────────────────────────────[...]
 mkdir -p /etc/skel/.config/lutris
 cat << 'EOF' > /etc/skel/.config/lutris/lutris.conf
 [lutris]
@@ -28,7 +28,7 @@ library-view-sorting=name
 library-view-sorting-ascending=true
 EOF
 
-# ── Steam ──────────────────────────────────────────────────────────────────────
+# ── Steam ────────────────────────────────────────────────────────────�[...]
 mkdir -p /etc/skel/.steam/steam
 cat << 'EOF' > /etc/skel/.steam/steam/steam_dev.cfg
 # Disable HTTP/2 (causes stalled downloads on many routers)
@@ -41,7 +41,7 @@ cat << 'EOF' > /etc/skel/.steam/steam/steam_dev.cfg
 @bEnableShaderPreCaching 0
 EOF
 
-# ── ulimits ────────────────────────────────────────────────────────────────────
+# ── ulimits ───────────────────────────────────────────────────────────��[...]
 cat << 'EOF' > /etc/security/limits.d/raptor-gaming.conf
 # Raptor OS gaming ulimits
 # Large open-file limit (Unity asset streaming, shader caches)
@@ -72,7 +72,7 @@ ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue
 EOF
 udevadm control --reload-rules 2>/dev/null || true
 
-# ── ZRAM swap ─────────────────────────────────────────────────────────────────
+# ── ZRAM swap ───────────────────────────────────────────────────────────[...]
 # ZRAM is configured via /etc/systemd/zram-generator.conf (installed by the
 # files module in recipe.yml). systemd-zram-generator handles device creation
 # automatically at boot — no separate service or script is needed here.
@@ -152,7 +152,7 @@ setup_firefox_optimizations() {
 // Memory defaults are managed via /etc/firefox/policies/policies.json.
 // This file handles GPU compositing, rendering quality, and privacy.
 
-// ── GPU / WebRender ───────────────────────────────────────────────────────────
+// ── GPU / WebRender ────────────────────────────────────────────────────────�[...]
 user_pref("layers.acceleration.enabled", true);
 user_pref("gfx.webrender.all", true);
 user_pref("gfx.webrender.compositor", true);
@@ -176,7 +176,7 @@ user_pref("browser.cache.disk.capacity", 524288);
 user_pref("browser.cache.memory.enable", true);
 // browser.cache.memory.capacity set in policies.json (64 MB)
 
-// ── Network ───────────────────────────────────────────────────────────────────
+// ── Network ───────────────────────────────────────────────────────────[...]
 // HTTP/2 + QUIC (HTTP/3) — pipelining was removed in Firefox 83, do not set it
 user_pref("network.http.max-connections", 900);
 user_pref("network.http.max-connections-per-server", 32);
@@ -206,7 +206,7 @@ user_pref("browser.newtabpage.activity-stream.showSponsoredTopSites", false);
 user_pref("breakpad.reportURL", "");
 user_pref("browser.tabs.crashReporting.sendReport", false);
 
-// ── Scroll smoothness ─────────────────────────────────────────────────────────
+// ── Scroll smoothness ───────────────────────────────────────────────────────��[...]
 user_pref("apz.allow_zooming", true);
 user_pref("general.smoothScroll", true);
 user_pref("general.smoothScroll.mouseWheel.durationMinMS", 80);
@@ -227,7 +227,7 @@ done
 mkdir -p /etc/skel/.mozilla/firefox/raptor-default
 setup_firefox_optimizations "/etc/skel/.mozilla/firefox/raptor-default"
 
-# ── Brave optimization ─────────────────────────────────────────────────────────
+# ── Brave optimization ───────────────────────────────────────────────────────��[...]
 setup_brave_optimizations() {
     local BRAVE_CONFIG_DIR="$1"
     mkdir -p "$BRAVE_CONFIG_DIR"
@@ -453,13 +453,16 @@ SYSCTL
 # Users who need more headroom for mail/search can raise these in their own
 # ~/.config/systemd/user/ overrides.
 
+mkdir -p /etc/systemd/user
+
 for svc_dir in \
     "baloo_file.service.d" \
     "akonadiserver.service.d" \
     "kdeconnectd.service.d" \
     "evolution-data-server.service.d" \
     "tracker-miner-fs-3.service.d" \
-    "kactivitymanagerd.service.d"
+    "kactivitymanagerd.service.d" \
+    "kwalletd6.service.d"
 do
     mkdir -p "/etc/systemd/user/${svc_dir}"
 done
@@ -513,8 +516,6 @@ cat << 'DROP' > /etc/systemd/user/kwalletd6.service.d/raptor-memcap.conf
 MemoryHigh=48M
 MemoryMax=96M
 DROP
-
-mkdir -p /etc/systemd/user/kwalletd6.service.d
 
 echo "Memory caps installed for background services."
 
@@ -625,7 +626,7 @@ RuntimeMaxUse=64M
 SystemMaxUse=200M
 JOURNALD
 
-# ── Mask ModemManager ──────────────────────────────────────────────────────────
+# ── Mask ModemManager ────────────────────────────────────────────────────────[...]
 # ModemManager probes for cellular/WWAN hardware on every boot and stays
 # resident. Desktop and laptop gaming systems essentially never have a modem.
 # Masking (symlink to /dev/null) fully prevents it from starting; users with
@@ -683,7 +684,7 @@ toggle_fps_limit=Shift_R+F1
 toggle_logging=Shift_R+F2
 reload_cfg=Shift_R+F4
 
-# ── Layout ────────────────────────────────────────────────────────────────────
+# ── Layout ───────────────────────────���───────────────────────────────��[...]
 position=top-left
 legacy_layout=false
 hud_compact=false
@@ -695,7 +696,7 @@ font_file=/usr/share/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf
 text_outline=true
 text_outline_thickness=1
 
-# ── GPU metrics ───────────────────────────────────────────────────────────────
+# ── GPU metrics ──────────────────────────────────────────────────────────[...]
 gpu_stats
 gpu_temp
 gpu_junction_temp
@@ -707,13 +708,13 @@ gpu_load_change
 throttling_status
 vram
 
-# ── CPU metrics ───────────────────────────────────────────────────────────────
+# ── CPU metrics ──────────────────────────────────────────────────────────[...]
 cpu_stats
 cpu_temp
 cpu_mhz
 cpu_power
 
-# ── System ────────────────────────────────────────────────────────────────────
+# ── System ───────────────────────────────────────────────────────────��[...]
 ram
 swap
 io_read
@@ -726,7 +727,7 @@ arch
 os
 kernel
 
-# ── FPS / Frametimes ─────────────────────────────────────────────────────────
+# ── FPS / Frametimes ────────────────────────────────────────────────────────�[...]
 fps
 fps_color_change=1
 fps_value=30,60
@@ -921,7 +922,7 @@ tcp_bbr
 sch_cake
 MODULES
 
-# ── DNS-over-TLS ──────────────────────────────────────────────────────────────
+# ── DNS-over-TLS ─────────────────────────────────────────────────────────��[...]
 mkdir -p /etc/systemd/resolved.conf.d
 cat << 'RESOLVED' > /etc/systemd/resolved.conf.d/raptor-dns.conf
 # Raptor OS: Cloudflare DoT resolver — faster than ISP default (~10 ms global)
