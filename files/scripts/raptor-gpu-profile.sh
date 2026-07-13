@@ -192,16 +192,60 @@ ENVEOF
   powersave)
     cat << ENVEOF > /etc/environment.d/raptor-gpu.conf
 # ── Raptor OS: POWER SAVING profile ──────────────────────────────────────────
+# Shader cache disabled: saves disk reads/writes and storage wake-ups.
+# Shaders will recompile on first launch but power draw is lower overall.
 MESA_SHADER_CACHE_DISABLE=true
+# Disable threaded optimizations: fewer background threads = lower idle power.
+__GL_THREADED_OPTIMIZATIONS=0
 $COMMON_VARS
 ENVEOF
     if [ "$GPU_VENDOR" = "amd" ]; then
+        # Force GPU to low power DPM level
         for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do
             echo "low" > "$f" 2>/dev/null || true
         done
+        # Set GPU power profile to video (profile 1) — lower clocks, optimised
+        # for sequential workloads rather than bursty gaming patterns
+        for f in /sys/class/drm/card*/device/pp_power_profile_mode; do
+            echo 1 > "$f" 2>/dev/null || true
+        done
+        # Enable GFXOFF: allows the GPU shader engine to fully power off at idle.
+        # On RDNA2+ this saves 0.5-2 W during desktop use.
+        for f in /sys/kernel/debug/dri/*/amdgpu_gfxoff; do
+            echo 1 > "$f" 2>/dev/null || true
+        done
+        # Hard cap GPU clocks to the lowest available level via OD
+        for card in /sys/class/drm/card*/device; do
+            if [ -f "$card/pp_od_clk_voltage" ]; then
+                echo "manual" > "$card/power_dpm_force_performance_level" 2>/dev/null || true
+                echo "s 0 $(awk 'NR==2{print $2}' "$card/pp_dpm_sclk" 2>/dev/null)"                     > "$card/pp_od_clk_voltage" 2>/dev/null || true
+                echo "c" > "$card/pp_od_clk_voltage" 2>/dev/null || true
+            fi
+        done 2>/dev/null || true
+    fi
+    if [ "$GPU_VENDOR" = "intel" ]; then
+        # Intel GPU: enable frequency scaling to minimum
+        for f in /sys/class/drm/card*/gt_min_freq_mhz; do
+            MIN=$(cat "${f%min_freq_mhz}min_freq_mhz" 2>/dev/null || echo 100)
+            echo "$MIN" > "$f" 2>/dev/null || true
+        done
+        for f in /sys/class/drm/card*/gt_max_freq_mhz; do
+            MIN=$(cat "${f%max_freq_mhz}min_freq_mhz" 2>/dev/null || echo 100)
+            echo "$MIN" > "$f" 2>/dev/null || true
+        done
+        # Intel Panel Self-Refresh: allows display controller to stop driving
+        # the panel backplane between frame updates. Saves 0.5-1.5 W on eDP.
+        echo 1 > /sys/module/i915/parameters/enable_psr 2>/dev/null || true
     fi
     if [ "$GPU_VENDOR" = "nvidia" ]; then
+        # Disable NVIDIA persistence mode: GPU fully powers down when idle
         nvidia-smi -pm 0 > /dev/null 2>&1 || true
+        # Reduce power limit to 80% of TDP if supported
+        MAX_PL=$(nvidia-smi --query-gpu=power.max_limit             --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')
+        if [ -n "$MAX_PL" ] && [ "$MAX_PL" -gt 0 ] 2>/dev/null; then
+            TARGET=$(( MAX_PL * 80 / 100 ))
+            nvidia-smi -pl "$TARGET" > /dev/null 2>&1 || true
+        fi
     fi
     ;;
 
