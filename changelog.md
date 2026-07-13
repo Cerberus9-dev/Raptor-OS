@@ -6,6 +6,212 @@
 - Custom Raptor OS logo
 - Better seamless fully custom wallpaper system like windows
 
+## [v2.6.7] - 2026-07-12 (Power Saving Overhaul, RAM Reduction, Cortex Expansion)
+
+### Fixed
+
+- **App launcher blank categories / scrolls to Favourites after updates** —
+  the sycoca rebuild autostart was running `kbuildsycoca6 --noincremental`
+  unconditionally on every login, which doesn't delete the stale cache files.
+  After an OSTree update the cache was built against the old deployment's file
+  paths and inode numbers; Plasma read the stale cache before the rebuild
+  finished, producing blank category pages. Fixed with a deployment-aware
+  script at `/usr/lib/raptor/sycoca-rebuild.sh`: reads the current OSTree
+  deployment checksum via `rpm-ostree status --json` and compares it against
+  `~/.cache/raptor-deploy-hash`. If the deployment changed (i.e. an update
+  was applied), all `ksycoca6_*` files are deleted before the rebuild so it
+  starts completely clean. Normal logins (same deployment) do a fast
+  incremental check only. The Raptor Update Manager also wipes the cache
+  and the hash file before triggering a reboot, so the post-update login
+  always gets a clean rebuild
+
+- **`build.yml` failing on every push** — `actions/checkout@v7` does not
+  exist (latest major version is v4). Every push to main was failing at the
+  checkout step before a single build step ran. Fixed to `@v4`
+
+- **`raptor-audio-rt.conf` security issue** — `*  -  rtprio  10` granted
+  real-time scheduling to every user account on the system. Changed to scope
+  only to the `@audio` group (`@audio  -  rtprio  95  /  memlock unlimited`)
+  which is what PipeWire and JACK actually need
+
+- **`raptor-cpugovernor.service` calling gpu-detect.sh redundantly** —
+  `ExecStart=/usr/lib/raptor/gpu-detect.sh` was called from the CPU governor
+  service, running the entire GPU detection + env propagation + sysctl reload
+  pipeline a second time at every boot. Also had `PartOf=raptor-gpu-profile.service`
+  which incorrectly coupled the two service lifecycles. Replaced with a minimal
+  inline script that only writes the CPU governor
+
+- **`raptor-ensure-services.service` not checking power profile** — only
+  checked `raptor-gpu-profile.service`; if `raptor-powerprofile.service` failed
+  at boot nothing noticed. Added to the health-check loop
+
+- **`cosign.yml` losing `cosign.pub`** — the previous workflow uploaded the
+  public key as a 90-day GitHub artifact which expired and deleted it. The
+  public key needs to be permanently in the repository root for image
+  verification. Rewritten to auto-commit `cosign.pub` to the repo via
+  `git push` after generation; the private key is uploaded as a 1-day artifact
+  with explicit instructions to add it as `SIGNING_SECRET` then delete it
+
+- **PipeWire/WirePlumber crash loops** — `Restart=on-failure` with no rate
+  limiting caused infinite restart loops if a bad plugin caused immediate
+  re-crash on every start. Added `RestartLimitBurst=5 / RestartLimitIntervalSec=60`
+
+- **Outdated Brave `--enable-features` flags** — `CanvasOopRasterization`
+  (removed ~Chromium v112), `OverlayScrollbar` (removed ~v108), and
+  `LightweightNoStatePrefetch` (deprecated ~v116) were generating silent
+  warnings. Removed all three
+
+### Added
+
+#### Power Saving — major overhaul
+
+- **Energy Performance Preference (EPP)** — new `_apply_epp()` helper writes
+  to `/sys/devices/system/cpu/cpufreq/policy*/energy_performance_preference`
+  and the legacy `energy_perf_bias` register. Setting `EPP=power` in Power
+  Saving mode tells the CPU hardware P-state controller (Intel HWP, AMD
+  P-state) to strongly favour efficiency; this is the single biggest battery
+  saver on modern CPUs, cutting CPU package power by 20–40% vs using the
+  `powersave` governor alone without EPP. EPP is restored to `balance_power`
+  (Balanced) and `performance` (Performance) when switching modes
+
+- **CPU max frequency cap** — new `_apply_cpu_max_freq_pct()` helper caps
+  `scaling_max_freq` to 65% of `cpuinfo_max_freq` in Power Saving mode.
+  On a 5 GHz CPU this prevents any burst above ~3.25 GHz, eliminating the
+  power spikes from turbo frequency. Restored to 100% on mode change
+
+- **Platform profile** — new `_apply_platform_profile()` helper writes to
+  `/sys/firmware/acpi/platform_profile` (`low-power` / `balanced` /
+  `performance`). On supported laptops (ThinkPad, ASUS, Dell, HP) this is a
+  firmware-level ACPI call that coordinates fan curves, VRM power limits, and
+  thermal targets at the EC level — often more effective than any Linux
+  software tuning. No-ops silently on unsupported hardware
+
+- **Network device runtime PM** — new `_apply_net_runtime_pm()` enables
+  `auto` power management for all network hardware. The NIC hardware powers
+  down between packets without disconnecting WiFi or Bluetooth. Restored to
+  `on` in Balanced/Performance modes
+
+- **HDA audio powersave controller** — `power_save_controller=Y` written to
+  `/sys/module/snd_hda_intel/parameters/power_save_controller` in Power Saving
+  mode. This allows the HDA controller itself (the PCI device, not just the
+  codec) to power off when idle — saves an additional 0.5–1 W beyond the
+  existing `power_save=1` codec setting
+
+- **More aggressive disk write-back** — `vm.dirty_writeback_centisecs=15000`
+  (150 s) in Power Saving mode (was 6000). Storage controllers go into deep
+  low-power states between access events; longer intervals mean more time in
+  deep sleep. `vm.laptop_mode=5` (was 1)
+
+- **GPU profiler powersave: 4 new controls** — AMD: `pp_power_profile_mode=1`
+  (video profile — lower, sequential clock pattern), GFXOFF enabled via
+  `/sys/kernel/debug/dri/*/amdgpu_gfxoff` (shader engine fully powers off at
+  idle, saves 0.5–2 W on RDNA2+). Intel: `i915.enable_psr=1` (Panel
+  Self-Refresh — display controller stops driving the eDP panel between frame
+  updates, saves 0.5–1.5 W). NVIDIA: power limit reduced to 80% of TDP via
+  `nvidia-smi -pl`
+
+- **PowerDevil battery profiles** — written to `/etc/skel/.config/powermanagementprofilesrc`
+  so all new users get KDE screen dim and auto-suspend configured from first
+  login. Previously KDE's defaults were `turnOffDisplayWhenIdle=false` and
+  `idleTime=0` on all profiles (screen never dims, never suspends on battery).
+  Now: AC dims after 5 min / off after 10 min; Battery dims after 60 s /
+  off after 2 min at 70% brightness / suspends after 10 min; Low Battery
+  dims after 30 s / 30% brightness / suspends after 5 min with hibernate
+
+#### Raptor Cortex — expanded features
+
+- **Temperature monitoring** — CPU temperature, GPU temperature, and CPU
+  frequency rows added to the System Memory stats panel. Temperature labels
+  are colour-coded: orange warning at 75°C CPU / 80°C GPU, red error at
+  90°C / 95°C. CPU temp reads `x86_pkg_temp` / `k10temp` from thermal zones;
+  GPU reads AMD hwmon or falls back to `nvidia-smi`; frequency reads
+  `scaling_cur_freq`
+
+- **Quick Actions** — three one-click presets:
+  - *Pre-Game Boost*: switches to Performance + runs enabled optimize options
+  - *Restore Desktop*: switches to Balanced + resumes all suspended services
+  - *Clear Shader Cache*: deletes Mesa, RADV, AMDVLK, and Steam shader caches;
+    reports MB freed
+
+- **Persistent Settings** — three toggles written to
+  `~/.config/raptor-cortex-settings.json` that survive reboots:
+  *Apply selected mode on boot*, *Auto-switch to Performance when game starts*,
+  *Restore Balanced mode after game exits*
+
+- **Scheduled memory cleanup** — configurable GLib timer (5–120 min, default
+  30 min) that automatically runs the enabled optimization options in the
+  background. Never auto-runs Swap Pressure Flush or Deep Clean. Shows next
+  scheduled time in the UI. Persists across launches
+
+#### Raptor GPU Profiler — full GTK4/Adwaita rewrite
+
+- Replaced the bash TUI with a proper GTK4/Adwaita graphical app installed at
+  `/usr/bin/raptor-gpu-profiler`. Matches Cortex's visual style exactly:
+  `Adw.ApplicationWindow`, `Adw.PreferencesGroup`, `Adw.ActionRow`, toast
+  notifications, pill buttons. Features: GPU info banner (vendor, model, VRAM),
+  profile selector (Auto/Balanced/Performance/Extreme/Power Saving) with live
+  environment variable preview, Apply button that writes flag files and re-runs
+  `gpu-detect.sh` without requiring a reboot, per-game Steam launch option
+  reference panel
+
+#### Memory — idle ~2.5–3 GB (was ~3.5 GB)
+
+- **Akonadi masked** — KDE PIM database server disabled by default via
+  `/dev/null` symlinks in `/etc/systemd/user/`. Saves 200–500 MB at idle
+  (re-enable: `systemctl --user unmask akonadiserver.service`)
+- **tracker-miner-fs-3 masked** — GNOME file indexer redundant alongside KDE
+  Baloo. Saves ~60–100 MB
+- **plasma-browser-integration masked** — browser tab sync service disabled
+  by default. Saves ~80 MB
+- **Baloo: filename-only indexing** — disabled full-text content indexing in
+  system-wide `/etc/xdg/baloofilerc`; 1-thread maximum. Sufficient for search,
+  fraction of the RAM and CPU cost
+- **`HiddenPreviews=4`** (was 5) — no longer keeps textures for minimised
+  windows in memory. Value 5 was holding up to 300 MB of window thumbnails
+  in RAM on sessions with many open windows
+- **`vm.page-cluster=0`** — single-page reads from ZRAM (avoids decompressing
+  8 pages when only 1 was requested)
+- **`vm.compaction_proactiveness=20`** — background memory defragmentation
+  to avoid stall-inducing compaction bursts
+
+#### MangoHud and Gamemode
+
+- MangoHud: added `gpu_junction_temp`, `cpu_power`, `io_read/write`,
+  `histogram`, `vulkan_driver`, `kernel`, `os`, `arch`; added logging via
+  `toggle_logging=Shift_R+F2` writing to `~/mangohud_logs/`; GPU colour
+  updated to `#33FF33` to match new green HUD palette; `fps_limit_method=early`
+- gamemode.ini: added `nv_powermizer_mode=1` for NVIDIA persistence, added
+  `gamescope` to supervisor whitelist, added `[script]` section
+
+#### HUD theme — full green colour overhaul (stamp v9)
+
+- All accent colours changed from dodger blue (`#1e90ff` / `30,144,255`) to
+  neon green (`#33FF33` / `51,255,51`) across 54 locations: colour scheme,
+  GTK CSS, Konsole profile, Aurorae window decoration, radar arc plasmoid
+- `panel-background.svg` rewritten with correct nine-slice element IDs
+  (`topleft`, `top`, `topright`, `left`, `center`, `right`, `bottomleft`,
+  `bottom`, `bottomright`) and proper neon green glow gradient. Previous version
+  was missing the nine-slice IDs entirely, causing Plasma to stretch the SVG
+  rather than slicing it correctly
+- `/etc/xdg/kwinrc` written at build time with `LatencyPolicy=0` and
+  `HiddenPreviews=4`; `FocusPolicy=ClickToFocus` for Windows-like focus
+
+### Changed
+
+- `zram-generator.conf`: added `options = discard` (freed compressed pages
+  returned to ZRAM pool immediately rather than holding dead slots)
+- Browser firstboot dialog: added Google Chrome as a third option
+  (`com.google.Chrome`) with network check, download progress bar, and retry
+  prompt on failure
+- Recipe: Krita added as default RPM; VSCodium and VLC added to default
+  Flatpaks; gcc/make/cmake moved to optional picker; Akonadi/tracker/
+  plasma-browser-integration masked at build time
+- `raptor-gpu-profile.sh`: added `RADV_PERFTEST=gpl` globally (cuts
+  in-game shader compile stalls 30–60% on RDNA2+); added
+  `/etc/drirc.d/99-raptor-mesa.conf` enabling `mesa_glthread=true`
+  system-wide; fixed `ExecStart` path in `raptor-gpu-profile.service`
+  (was `/usr/bin/raptor-gpu-profile.sh`, should be `/usr/lib/raptor/gpu-detect.sh`)
+
 ## [v2.6.6] - 2026-06-23 (Launcher Fix, Window Buttons, Firstboot Polish)
 
 ### Fixed
