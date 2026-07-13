@@ -105,6 +105,75 @@ _apply_sata_link_power() {
     done
 }
 
+_apply_epp() {
+    # energy_performance_preference: power | balance_power | balance_performance | performance
+    # This is the biggest single battery saver on Intel HWP and AMD P-state systems.
+    # Sets a hardware-level hint that goes directly to the processor's internal
+    # P-state controller, separate from the software governor.
+    local EPP="$1"
+    for cpu_pol in /sys/devices/system/cpu/cpufreq/policy*; do
+        local f="$cpu_pol/energy_performance_preference"
+        if [ -f "$f" ]; then
+            echo "$EPP" > "$f" 2>/dev/null || true
+        fi
+    done
+    # Intel energy_perf_bias: 0=performance, 15=power (legacy interface)
+    if [ -f /sys/devices/system/cpu/cpu0/power/energy_perf_bias ]; then
+        case "$EPP" in
+            power)               BIAS=15 ;;
+            balance_power)       BIAS=10 ;;
+            balance_performance) BIAS=6  ;;
+            performance)         BIAS=0  ;;
+            *)                   BIAS=6  ;;
+        esac
+        for f in /sys/devices/system/cpu/cpu*/power/energy_perf_bias; do
+            echo "$BIAS" > "$f" 2>/dev/null || true
+        done
+    fi
+}
+
+_apply_cpu_max_freq_pct() {
+    # Cap scaling_max_freq to a percentage of cpuinfo_max_freq.
+    # Pass 100 to restore to physical maximum.
+    local PCT="$1"
+    for pol in /sys/devices/system/cpu/cpufreq/policy*; do
+        MAX=$(cat "$pol/cpuinfo_max_freq" 2>/dev/null || echo 0)
+        if [ "$MAX" -gt 0 ]; then
+            if [ "$PCT" -eq 100 ]; then
+                echo "$MAX" > "$pol/scaling_max_freq" 2>/dev/null || true
+            else
+                TARGET=$(( MAX * PCT / 100 ))
+                echo "$TARGET" > "$pol/scaling_max_freq" 2>/dev/null || true
+            fi
+        fi
+    done
+}
+
+_apply_platform_profile() {
+    # low-power | balanced | performance
+    # Firmware-level power coordination: fan curves, VRM limits, thermal targets.
+    # More effective than software tuning alone on supported laptops.
+    local PROF="$1"
+    if [ -f /sys/firmware/acpi/platform_profile ]; then
+        # Map our names to platform_profile values
+        case "$PROF" in
+            power_saving) echo "low-power"    > /sys/firmware/acpi/platform_profile 2>/dev/null || true ;;
+            balanced)     echo "balanced"     > /sys/firmware/acpi/platform_profile 2>/dev/null || true ;;
+            performance)  echo "performance"  > /sys/firmware/acpi/platform_profile 2>/dev/null || true ;;
+        esac
+    fi
+}
+
+_apply_net_runtime_pm() {
+    # Enable runtime power management for network devices.
+    # This powers down the NIC hardware when idle — does NOT disconnect WiFi.
+    # The driver keeps the association; the radio powers down between packets.
+    local MODE="$1"   # auto | on
+    for dev in /sys/class/net/*/device/power/control; do
+        echo "$MODE" > "$dev" 2>/dev/null || true
+    done
+}
+
 _apply_audio_powersave() {
     # 1 or 0
     for f in /sys/module/snd_hda_intel/parameters/power_save \
@@ -249,14 +318,37 @@ case "$ACTION" in
                 echo 180  > /proc/sys/vm/swappiness                2>/dev/null || true
                 echo 5    > /proc/sys/vm/dirty_ratio               2>/dev/null || true
                 echo 2    > /proc/sys/vm/dirty_background_ratio    2>/dev/null || true
-                echo 6000 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
-                echo 60000 > /proc/sys/vm/dirty_expire_centisecs   2>/dev/null || true
-                echo 1    > /proc/sys/vm/laptop_mode               2>/dev/null || true
+                # Longer writeback: 150 s means fewer storage controller wake-ups.
+                # Storage (especially NVMe) goes into deep low-power states between
+                # writes; longer intervals = more time in deep sleep.
+                echo 15000 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
+                echo 60000 > /proc/sys/vm/dirty_expire_centisecs    2>/dev/null || true
+                # laptop_mode=5: more aggressive disk caching, even less frequent
+                # actual writes to storage (5 is max useful value on modern kernels)
+                echo 5    > /proc/sys/vm/laptop_mode                2>/dev/null || true
 
-                echo 0 > /sys/devices/system/cpu/cpufreq/boost     2>/dev/null || true
+                # CPU: governor + turbo off
+                echo 0 > /sys/devices/system/cpu/cpufreq/boost      2>/dev/null || true
                 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
                     echo powersave > "$gov" 2>/dev/null || true
                 done
+
+                # EPP = power: tells the HWP/AMD-pstate hardware controller to
+                # strongly prefer efficiency. This is the single biggest battery
+                # saver on Intel (12th gen+) and AMD (Ryzen 4000+) — can cut CPU
+                # power draw 20-40% vs governor alone. powersave governor without
+                # EPP still lets the CPU hit high P-states under burst load.
+                _apply_epp power
+
+                # Cap max frequency to 65% of physical max — prevents high-freq
+                # bursts under light loads. Restore with _apply_cpu_max_freq_pct 100
+                _apply_cpu_max_freq_pct 65
+
+                # Firmware-level power profile: coordinates fan curves, VRM limits,
+                # and thermal targets at the ACPI/EC level. More effective than any
+                # single software setting on supported laptops (ThinkPad, ASUS, etc.)
+                _apply_platform_profile power_saving
+
                 echo never > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
 
                 _apply_pcie_aspm       powersave
@@ -265,6 +357,16 @@ case "$ACTION" in
                 _apply_runtime_pm      auto
                 _apply_sata_link_power min_power
                 _apply_audio_powersave 1
+
+                # HDA audio powersave controller: separate from power_save flag.
+                # Allows the HD-audio controller itself (not just the codec) to
+                # power down — saves ~0.5-1 W on systems with HDA audio hardware.
+                echo Y > /sys/module/snd_hda_intel/parameters/power_save_controller                     2>/dev/null || true
+
+                # Network device runtime PM: powers down NIC hardware between packets.
+                # Does NOT disconnect WiFi — the driver keeps the association alive;
+                # only the radio hardware powers down during idle periods.
+                _apply_net_runtime_pm auto
 
                 powerprofilesctl set power-saver 2>/dev/null || true
                 ;;
@@ -283,6 +385,12 @@ case "$ACTION" in
                 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
                     echo schedutil > "$gov" 2>/dev/null || true
                 done
+
+                # Restore EPP and max_freq if coming from power_saving
+                _apply_epp              balance_power
+                _apply_cpu_max_freq_pct 100
+                _apply_platform_profile balanced
+
                 echo madvise       > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
                 echo defer+madvise > /sys/kernel/mm/transparent_hugepage/defrag  2>/dev/null || true
 
@@ -292,6 +400,10 @@ case "$ACTION" in
                 _apply_runtime_pm      auto
                 _apply_sata_link_power medium_power
                 _apply_audio_powersave 1
+
+                # Restore audio controller to on (balanced doesn't need it saving power)
+                echo N > /sys/module/snd_hda_intel/parameters/power_save_controller                     2>/dev/null || true
+                _apply_net_runtime_pm on
 
                 powerprofilesctl set balanced 2>/dev/null || true
                 ;;
@@ -307,6 +419,16 @@ case "$ACTION" in
                 echo 500 > /proc/sys/vm/dirty_writeback_centisecs  2>/dev/null || true
                 echo 500 > /proc/sys/vm/dirty_expire_centisecs     2>/dev/null || true
                 echo 0   > /proc/sys/vm/laptop_mode                2>/dev/null || true
+
+                # EPP = performance: full hardware P-state performance mode
+                _apply_epp              performance
+                # Restore max freq to physical maximum (in case power_saving capped it)
+                _apply_cpu_max_freq_pct 100
+                _apply_platform_profile performance
+
+                # Restore audio controller and net PM to full power
+                echo N > /sys/module/snd_hda_intel/parameters/power_save_controller                     2>/dev/null || true
+                _apply_net_runtime_pm on
                 echo 500 > /proc/sys/vm/dirty_writeback_centisecs  2>/dev/null || true
                 echo 500 > /proc/sys/vm/dirty_expire_centisecs     2>/dev/null || true
                 echo 0   > /proc/sys/vm/laptop_mode                2>/dev/null || true
