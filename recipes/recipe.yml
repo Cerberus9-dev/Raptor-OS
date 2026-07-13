@@ -5,7 +5,7 @@ base-image: ghcr.io/ublue-os/bazzite
 image-version: stable
 
 modules:
-  # ── Static files ─────────────────────────────────────────────────────────────
+  # ── Static files ─────────────────────────────────────────────────────────
   - type: files
     files:
       # User service — must live in the user unit dir so it runs inside the
@@ -36,11 +36,11 @@ modules:
       - source: ../files/system_files/zram-generator.conf
         destination: /etc/systemd/zram-generator.conf
 
-  # ── RPM packages ─────────────────────────────────────────────────────────────
+  # ── RPM packages ─────────────────────────────────────────────────────────
   - type: rpm-ostree
     install:
       # Browser
-      - firefox
+      # firefox removed temporarily (depsolve failure for mozilla-openh264)
 
       # System utilities
       - fastfetch
@@ -128,7 +128,7 @@ modules:
     remove:
       - tuned-ppd
 
-  # ── Flatpaks ──────────────────────────────────────────────────────────────────
+  # ── Flatpaks ─────────────────────────────────────────────────────────────
   # Only mandatory/core apps here. Optional apps (VSCodium, Blender, Bitwarden,
   # Joplin, etc.) are offered by raptor-firstboot.service on first login so the
   # user can choose what they actually want.
@@ -167,7 +167,7 @@ modules:
       - raptor-gaming.sh
       - raptor-update.sh
 
-  # ── Systemd units ─────────────────────────────────────────────────────────────
+  # ── Systemd units ───────────────────────────────────────────────────────────
   - type: systemd
     system:
       enabled:
