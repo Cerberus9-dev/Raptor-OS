@@ -542,6 +542,74 @@ ln -sf /dev/null /etc/systemd/user/plasma-browser-integration.service 2>/dev/nul
 
 echo "Heavy background services masked (Akonadi, tracker-miner-fs, browser-integration)."
 
+# ── PowerDevil: KDE power management profiles ─────────────────────────────────
+# Written to /etc/skel so every new user gets sensible battery/AC defaults.
+# Without this, KDE's default is "never dim, never suspend" on all profiles,
+# which is a large battery drain on laptops.
+# Users can override in System Settings → Power Management.
+mkdir -p /etc/skel/.config
+cat << 'PDEOF' > /etc/skel/.config/powermanagementprofilesrc
+[AC]
+[AC][Display]
+dimDisplayIdleTime=300
+dimDisplayWhenIdle=true
+displayBrightnessValue=100
+turnOffDisplayIdleTime=600
+turnOffDisplayWhenIdle=true
+
+[AC][SuspendSession]
+idleTime=0
+inhibitLidActionExternalMonitor=true
+lidAction=0
+powerButtonAction=28
+suspendThenHibernate=false
+whenSleepingEnter=standby then memory then disk
+whenLaptopLidClosed=0
+
+[Battery]
+[Battery][Display]
+# Dim display after 60 s idle on battery
+dimDisplayIdleTime=60
+dimDisplayWhenIdle=true
+# Brightness on battery: 70% saves meaningful power vs 100%
+displayBrightnessValue=70
+# Turn off display after 2 min idle
+turnOffDisplayIdleTime=120
+turnOffDisplayWhenIdle=true
+
+[Battery][SuspendSession]
+# Suspend after 10 min idle on battery (600000 ms)
+idleTime=600000
+inhibitLidActionExternalMonitor=false
+# Lid close: suspend (1)
+lidAction=1
+# Power button: suspend (1)
+powerButtonAction=1
+suspendThenHibernate=false
+whenSleepingEnter=standby then memory then disk
+whenLaptopLidClosed=1
+
+[LowBattery]
+[LowBattery][Display]
+dimDisplayIdleTime=30
+dimDisplayWhenIdle=true
+displayBrightnessValue=30
+turnOffDisplayIdleTime=60
+turnOffDisplayWhenIdle=true
+
+[LowBattery][SuspendSession]
+# Suspend after 5 min idle when battery is low
+idleTime=300000
+inhibitLidActionExternalMonitor=false
+lidAction=1
+powerButtonAction=1
+suspendThenHibernate=true
+whenSleepingEnter=standby then memory then disk
+whenLaptopLidClosed=1
+PDEOF
+
+echo "PowerDevil battery profiles written to /etc/skel."
+
 # ── journald: cap in-memory/disk usage ────────────────────────────────────────
 # journald keeps a chunk of recent logs in a tmpfs-backed runtime journal
 # (/run/log/journal) — this is RAM. Default limits scale with disk/RAM size
