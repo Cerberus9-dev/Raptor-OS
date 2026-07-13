@@ -40,7 +40,7 @@ modules:
   - type: rpm-ostree
     install:
       # Browser
-      # firefox removed temporarily (depsolve failure for mozilla-openh264)
+      # firefox removed temporarily from RPM install due to mozilla-openh264 depsolve
 
       # System utilities
       - fastfetch
@@ -145,6 +145,8 @@ modules:
         - com.github.tchx84.Flatseal    # Flatpak permission manager
         - com.vscodium.codium           # VSCodium — open-source VS Code (no telemetry)
         - org.videolan.VLC              # VLC — plays any media format, no codec hunting
+        # Firefox added as a Flatpak to avoid RPM openh264 depsolve issues
+        - org.mozilla.firefox
 
   # ── Kernel boot arguments ─────────────────────────────────────────────────────
   # split_lock_detect=off   — prevents costly split-lock penalties in game loops
