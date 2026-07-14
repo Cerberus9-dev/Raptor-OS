@@ -17,7 +17,52 @@ mkdir -p /etc/environment.d \
          /usr/lib/systemd/system \
          /etc/polkit-1/rules.d \
          /etc/sudoers.d \
-         /etc/raptor
+         /etc/raptor \
+         /usr/share/icons/hicolor/scalable/apps
+
+# ── App icon ───────────────────────────────────────────────────────────────────
+# Same visual language as raptor-cortex.svg (radial badge, dashed ring, cardinal
+# ticks) so both apps read as a matched pair in the app menu — a GPU/chip glyph
+# replaces Cortex's lightning bolt in the centre.
+cat << 'SVGEOF' > /usr/share/icons/hicolor/scalable/apps/raptor-gpu-profiler.svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#4c1d95"/>
+    </radialGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#bg)"/>
+  <circle cx="32" cy="32" r="24" fill="none" stroke="#a78bfa" stroke-width="1.5"
+          stroke-dasharray="12 4" stroke-linecap="round"/>
+  <line x1="32" y1="10" x2="32" y2="18" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="32" y1="46" x2="32" y2="54" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="10" y1="32" x2="18" y2="32" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="46" y1="32" x2="54" y2="32" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="16.7" y1="16.7" x2="22.4" y2="22.4" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="41.6" y1="41.6" x2="47.3" y2="47.3" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="47.3" y1="16.7" x2="41.6" y2="22.4" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="22.4" y1="41.6" x2="16.7" y2="47.3" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- GPU chip glyph: square die with corner pins -->
+  <circle cx="32" cy="32" r="9" fill="url(#core)"/>
+  <rect x="27" y="27" width="10" height="10" rx="1.5" fill="white" opacity="0.95"/>
+  <rect x="29" y="29" width="6" height="6" rx="0.5" fill="url(#core)"/>
+  <line x1="27" y1="24" x2="27" y2="27" stroke="white" stroke-width="1.2" opacity="0.95"/>
+  <line x1="37" y1="24" x2="37" y2="27" stroke="white" stroke-width="1.2" opacity="0.95"/>
+  <line x1="27" y1="37" x2="27" y2="40" stroke="white" stroke-width="1.2" opacity="0.95"/>
+  <line x1="37" y1="37" x2="37" y2="40" stroke="white" stroke-width="1.2" opacity="0.95"/>
+  <line x1="24" y1="27" x2="27" y2="27" stroke="white" stroke-width="1.2" opacity="0.95"/>
+  <line x1="24" y1="37" x2="27" y2="37" stroke="white" stroke-width="1.2" opacity="0.95"/>
+  <line x1="37" y1="27" x2="40" y2="27" stroke="white" stroke-width="1.2" opacity="0.95"/>
+  <line x1="37" y1="37" x2="40" y2="37" stroke="white" stroke-width="1.2" opacity="0.95"/>
+</svg>
+SVGEOF
+
+gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true
 
 # ── Fallback env file (overwritten at runtime by gpu-detect.sh) ───────────────
 cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
@@ -404,7 +449,8 @@ polkit.addRule(function(action, subject) {
     if (allowedActions.indexOf(action.id) >= 0 &&
         action.lookup("program") &&
         (action.lookup("program").indexOf("raptor-gpu-profile") !== -1 ||
-         action.lookup("program").indexOf("raptor-profile-switcher") !== -1) &&
+         action.lookup("program").indexOf("raptor-gpu-profiler") !== -1 ||
+         action.lookup("program").indexOf("gpu-detect.sh") !== -1) &&
         subject.active && subject.local) {
         return polkit.Result.YES;
     }
@@ -739,6 +785,31 @@ if __name__ == "__main__":
     sys.exit(app.run(sys.argv))
 GPUPYEOF
 chmod +x /usr/bin/raptor-gpu-profiler
+
+# ── .desktop launcher ─────────────────────────────────────────────────────────
+# This was missing entirely in earlier versions — the GTK4 app existed at
+# /usr/bin/raptor-gpu-profiler but had no menu entry, so it could never be
+# launched from the app launcher. Matches raptor-cortex.desktop's format
+# exactly so both apps appear consistently in the menu (same category,
+# same Raptor OS branding).
+mkdir -p /usr/share/applications
+cat << 'DESKTOPEOF' > /usr/share/applications/raptor-gpu-profiler.desktop
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=Raptor GPU Profiler
+GenericName=GPU Performance Profile Switcher
+Comment=Switch GPU performance profiles, view live environment variables, per-game launch option reference
+Exec=/usr/bin/raptor-gpu-profiler
+Icon=raptor-gpu-profiler
+Terminal=false
+Categories=X-RaptorOS;System;Settings;
+Keywords=gpu;graphics;profile;performance;vulkan;amd;nvidia;intel;
+StartupNotify=true
+X-KDE-SubstituteUID=false
+DESKTOPEOF
+
+echo "GPU_PROFILER_DESKTOP_READY"
 
 
 echo "GPU_PROFILE_READY"
