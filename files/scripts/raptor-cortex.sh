@@ -310,6 +310,20 @@ case "$ACTION" in
     # ── Per-mode kernel tuning ─────────────────────────────────────────────
     set-mode)
         MODE="${2:-balanced}"
+
+        # ── Unconditional reset BEFORE applying the target mode ──────────────
+        # Guards against drift: if a previous mode switch partially failed to
+        # restore EPP / max frequency / platform profile (e.g. one sysfs write
+        # silently failed), the system could stay stuck throttled even after
+        # switching to Performance or Balanced. This block always runs first,
+        # bringing the CPU to a full-power known state, before the target
+        # mode's case below applies whatever throttling IT wants. This means
+        # every mode switch is a full reset + reapply, never an incremental
+        # patch on top of unknown prior state.
+        _apply_cpu_max_freq_pct 100
+        _apply_epp balance_performance
+        echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
+
         case "$MODE" in
             power_saving)
                 # FIX: clear Powerdevil logout action BEFORE switching profile
@@ -468,10 +482,24 @@ case "$ACTION" in
         # Stops irqbalance from moving NIC/audio IRQs away from the CPU
         # the game is running on mid-frame.
         systemctl stop irqbalance.service 2>/dev/null || true
-        # Set /dev/cpu_dma_latency=0 to disable CPU deep sleep during gaming.
-        # Deep C-states add ~100-300µs wake latency; disabling them keeps the
-        # CPU at C1 or shallower, reducing input and audio latency.
-        echo 0 | tee /dev/cpu_dma_latency >/dev/null 2>/dev/null || true
+        # Hold /dev/cpu_dma_latency open for the duration of gaming.
+        # IMPORTANT: closing the file descriptor immediately releases the PM
+        # QoS constraint — a one-shot `echo 0 | tee` opens, writes, and closes
+        # the FD in the same instant, so the constraint was released before
+        # the game even started. This was a complete no-op in earlier versions.
+        # Fixed: a backgrounded subshell holds the FD open via `exec`, keeping
+        # the constraint active (CPU stays at C1 or shallower, ~100-300µs less
+        # wake latency) until resume-background removes the sentinel file.
+        rm -f /run/raptor-cpu-dma-latency-held
+        (
+            exec 9<>/dev/cpu_dma_latency
+            echo 0 >&9
+            touch /run/raptor-cpu-dma-latency-held
+            while [ -f /run/raptor-cpu-dma-latency-held ]; do
+                sleep 5
+            done
+        ) &>/dev/null &
+        disown
         BACKGROUND_PROCS=(
             "tracker-miner" "tracker-store" "tracker3"
             "baloo_file" "baloo_file_extractor" "akonadi"
@@ -510,6 +538,10 @@ case "$ACTION" in
         systemctl start snapd.service  2>/dev/null || true
         # Restart irqbalance so it can redistribute IRQs across cores normally
         systemctl start irqbalance.service 2>/dev/null || true
+        # Release the cpu_dma_latency hold — removes the sentinel file, which
+        # the held-open subshell is polling for; it then exits and closes the
+        # FD, releasing the PM QoS constraint so the CPU can idle normally again.
+        rm -f /run/raptor-cpu-dma-latency-held
         echo 500 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null || true
         ;;
 
