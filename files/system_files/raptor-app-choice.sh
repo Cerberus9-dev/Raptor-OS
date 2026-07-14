@@ -120,8 +120,8 @@ APP_CATALOGUE=(
     "FALSE|Signal|org.signal.Signal|Private, encrypted messaging"
     "FALSE|Slack|com.slack.Slack|Team communication"
     "FALSE|Zoom|us.zoom.Zoom|Video conferencing"
+    "FALSE|Element|im.riot.Riot|Matrix chat client — decentralised, encrypted messaging"
     # ── Productivity ───────────────────────────────────────────────────────
-    "TRUE|VSCodium|com.vscodium.codium|Open-source VS Code (no telemetry)"
     "FALSE|ONLYOFFICE|org.onlyoffice.desktopeditors|Office suite — Word/Excel/PowerPoint compat"
     "FALSE|Bitwarden|com.bitwarden.desktop|Open-source password manager"
     "FALSE|Joplin|net.cozic.joplin_desktop|Note-taking app with markdown support"
@@ -140,6 +140,7 @@ APP_CATALOGUE=(
     "FALSE|OBS Studio|com.obsproject.Studio|Screen recording and live streaming"
     "FALSE|Audacity|org.audacityteam.Audacity|Audio recording and editing"
     "FALSE|Boatswain|com.feaneron.Boatswain|Elgato Stream Deck controller"
+    "FALSE|HandBrake|fr.handbrake.ghb|Video transcoder — convert, compress, and re-encode video files"
     # ── Development ────────────────────────────────────────────────────────
     "FALSE|Godot Engine|org.godotengine.Godot|Free, open-source game engine"
     "FALSE|GitHub Desktop|io.github.shiftey.Desktop|Git GUI for GitHub repos"
@@ -156,6 +157,7 @@ APP_CATALOGUE=(
     "FALSE|Warehouse|io.github.flattool.Warehouse|Browse, manage and clean up installed Flatpak apps"
     "FALSE|Impression|io.gitlab.adhami3310.Impression|Flash OS images to USB drives"
     "FALSE|CoreCtrl|org.corectrl.CoreCtrl|AMD GPU and CPU control — overclocking, fan curves, power limits"
+    "FALSE|GNOME Backups|org.gnome.DejaDup|Automatic encrypted backups of your home folder"
     # ── Communication ──────────────────────────────────────────────────────
     "FALSE|Thunderbird|org.mozilla.Thunderbird|Email and calendar client"
     # ── Terminal & Developer tools ─────────────────────────────────────────
@@ -189,7 +191,8 @@ APP_CATALOGUE=(
     "FALSE|Ryujinx|org.ryujinx.Ryujinx|Nintendo Switch emulator"
     "FALSE|RPCS3|net.rpcs3.RPCS3|PlayStation 3 emulator"
     "FALSE|RetroArch|org.libretro.RetroArch|Multi-system emulator frontend (SNES, N64, PS1, GBA and many more)"
-    "FALSE|Heroic Games Launcher (Flatpak)|com.heroicgameslauncher.hgl|Epic/GOG/Amazon game launcher (Flatpak edition)"
+    "FALSE|Dolphin Emulator|org.DolphinEmu.dolphin-emu|GameCube and Wii emulator"
+    "FALSE|PCSX2|net.pcsx2.PCSX2|PlayStation 2 emulator"
     "FALSE|Chiaki|re.chiaki.Chiaki4deck|Remote play client for PlayStation 4 and 5"
     # ── Audio Production ──────────────────────────────────────────────────
     "FALSE|Helvum|org.freedesktop.Helvum|PipeWire patchbay — visually connect audio/MIDI devices"
@@ -209,7 +212,7 @@ SELECTED=$(
     zenity \
         --list \
         --title="Raptor OS — Optional App Setup" \
-        --text="<b>Select optional applications to install from Flathub:</b>\n\nPre-ticked apps are recommended for most users.\nYou can install more later from Discover or the terminal." \
+        --text="<b>Select optional applications to install from Flathub:</b>\n\nTick anything you want, or click <b>Skip — Install Nothing</b> to install none of these now.\nEverything here can also be installed later from Discover or the terminal." \
         --checklist \
         --column="Install" \
         --column="Application" \
@@ -220,7 +223,7 @@ SELECTED=$(
         "${ZENITY_ARGS[@]}" \
         --width=700 --height=600 \
         --ok-label="Install Selected" \
-        --cancel-label="Skip for Now" \
+        --cancel-label="Skip — Install Nothing" \
         2>/dev/null
 ) || true
 # zenity exits 1 on "Skip" — that's caught by `|| true`
