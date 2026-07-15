@@ -25,12 +25,16 @@ modules:
       # ── Audio: PipeWire low-latency gaming config ──────────────────────────
       - source: ../files/system_files/99-raptor-pipewire-lowlatency.conf
         destination: /etc/pipewire/pipewire.conf.d/99-raptor-lowlatency.conf
+      - source: ../files/system_files/99-raptor-pipewire-pulse-lowlatency.conf
+        destination: /etc/pipewire/pipewire-pulse.conf.d/99-raptor-pulse-lowlatency.conf
       - source: ../files/system_files/99-raptor-wireplumber-alsa.conf
         destination: /etc/wireplumber/wireplumber.conf.d/99-raptor-alsa.conf
       - source: ../files/system_files/raptor-audio-rt.conf
         destination: /etc/security/limits.d/raptor-audio-rt.conf
       - source: ../files/system_files/raptor-pipewire-restart.conf
         destination: /etc/systemd/user/pipewire.service.d/raptor-restart.conf
+      - source: ../files/system_files/raptor-pipewire-restart.conf
+        destination: /etc/systemd/user/pipewire-pulse.service.d/raptor-restart.conf
       - source: ../files/system_files/raptor-wireplumber-restart.conf
         destination: /etc/systemd/user/wireplumber.service.d/raptor-restart.conf
       - source: ../files/system_files/zram-generator.conf
