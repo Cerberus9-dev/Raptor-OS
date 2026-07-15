@@ -643,6 +643,7 @@ import subprocess
 import threading
 import os
 import sys
+import time
 
 CORTEX_CONFIG  = "/etc/raptor/cortex-suspend.conf"
 HELPER         = "/usr/lib/raptor/cortex-helper"
@@ -834,6 +835,33 @@ def get_cpu_freq_mhz():
         return None
 
 
+def format_relative_time(timestamp):
+    """Convert a unix epoch timestamp into a short human-readable relative
+    string — "Just now", "5 minutes ago", "2 hours ago", etc. Falls back to
+    an absolute date once it's more than a week old, since "9 days ago" is
+    less useful at that point than the actual date."""
+    if timestamp is None:
+        return "Never"
+    delta = time.time() - timestamp
+    if delta < 0:
+        delta = 0
+    if delta < 10:
+        return "Just now"
+    if delta < 60:
+        n = int(delta)
+        return f"{n} second{'s' if n != 1 else ''} ago"
+    if delta < 3600:
+        n = int(delta // 60)
+        return f"{n} minute{'s' if n != 1 else ''} ago"
+    if delta < 86400:
+        n = int(delta // 3600)
+        return f"{n} hour{'s' if n != 1 else ''} ago"
+    if delta < 604800:
+        n = int(delta // 86400)
+        return f"{n} day{'s' if n != 1 else ''} ago"
+    return time.strftime("%b %-d, %Y", time.localtime(timestamp))
+
+
 def load_persistent_settings():
     """Load persistent Cortex settings from ~/.config/raptor-cortex-settings.json."""
     defaults = {
@@ -842,6 +870,7 @@ def load_persistent_settings():
         "auto_restore_after_game": False,
         "sched_cleanup_enabled": False,
         "sched_cleanup_interval_min": 30,
+        "last_optimize_timestamp": None,
     }
     settings_file = os.path.expanduser("~/.config/raptor-cortex-settings.json")
     try:
@@ -999,6 +1028,12 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self.cpu_freq_label.add_css_class("dim-label")
         self.cpu_freq_row.add_suffix(self.cpu_freq_label)
         stats_group.add(self.cpu_freq_row)
+
+        self.last_optimize_row = Adw.ActionRow(title="Last Optimization")
+        self.last_optimize_label = Gtk.Label(label="…")
+        self.last_optimize_label.add_css_class("dim-label")
+        self.last_optimize_row.add_suffix(self.last_optimize_label)
+        stats_group.add(self.last_optimize_row)
 
         mode_group = Adw.PreferencesGroup(title="Performance Mode")
         mode_group.set_description(
@@ -1469,6 +1504,9 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         freq = get_cpu_freq_mhz()
         self.cpu_freq_label.set_text(
             f"{freq} MHz ({freq/1000:.2f} GHz)" if freq else "N/A")
+
+        self.last_optimize_label.set_text(
+            format_relative_time(self._settings.get("last_optimize_timestamp")))
         return True
 
     def on_optimize(self, btn):
@@ -1518,6 +1556,15 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self._running = False
         self.run_btn.set_sensitive(True)
         self.spinner.stop()
+
+        # Record the timestamp for any completed optimization run — manual
+        # "Optimize Memory Now", Pre-Game Boost, and Scheduled Cleanup all
+        # converge on this method, so this one write covers all three.
+        self._settings["last_optimize_timestamp"] = time.time()
+        threading.Thread(
+            target=save_persistent_settings, args=(self._settings,), daemon=True
+        ).start()
+
         self._refresh_stats()
 
         self.result_group.set_visible(True)
