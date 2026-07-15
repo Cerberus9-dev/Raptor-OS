@@ -168,6 +168,7 @@ modules:
       - raptor-gpu-profile.sh
       - raptor-gaming.sh
       - raptor-update.sh
+      - raptor-wallpaper-manager.sh
 
   # ── Systemd units ───────────────────────────────────────────────────────────
   - type: systemd
