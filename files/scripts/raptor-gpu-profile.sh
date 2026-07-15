@@ -402,7 +402,7 @@ chmod +x /usr/lib/raptor/gpu-detect.sh
 # throttle_cpu_to_gpu=false: don't stall the CPU waiting for GPU — lets the game
 # pre-generate more draw calls.
 mkdir -p /etc/drirc.d
-cat << '"'"'DRIRC'"'"' > /etc/drirc.d/99-raptor-mesa.conf
+cat << 'DRIRC' > /etc/drirc.d/99-raptor-mesa.conf
 <driconf>
    <!-- Apply optimisations to all applications -->
    <application name="Default" executable="*">
