@@ -1307,6 +1307,51 @@ kwc --file kdeglobals --group General --key Name        RaptorOS
 # ── 2. Plasma theme (provides the panel-background.svg neon glow) ─────────────
 kwc --file plasmarc --group Theme --key name RaptorOS
 
+# ── 2b. Force panel Opacity = Opaque ──────────────────────────────────────────
+# Plasma's per-panel "Opacity" setting (Edit Mode → More Settings → Panel
+# Opacity) has three states: Translucent / Adaptive / Opaque. Left at its
+# default, empty regions of the panel (behind the launcher, spacers, system
+# tray, clock) can show the desktop wallpaper through instead of a solid fill
+# — this is what caused the "green only shows behind app icons, rest of the
+# bar shows wallpaper" bug. Task Manager icons looked fine because that
+# widget paints its own opaque item backgrounds independent of the panel's
+# own translucency; the panel chrome itself was letting wallpaper bleed
+# through everywhere else.
+#
+# panelOpacity values: 0=Translucent  1=Adaptive  2=Opaque
+# Forcing Opaque guarantees Plasma paints a solid fill using the colour
+# scheme's Window background (28,35,48 — near-black, already set above)
+# across the ENTIRE panel, regardless of whether the SVG theme's own
+# panel-background asset renders correctly on a given system.
+#
+# The panel's containment ID varies per install (not always "Panel 2"), so
+# find it dynamically from the current appletsrc rather than hardcoding it.
+APPLETSRC="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
+if [ -f "$APPLETSRC" ]; then
+    PANEL_ID=$(python3 - "$APPLETSRC" << 'FINDPANELID'
+import sys
+path = sys.argv[1]
+with open(path) as f:
+    lines = f.read().splitlines()
+current_id = None
+for line in lines:
+    if line.startswith("[Containments][") and line.endswith("]"):
+        inner = line[len("[Containments]["):-1]
+        if inner.isdigit():
+            current_id = inner
+        continue
+    if line.strip() == "plugin=org.kde.panel" and current_id is not None:
+        print(current_id)
+        break
+FINDPANELID
+)
+    if [ -n "$PANEL_ID" ]; then
+        kwc --file plasmashellrc \
+            --group PlasmaViews --group "Panel $PANEL_ID" --group Defaults \
+            --key panelOpacity 2
+    fi
+fi
+
 # ── 3. Icons ──────────────────────────────────────────────────────────────────
 ICON_THEME="breeze-dark"
 kwc --file kdeglobals --group Icons --key Theme "$ICON_THEME"
@@ -1600,13 +1645,13 @@ After=plasma-plasmashell.service
 # absent from the systemd user service env. v4 sets all session env vars
 # explicitly and uses systemctl --user restart plasma-plasmashell.service
 # as the primary method (uses private socket, not D-Bus).
-# Delete ~/.local/share/raptor-hud-applied-v9 to re-run manually.
-ConditionPathExists=!%h/.local/share/raptor-hud-applied-v9
+# Delete ~/.local/share/raptor-hud-applied-v10 to re-run manually.
+ConditionPathExists=!%h/.local/share/raptor-hud-applied-v10
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v9'
+ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v10'
 RemainAfterExit=yes
 
 [Install]
@@ -1624,64 +1669,4 @@ echo "RAPTOR_HUD_READY"
 echo ""
 echo "To set your wallpaper (persists across logins):"
 echo "  raptor-set-wallpaper /path/to/image.jpg"
-echo "  — or search 'Set Wallpaper' in the app menu"#!/bin/bash
-set -e
-
-# =============================================================================
-# Raptor HUD v4.2 — F-22 Themed KDE Plasma Shell
-# =============================================================================
-
-# ── Palette reference ─────────────────────────────────────────────────────────
-# Base:    #0d0f12  Surface: #151a20  Panel:   #1c2330  Border:  #2a3444
-# Accent:  #33FF33  Warning: #f5a623  Success: #2ec27e  Text:    #c8d6e8
-
-mkdir -p /usr/lib/raptor/hud
-
-# ── Sycoca autostart — rebuild menu cache early in session ────────────────────
-# Runs kbuildsycoca6 at session start BEFORE the app launcher is rendered.
-# This prevents blank categories from appearing when the cache is stale/absent.
-# Uses an autostart .desktop file so it runs in the user session context where
-# the user's cache directory (~/.cache/ksycoca6) is writable.
-mkdir -p /etc/xdg/autostart
-# Write the sycoca rebuild script separately so it can contain complex logic
-mkdir -p /usr/lib/raptor
-cat << 'SYCOCASCRIPT' > /usr/lib/raptor/sycoca-rebuild.sh
-#!/bin/bash
-# Raptor OS: sycoca rebuild on session start.
-#
-# Problem: when rpm-ostree activates a new deployment and the user reboots,
-# the sycoca database (~/.cache/ksycoca6_*) was built against the OLD
-# deployment's file paths. Plasma starts and reads the stale cache before
-# any user-level autostart fires — Kickoff shows blank categories and
-# resets to Favourites.
-#
-# Fix: compare the current OSTree deployment checksum to the last one we
-# saw. If it changed (i.e. an update was applied), delete the stale cache
-# so kbuildsycoca6 starts completely fresh. If it's the same deployment,
-# a fast incremental check is sufficient.
-
-set -euo pipefail
-
-CACHE_DIR="${HOME}/.cache"
-DEPLOY_HASH_FILE="${CACHE_DIR}/raptor-deploy-hash"
-
-# Get the current OSTree deployment checksum (first 16 chars is enough)
-CURRENT_DEPLOY=$(
-    rpm-ostree status --json 2>/dev/null \
-    | python3 -c "
-import json,sys
-try:
-    d = json.load(sys.stdin)
-    print(d['deployments'][0]['checksum'][:16])
-except Exception:
-    print('unknown')
-" 2>/dev/null || echo "unknown"
-)
-
-STORED_DEPLOY=$(cat "${DEPLOY_HASH_FILE}" 2>/dev/null || echo "")
-
-if [ "$CURRENT_DEPLOY" != "$STORED_DEPLOY" ]; then
-    # New OSTree deployment detected — the old sycoca is invalid.
-    # Delete it so kbuildsycoca6 builds a completely fresh database.
-    rm -f "${CACHE_DIR}"/ksycoca6_* "${CACHE_DIR}"/ksycoca5_* 2>/dev/null || true
-    kbuildsycoca6 --noincremental 2>/dev/null \
+echo "  — or search 'Set Wallpaper' in the app menu"
