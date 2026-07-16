@@ -5,173 +5,11 @@ set -e
 # Raptor HUD v4.2 — F-22 Themed KDE Plasma Shell
 # =============================================================================
 
-# ── Palette reference ─────────────────────────────────────────────────────────
+# ── Palette reference ────────────────────────────────────────────────────────
 # Base:    #0d0f12  Surface: #151a20  Panel:   #1c2330  Border:  #2a3444
 # Accent:  #33FF33  Warning: #f5a623  Success: #2ec27e  Text:    #c8d6e8
 
 mkdir -p /usr/lib/raptor/hud
-
-# ── Sycoca autostart — rebuild menu cache early in session ────────────────────
-# Runs kbuildsycoca6 at session start BEFORE the app launcher is rendered.
-# This prevents blank categories from appearing when the cache is stale/absent.
-# Uses an autostart .desktop file so it runs in the user session context where
-# the user's cache directory (~/.cache/ksycoca6) is writable.
-mkdir -p /etc/xdg/autostart
-# Write the sycoca rebuild script separately so it can contain complex logic
-mkdir -p /usr/lib/raptor
-cat << 'SYCOCASCRIPT' > /usr/lib/raptor/sycoca-rebuild.sh
-#!/bin/bash
-# Raptor OS: sycoca rebuild on session start.
-#
-# Problem: when rpm-ostree activates a new deployment and the user reboots,
-# the sycoca database (~/.cache/ksycoca6_*) was built against the OLD
-# deployment's file paths. Plasma starts and reads the stale cache before
-# any user-level autostart fires — Kickoff shows blank categories and
-# resets to Favourites.
-#
-# Fix: compare the current OSTree deployment checksum to the last one we
-# saw. If it changed (i.e. an update was applied), delete the stale cache
-# so kbuildsycoca6 starts completely fresh. If it's the same deployment,
-# a fast incremental check is sufficient.
-
-set -euo pipefail
-
-CACHE_DIR="${HOME}/.cache"
-DEPLOY_HASH_FILE="${CACHE_DIR}/raptor-deploy-hash"
-
-# Get the current OSTree deployment checksum (first 16 chars is enough)
-CURRENT_DEPLOY=$(
-    rpm-ostree status --json 2>/dev/null \
-    | python3 -c "
-import json,sys
-try:
-    d = json.load(sys.stdin)
-    print(d['deployments'][0]['checksum'][:16])
-except Exception:
-    print('unknown')
-" 2>/dev/null || echo "unknown"
-)
-
-STORED_DEPLOY=$(cat "${DEPLOY_HASH_FILE}" 2>/dev/null || echo "")
-
-if [ "$CURRENT_DEPLOY" != "$STORED_DEPLOY" ]; then
-    # New OSTree deployment detected — the old sycoca is invalid.
-    # Delete it so kbuildsycoca6 builds a completely fresh database.
-    rm -f "${CACHE_DIR}"/ksycoca6_* "${CACHE_DIR}"/ksycoca5_* 2>/dev/null || true
-    kbuildsycoca6 --noincremental 2>/dev/null \
-        || kbuildsycoca5 --noincremental 2>/dev/null \
-        || true
-    # Record this deployment so we don't full-rebuild next session
-    echo "${CURRENT_DEPLOY}" > "${DEPLOY_HASH_FILE}"
-    logger -t raptor-sycoca "Full rebuild after deployment change: ${STORED_DEPLOY:-none} → ${CURRENT_DEPLOY}"
-else
-    # Same deployment — sycoca is already valid; fast incremental check only
-    kbuildsycoca6 2>/dev/null || true
-fi
-SYCOCASCRIPT
-chmod +x /usr/lib/raptor/sycoca-rebuild.sh
-
-cat << 'SYCOCA_AUTOSTART' > /etc/xdg/autostart/raptor-sycoca-rebuild.desktop
-[Desktop Entry]
-Type=Application
-Name=Raptor OS Sycoca Rebuild
-Comment=Rebuild KDE service cache after OS updates (prevents blank app launcher categories)
-Exec=/usr/lib/raptor/sycoca-rebuild.sh
-Terminal=false
-Hidden=false
-X-KDE-autostart-phase=1
-X-GNOME-Autostart-enabled=true
-NoDisplay=true
-SYCOCA_AUTOSTART
-
-# ── raptor-set-wallpaper command ──────────────────────────────────────────────
-cat << 'WPEOF' > /usr/bin/raptor-set-wallpaper
-#!/bin/bash
-# Usage: raptor-set-wallpaper /path/to/image.jpg
-#   or:  raptor-set-wallpaper   (opens KDE file picker)
-#
-# Uses plasma-apply-wallpaperimage (Plasma 5.26+) with a qdbus fallback.
-# No nitrogen required.
-
-WALLPAPER_CACHE="$HOME/.config/raptor-wallpaper"
-
-_apply_kde_wallpaper() {
-    local IMG="$1"
-
-    # Method 1: plasma-apply-wallpaperimage (Plasma 5.26+, works Wayland + X11)
-    if command -v plasma-apply-wallpaperimage &>/dev/null; then
-        plasma-apply-wallpaperimage "$IMG" && return 0
-    fi
-
-    # Method 2: qdbus / qdbus6 script to every desktop containment
-    local QDBUS=""
-    command -v qdbus6  &>/dev/null && QDBUS="qdbus6"
-    command -v qdbus   &>/dev/null && QDBUS="qdbus"
-
-    if [ -n "$QDBUS" ]; then
-        local SCRIPT
-        SCRIPT=$(cat << JEOF
-var allDesktops = desktops();
-for (var i = 0; i < allDesktops.length; i++) {
-    var d = allDesktops[i];
-    d.wallpaperPlugin = "org.kde.image";
-    d.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
-    d.writeConfig("Image", "file://$IMG");
-}
-JEOF
-)
-        $QDBUS org.kde.plasmashell /PlasmaShell \
-            org.kde.PlasmaShell.evaluateScript "$SCRIPT" 2>/dev/null && return 0
-    fi
-
-    echo "[raptor-wallpaper] Could not set wallpaper — Plasma not running?" >&2
-    return 1
-}
-
-set_wallpaper() {
-    local IMG="$1"
-    [ -f "$IMG" ] || { echo "File not found: $IMG" >&2; exit 1; }
-    _apply_kde_wallpaper "$IMG" || exit 1
-    echo "$IMG" > "$WALLPAPER_CACHE"
-    echo "Wallpaper set: $IMG"
-}
-
-if [ -n "$1" ]; then
-    set_wallpaper "$1"
-elif command -v kdialog &>/dev/null; then
-    FILE=$(kdialog --getopenfilename "$HOME" \
-        "Images (*.png *.jpg *.jpeg *.webp *.bmp *.svg)|*.png *.jpg *.jpeg *.webp *.bmp *.svg")
-    [ -n "$FILE" ] && set_wallpaper "$FILE"
-else
-    echo "Usage: raptor-set-wallpaper /path/to/image.jpg"
-    exit 1
-fi
-WPEOF
-chmod +x /usr/bin/raptor-set-wallpaper
-
-cat << 'EOF' > /usr/share/applications/raptor-set-wallpaper.desktop
-[Desktop Entry]
-Type=Application
-Name=Set Wallpaper
-Comment=Set the desktop wallpaper using the KDE image plugin
-Exec=/usr/bin/raptor-set-wallpaper
-Icon=preferences-desktop-wallpaper
-Terminal=false
-Categories=X-RaptorOS;System;Settings;
-EOF
-
-# ── Autostart: restore wallpaper on login via KDE method ─────────────────────
-mkdir -p /etc/xdg/autostart
-cat << 'EOF' > /etc/xdg/autostart/raptor-wallpaper.desktop
-[Desktop Entry]
-Type=Application
-Name=Raptor Wallpaper Restore
-Comment=Restores saved wallpaper on login
-Exec=bash -c 'WP="$HOME/.config/raptor-wallpaper"; [ -f "$WP" ] && IMG="$(cat "$WP")" && [ -f "$IMG" ] && raptor-set-wallpaper "$IMG" || true'
-Hidden=false
-NoDisplay=true
-X-GNOME-Autostart-enabled=true
-EOF
 
 # ── RaptorOS KDE Color Scheme ─────────────────────────────────────────────────
 mkdir -p /usr/share/color-schemes
@@ -397,49 +235,6 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
   </g>
 </svg>
 SVGEOF
-
-# ── Raptor OS App Launcher Category ──────────────────────────────────────────
-mkdir -p /usr/share/desktop-directories
-cat << 'EOF' > /usr/share/desktop-directories/raptor-os.directory
-[Desktop Entry]
-Type=Directory
-Name=Raptor OS
-Comment=Raptor OS tools and utilities
-Icon=preferences-system
-EOF
-
-mkdir -p /etc/xdg/menus
-for MENUFILE in /etc/xdg/menus/applications.menu \
-                /etc/xdg/menus/kde-applications.menu; do
-  if [ -f "$MENUFILE" ]; then
-    if ! grep -q 'X-RaptorOS' "$MENUFILE" 2>/dev/null; then
-      if grep -q '<!-- End Applications -->' "$MENUFILE" 2>/dev/null; then
-        sed -i 's|</Menu> <!-- End Applications -->|  <Menu>\n    <Name>Raptor OS</Name>\n    <Directory>raptor-os.directory</Directory>\n    <Include><Category>X-RaptorOS</Category></Include>\n  </Menu>\n</Menu> <!-- End Applications -->|' "$MENUFILE"
-      else
-        sed -i 's|</Menu>$|  <Menu>\n    <Name>Raptor OS</Name>\n    <Directory>raptor-os.directory</Directory>\n    <Include><Category>X-RaptorOS</Category></Include>\n  </Menu>\n</Menu>|' "$MENUFILE"
-      fi
-    fi
-  else
-    cat << 'MENUEOF' > "$MENUFILE"
-<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
-  "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
-<Menu>
-  <Name>Applications</Name>
-  <Menu>
-    <Name>Raptor OS</Name>
-    <Directory>raptor-os.directory</Directory>
-    <Include>
-      <Category>X-RaptorOS</Category>
-    </Include>
-  </Menu>
-</Menu>
-MENUEOF
-  fi
-done
-
-mkdir -p /etc/xdg/menus/applications-merged
-cp /etc/xdg/menus/kde-applications.menu \
-   /etc/xdg/menus/applications-merged/raptor-os.menu 2>/dev/null || true
 
 # ── GPU Profile Detection, Configuration & Profiler UI ───────────────────────
 mkdir -p /usr/bin /usr/lib/raptor /usr/lib/systemd/system \
@@ -680,16 +475,16 @@ read_vram_override() {
 draw_header() {
     clear
     echo -e "${BLUE}${BOLD}"
-    echo "  ██████╗  █████╗ ██████╗ ████████╗ ██████╗ ██████╗      ██████╗ ███████╗"
-    echo "  ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔═══██╗██╔══██╗    ██╔═══██╗██╔════╝"
-    echo "  ██████╔╝███████║██████╔╝   ██║   ██║   ██║██████╔╝    ██║   ██║███████╗"
-    echo "  ██╔══██╗██╔══██║██╔═══╝    ██║   ██║   ██║██╔══██╗    ██║   ██║╚════██║"
-    echo "  ██║  ██║██║  ██║██║        ██║   ╚██████╔╝██║  ██║    ╚██████╔╝███████║"
-    echo "  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝        ╚═╝    ╚═════╝ ╚═╝  ╚═╝     ╚═════╝ ╚══════╝"
+    echo "  ██████╗  █████╗ ██████╗ ████████╗ ██████╗ ██████╗      ██████╗ ██████╗ ███████╗"
+    echo "  ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔═══██╗██╔══██╗    ██╔═══██╗██╔══██╗██╔════╝"
+    echo "  ██████╔╝███████║██████╔╝   ██║   ██║   ██║██████╔╝    ██║   ██║███████║███████╗"
+    echo "  ██╔══██╗██╔══██║██╔═══╝    ██║   ██║   ██║██╔══██╗    ██║   ██║╚════██║╚════██║"
+    echo "  ██║  ██║██║  ██║██║        ██║   ╚██████╔╝██║  ██║    ╚██████╔╝███████║███████║"
+    echo "  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝        ╚═╝    ╚═════╝ ╚═╝  ╚═╝     ╚═════╝ ╚══════╝╚══════╝"
     echo -e "${R}"
-    echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
+    echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
     echo -e "  ${AMBER}▸ GPU PROFILER  ${DIM}│${R}  F-22 RAPTOR HUD  ${DIM}│${R}  $(date '+%Y-%m-%d %H:%M:%S')"
-    echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
+    echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
     echo ""
 }
 
@@ -894,6 +689,60 @@ Keywords=gpu;profile;performance;raptor;monitor;nvidia;amd;intel;
 StartupNotify=true
 EOF
 
+# ── System-wide theme defaults (written at BUILD TIME) ────────────────────────
+mkdir -p /etc/xdg
+cat << 'SYSPLASMARC' > /etc/xdg/plasmarc
+[Theme]
+name=RaptorOS
+SYSPLASMARC
+
+# ── Baloo: filename-only indexing, 1-thread, low priority ─────────────────────
+mkdir -p /etc/xdg
+cat << 'BALOORCEOF' > /etc/xdg/baloofilerc
+[Basic Settings]
+Indexing-Enabled=true
+Only from Cache=false
+
+[General]
+# Disable full-text content indexing — filename search only
+exclude filters=*~,*.part,*.tmp,*.log,*.o,*.la,*.lo,*.loT,*.moc,moc_*.cpp,qrc_*.cpp,ui_*.h,cmake_install.cmake,CMakeCache.txt,CTestTestfile.cmake,libtool,config.status,confdefs.h,autom4te,conftest,confstat,Makefile.am,*.gcode,.hg,.git,.svn,.bzr,_darcs,.deps,.libs,.sconf_temp,.DS_Store,socket_*
+dbPath[$e]=$HOME/.local/share/baloo
+# 1 thread: prevents Baloo from competing with game loading/shader compilation
+max threads=1
+BALOORCEOF
+
+# Also write /etc/xdg/kwinrc at build time for system-wide window decoration defaults.
+cat << 'SYSKWINRC' > /etc/xdg/kwinrc
+[org.kde.kdecoration2]
+ButtonsOnLeft=M
+ButtonsOnRight=IAX
+
+[Windows]
+TitlebarDoubleClickCommand=Maximize
+ClickRaise=true
+ElectricBorderMaximize=true
+ElectricBorderTiling=true
+FocusPolicy=ClickToFocus
+
+[Compositing]
+AnimationSpeed=3
+LatencyPolicy=0
+HiddenPreviews=4
+SYSKWINRC
+
+# Also write system-wide kdeglobals defaults for color scheme and icons
+cat << 'SYSKDEGLOBALS' > /etc/xdg/kdeglobals
+[General]
+ColorScheme=RaptorOS
+
+[Icons]
+Theme=breeze-dark
+
+[KDE]
+LookAndFeelPackage=org.kde.breezedark.desktop
+SingleClick=false
+SYSKDEGLOBALS
+
 # ── Plasma desktop theme ──────────────────────────────────────────────────────
 mkdir -p /usr/share/plasma/desktoptheme/RaptorOS/widgets
 mkdir -p /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets
@@ -913,83 +762,6 @@ X-KDE-PluginInfo-EnabledByDefault=true
 BaseTheme=breezedark
 EOF
 
-# ── System-wide theme defaults (written at BUILD TIME) ────────────────────────
-# Writing /etc/xdg/plasmarc at build time makes RaptorOS the system default
-# before any user logs in. Without this, KDE starts with Breeze Dark and the
-# per-user service tries to override an already-active theme — often losing
-# the race against KDE's own session restore. With this file present, Plasma
-# reads RaptorOS as the configured theme from the very first session start.
-mkdir -p /etc/xdg
-cat << 'SYSPLASMARC' > /etc/xdg/plasmarc
-[Theme]
-name=RaptorOS
-SYSPLASMARC
-
-# ── Baloo: filename-only indexing, 1-thread, low priority ─────────────────────
-# Baloo is KDE's file indexer. Full-text search (indexing file CONTENT) is the
-# biggest RAM and CPU offender — it loads each file into memory to extract text.
-# For a gaming desktop, filename-only search is sufficient and uses a fraction
-# of the RAM. Limiting to 1 thread prevents it from competing with game I/O.
-mkdir -p /etc/xdg
-cat << 'BALOORCEOF' > /etc/xdg/baloofilerc
-[Basic Settings]
-Indexing-Enabled=true
-Only from Cache=false
-
-[General]
-# Disable full-text content indexing — filename search only
-exclude filters=*~,*.part,*.tmp,*.log,*.o,*.la,*.lo,*.loT,*.moc,moc_*.cpp,qrc_*.cpp,ui_*.h,cmake_install.cmake,CMakeCache.txt,CTestTestfile.cmake,libtool,config.status,confdefs.h,autom4te,conftest,confstat,Makefile.am,*.gcode,.hg,.git,.svn,.bzr,_darcs,.deps,.libs,.sconf_temp,.DS_Store,socket_*
-dbPath[$e]=$HOME/.local/share/baloo
-# 1 thread: prevents Baloo from competing with game loading/shader compilation
-max threads=1
-BALOORCEOF
-
-# Also write /etc/xdg/kwinrc at build time for system-wide window decoration defaults.
-# Without this, kwinrc button layout only applies after raptor-hud-apply.service runs
-# (which is AFTER kwin has already read its config and drawn window decorations).
-cat << 'SYSKWINRC' > /etc/xdg/kwinrc
-[org.kde.kdecoration2]
-ButtonsOnLeft=M
-ButtonsOnRight=IAX
-
-[Windows]
-TitlebarDoubleClickCommand=Maximize
-ClickRaise=true
-ElectricBorderMaximize=true
-ElectricBorderTiling=true
-FocusPolicy=ClickToFocus
-
-[Compositing]
-AnimationSpeed=3
-# LatencyPolicy=0: Submit frames immediately without waiting for the next vblank
-# interval, minimising display latency at the cost of potential tearing on X11
-# (no effect on Wayland which handles VSync in the compositor itself).
-LatencyPolicy=0
-# HiddenPreviews=4: keep window thumbnails for visible/taskbar-hovered windows
-# only. Value 5 (all windows including minimised) was wasting 100-300 MB of
-# RAM depending on how many windows were open. 4 is the KDE default and is
-# sufficient for snappy taskbar hover previews without the memory cost.
-HiddenPreviews=4
-SYSKWINRC
-
-# Also write system-wide kdeglobals defaults for color scheme and icons
-cat << 'SYSKDEGLOBALS' > /etc/xdg/kdeglobals
-[General]
-ColorScheme=RaptorOS
-
-[Icons]
-Theme=breeze-dark
-
-[KDE]
-LookAndFeelPackage=org.kde.breezedark.desktop
-SingleClick=false
-SYSKDEGLOBALS
-
-# Plasma 6 uses KPackage format (metadata.json) for theme discovery.
-# Without this file Plasma 6 cannot locate the theme by its ID string —
-# kwriteconfig6 writes "RaptorOS" to plasmarc but Plasma finds no theme
-# with that ID in its package index and silently falls back to Breeze Dark.
-# This is the primary reason the HUD theme never applied in v1–v5.
 cat << 'EOF' > /usr/share/plasma/desktoptheme/RaptorOS/metadata.json
 {
     "KPlugin": {
@@ -1117,317 +889,7 @@ SVGEOF
 cp /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg \
    /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets/panel-background.svg
 
-# ── Radar arc plasmoid ────────────────────────────────────────────────────────
-mkdir -p /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui
-
-cat << 'EOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/metadata.json
-{
-    "KPackageStructure": "Plasma/Applet",
-    "KPlugin": {
-        "Authors": [{"Email": "raptor@local", "Name": "RaptorOS"}],
-        "Category": "Utilities",
-        "Description": "Cockpit radar arc decoration for the Raptor HUD panel",
-        "Icon": "preferences-system-performance",
-        "Id": "org.raptoros.radararc",
-        "Name": "Raptor Radar Arc",
-        "Version": "1.0"
-    }
-}
-EOF
-
-cat << 'QMLEOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui/main.qml
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-
-Item {
-    id: root
-    implicitWidth: 120
-    implicitHeight: 48
-    property string side: plasmoid.configuration.side || "left"
-    property real sweepAngle: 0
-
-    // Static blip definitions: angle (degrees from top), dist (0-1 of maxR)
-    readonly property var blipDefs: [
-        { a: 210, r: 0.38 }, { a: 255, r: 0.58 },
-        { a: 290, r: 0.29 }, { a: 238, r: 0.72 }, { a: 222, r: 0.50 }
-    ]
-    property var blipBrightness: [0.6, 0.3, 0.8, 0.2, 0.5]
-
-    SequentialAnimation on sweepAngle {
-        loops: Animation.Infinite
-        NumberAnimation { to: 360; duration: 4000; easing.type: Easing.Linear }
-    }
-
-    onSweepAngleChanged: {
-        var bb = blipBrightness.slice()
-        for (var i = 0; i < blipDefs.length; i++) {
-            var diff = (sweepAngle - blipDefs[i].a + 360) % 360
-            if (diff >= 0 && diff < 4) {
-                bb[i] = 0.9 + Math.random() * 0.1
-            } else {
-                bb[i] = Math.max(0, bb[i] - 0.001)
-            }
-        }
-        blipBrightness = bb
-        canvas.requestPaint()
-    }
-
-    Canvas {
-        id: canvas
-        anchors.fill: parent
-        onPaint: {
-            var ctx = getContext("2d")
-            ctx.clearRect(0, 0, width, height)
-
-            // Corner anchor: left widget anchors at bottom-left, right at bottom-right
-            var cx = side === "left" ? 0 : width
-            var cy = height
-            var maxR = width * 1.4
-
-            // Grid arcs from corner
-            ctx.strokeStyle = "rgba(0,255,65,0.18)"
-            ctx.lineWidth = 0.5
-            for (var rr = maxR * 0.3; rr <= maxR; rr += maxR * 0.25) {
-                ctx.beginPath(); ctx.arc(cx, cy, rr, -Math.PI, 0); ctx.stroke()
-            }
-
-            // Sweep trail
-            var sweepRad = (sweepAngle - 90) * Math.PI / 180
-            var trailLen = Math.PI / 3
-            for (var s = 0; s < 32; s++) {
-                var frac   = s / 32
-                var startA = sweepRad - trailLen * frac
-                var endA   = sweepRad - trailLen * (frac + 1 / 32)
-                ctx.beginPath(); ctx.moveTo(cx, cy)
-                ctx.arc(cx, cy, maxR, startA, endA, true); ctx.closePath()
-                ctx.fillStyle = "rgba(0,255,65," + ((1 - frac) * 0.15) + ")"
-                ctx.fill()
-            }
-
-            // Sweep line
-            ctx.strokeStyle = "rgba(0,255,65,0.55)"
-            ctx.lineWidth = 1
-            ctx.beginPath(); ctx.moveTo(cx, cy)
-            ctx.lineTo(cx + maxR * Math.cos(sweepRad), cy + maxR * Math.sin(sweepRad))
-            ctx.stroke()
-
-            // Blips with brightness persistence
-            var bb = root.blipBrightness
-            for (var bi = 0; bi < root.blipDefs.length; bi++) {
-                if (bb[bi] < 0.02) continue
-                var blip = root.blipDefs[bi]
-                var ba = (blip.a - 90) * Math.PI / 180
-                var bx = cx + blip.r * maxR * Math.cos(ba)
-                var by = cy + blip.r * maxR * Math.sin(ba)
-                if (side === "left"  && bx < -4) continue
-                if (side === "right" && bx > width + 4) continue
-                if (by < -4) continue
-
-                var grad = ctx.createRadialGradient(bx, by, 0, bx, by, 6)
-                grad.addColorStop(0, "rgba(0,255,65," + (bb[bi] * 0.6) + ")")
-                grad.addColorStop(1, "rgba(0,0,0,0)")
-                ctx.fillStyle = grad
-                ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2); ctx.fill()
-
-                ctx.fillStyle   = "rgba(51,255,51," + bb[bi] + ")"
-                ctx.beginPath(); ctx.arc(bx, by, 1.5, 0, Math.PI * 2); ctx.fill()
-            }
-        }
-    }
-
-    Column {
-        anchors {
-            left:           side === "left"  ? parent.left  : undefined
-            right:          side === "right" ? parent.right : undefined
-            verticalCenter: parent.verticalCenter
-            leftMargin:     side === "left"  ? 4 : 0
-            rightMargin:    side === "right" ? 4 : 0
-        }
-        spacing: 1
-        Text { text: "HDG"; color: "#3a5060"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1.5 }
-        Text { text: "270°"; color: "#33FF33"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
-        Text { text: "ALT"; color: "#3a5060"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1.5 }
-        Text { text: "FL350"; color: "#f5a623"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
-    }
-}
-QMLEOF
-
-# ── apply-plasma-panel.sh ─────────────────────────────────────────────────────
-# Panel layout is applied via a Plasma layout script (layout.js) which is the
-# correct, reliable mechanism for first-boot panel configuration. kwriteconfig5
-# alone is not sufficient when Plasma has never run for that user because the
-# appletsrc file doesn't exist yet and Plasma ignores partial writes on first run.
-cat << 'EOF' > /usr/lib/raptor/hud/apply-plasma-panel.sh
-#!/bin/bash
-# apply-plasma-panel.sh  v6.0 — Raptor OS HUD theme applicator
-#
-# THEME ONLY. Never touches plasma-org.kde.plasma.desktop-appletsrc,
-# never writes wallpaper, never clears pinned apps. The F-22 HUD visual
-# look (dark panel + neon glow) comes entirely from the RaptorOS Plasma
-# theme SVGs — the panel structure is irrelevant.
-#
-# v1-v5 all had variants of the same bug: modifying the appletsrc caused
-# the wallpaper to reset, pinned apps to clear, and either broke the boot
-# sequence (v4 used systemctl restart plasma-plasmashell which is PartOf
-# graphical-session.target) or silently failed when D-Bus vars weren't
-# in the service environment.
-
-set -euo pipefail
-
-# Session env — set explicitly; systemd user services don't always inherit these
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
-export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
-
-# kwriteconfig shim — tries Plasma 6 first, falls back to 5
-kwc() {
-    if command -v kwriteconfig6 &>/dev/null; then
-        kwriteconfig6 "$@" 2>/dev/null || true
-    else
-        kwriteconfig5 "$@" 2>/dev/null || true
-    fi
-}
-
-# Verify the RaptorOS theme is installed before trying to apply it.
-# If it's missing for any reason, bail rather than leaving plasmarc
-# pointing at a theme that doesn't exist (causes Breeze fallback).
-THEME_DIR="/usr/share/plasma/desktoptheme/RaptorOS"
-if [ ! -f "$THEME_DIR/metadata.desktop" ] && [ ! -f "$THEME_DIR/metadata.json" ]; then
-    echo "ERROR: RaptorOS Plasma theme not found at $THEME_DIR — aborting theme apply"
-    exit 1
-fi
-
-# ── 1. Colour scheme ──────────────────────────────────────────────────────────
-plasma-apply-colorscheme RaptorOS 2>/dev/null \
-    || plasma-apply-colorscheme /usr/share/color-schemes/RaptorOS.colors 2>/dev/null \
-    || true
-kwc --file kdeglobals --group General --key ColorScheme RaptorOS
-kwc --file kdeglobals --group General --key Name        RaptorOS
-
-# ── 2. Plasma theme (provides the panel-background.svg neon glow) ─────────────
-kwc --file plasmarc --group Theme --key name RaptorOS
-
-# ── 2b. Force panel Opacity = Opaque ──────────────────────────────────────────
-# Plasma's per-panel "Opacity" setting (Edit Mode → More Settings → Panel
-# Opacity) has three states: Translucent / Adaptive / Opaque. Left at its
-# default, empty regions of the panel (behind the launcher, spacers, system
-# tray, clock) can show the desktop wallpaper through instead of a solid fill
-# — this is what caused the "green only shows behind app icons, rest of the
-# bar shows wallpaper" bug. Task Manager icons looked fine because that
-# widget paints its own opaque item backgrounds independent of the panel's
-# own translucency; the panel chrome itself was letting wallpaper bleed
-# through everywhere else.
-#
-# panelOpacity values: 0=Translucent  1=Adaptive  2=Opaque
-# Forcing Opaque guarantees Plasma paints a solid fill using the colour
-# scheme's Window background (28,35,48 — near-black, already set above)
-# across the ENTIRE panel, regardless of whether the SVG theme's own
-# panel-background asset renders correctly on a given system.
-#
-# The panel's containment ID varies per install (not always "Panel 2"), so
-# find it dynamically from the current appletsrc rather than hardcoding it.
-APPLETSRC="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
-if [ -f "$APPLETSRC" ]; then
-    PANEL_ID=$(python3 - "$APPLETSRC" << 'FINDPANELID'
-import sys
-path = sys.argv[1]
-with open(path) as f:
-    lines = f.read().splitlines()
-current_id = None
-for line in lines:
-    if line.startswith("[Containments][") and line.endswith("]"):
-        inner = line[len("[Containments]["):-1]
-        if inner.isdigit():
-            current_id = inner
-        continue
-    if line.strip() == "plugin=org.kde.panel" and current_id is not None:
-        print(current_id)
-        break
-FINDPANELID
-)
-    if [ -n "$PANEL_ID" ]; then
-        kwc --file plasmashellrc \
-            --group PlasmaViews --group "Panel $PANEL_ID" --group Defaults \
-            --key panelOpacity 2
-    fi
-fi
-
-# ── 3. Icons ──────────────────────────────────────────────────────────────────
-ICON_THEME="breeze-dark"
-kwc --file kdeglobals --group Icons --key Theme "$ICON_THEME"
-kwc --file kdeglobals --group KDE   --key LookAndFeelPackage org.kde.breezedark.desktop
-plasma-apply-icon-theme "$ICON_THEME" 2>/dev/null || true
-
-# ── 4. Window decoration ──────────────────────────────────────────────────────
-kwc --file kwinrc --group "org.kde.kdecoration2" --key library org.kde.kwin.aurorae
-kwc --file kwinrc --group "org.kde.kdecoration2" --key theme "__aurorae__svg__RaptorOS"
-# Window button layout — Windows style: Minimize, Maximize, Close on the right
-# KDE codes: I=Minimize, A=Maximize, X=Close, M=AppMenu, _=Spacer
-kwc --file kwinrc --group "org.kde.kdecoration2" --key ButtonsOnLeft  "M"
-kwc --file kwinrc --group "org.kde.kdecoration2" --key ButtonsOnRight "IAX"
-
-# Window behaviour — closer to Windows defaults
-# Double-click titlebar maximises (Windows default)
-kwc --file kwinrc --group Windows --key TitlebarDoubleClickCommand Maximize
-# Click-to-raise (Windows always raises on click, not just titlebar)
-kwc --file kwinrc --group Windows --key ClickRaise true
-# Edge tiling — drag to screen edge to snap/tile (Windows Aero snap)
-kwc --file kwinrc --group Windows --key ElectricBorders 1
-kwc --file kwinrc --group Windows --key ElectricBorderMaximize true
-kwc --file kwinrc --group Windows --key ElectricBorderTiling true
-# Windows-like Alt+F4 always closes, no confirmation
-kwc --file kwinrc --group KDE --key AnimationSpeed 3
-
-# ── 5. Kvantum ────────────────────────────────────────────────────────────────
-mkdir -p "$HOME/.config/Kvantum"
-printf '[General]\ntheme=RaptorOS\n' > "$HOME/.config/Kvantum/kvantum.kvconfig"
-kwc --file kdeglobals --group KDE --key widgetStyle kvantum
-
-# ── 6. GTK ────────────────────────────────────────────────────────────────────
-mkdir -p "$HOME/.config/gtk-3.0"
-cat > "$HOME/.config/gtk-3.0/settings.ini" << GTKEOF
-[Settings]
-gtk-theme-name=RaptorOS-GTK
-gtk-icon-theme-name=${ICON_THEME}
-gtk-cursor-theme-name=Adwaita
-gtk-font-name=JetBrains Mono 10
-gtk-application-prefer-dark-theme=1
-GTKEOF
-
-# ── 7. Sycoca rebuild + icon loader notify ────────────────────────────────────
-XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" kbuildsycoca6 --noincremental 2>/dev/null \
-    || XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" kbuildsycoca5 --noincremental 2>/dev/null \
-    || true
-dbus-send --session --dest=org.kde.KIconLoader --type=signal \
-    /KIconLoader org.kde.KIconLoader.iconChanged int32:0 2>/dev/null || true
-
-# ── 8. KWin decoration reload (no compositor restart) ─────────────────────────
-qdbus6 org.kde.KWin /KWin reconfigure 2>/dev/null \
-    || qdbus org.kde.KWin /KWin reconfigure 2>/dev/null \
-    || true
-
-# ── 9. Restart plasmashell to load the new theme ──────────────────────────────
-# Runs in a fully detached subshell so this script exits cleanly first.
-# The stamp is written (ExecStartPost) before plasmashell restarts.
-# systemctl restart is intentionally NOT used — plasma-plasmashell.service
-# is PartOf=graphical-session.target; restarting via systemd cascades and
-# hung the machine on reboot in v4.
-(
-    sleep 5
-    killall plasmashell 2>/dev/null || true
-    sleep 2
-    WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-    DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
-    plasmashell --replace &>/dev/null &
-    disown
-) &>/dev/null &
-disown
-
-echo "RAPTOR_HUD_APPLIED_V6"
-EOF
-chmod +x /usr/lib/raptor/hud/apply-plasma-panel.sh
-
-# ── GTK theme ─────────────────────────────────────────────────────────────────
+# ── GTK theme ──────────────────────────────────────────────────────────────────
 mkdir -p /usr/share/themes/RaptorOS-GTK/gtk-3.0
 mkdir -p /usr/share/themes/RaptorOS-GTK/gtk-4.0
 
@@ -1538,7 +1000,7 @@ cat << 'EOF' > /usr/share/Kvantum/RaptorOS/RaptorOS.svg
 </svg>
 EOF
 
-# ── Konsole profile ───────────────────────────────────────────────────────────
+# ── Konsole profile ────────────────────────────────────────────────────────────
 mkdir -p /usr/share/konsole
 cat << 'EOF' > /usr/share/konsole/RaptorOS.profile
 [Appearance]
@@ -1634,39 +1096,13 @@ Description=RaptorOS
 Opacity=0.92
 EOF
 
-# ── Firstboot systemd user service ───────────────────────────────────────────
-mkdir -p /usr/lib/systemd/user
-cat << 'EOF' > /usr/lib/systemd/user/raptor-hud-apply.service
-[Unit]
-Description=Raptor HUD — Apply KDE theme on first login
-After=plasma-plasmashell.service
-# v4 stamp: v3 fixed the appletsrc structure. v4 fixes the plasmashell
-# restart — kquitapp6 silently fails when DBUS_SESSION_BUS_ADDRESS is
-# absent from the systemd user service env. v4 sets all session env vars
-# explicitly and uses systemctl --user restart plasma-plasmashell.service
-# as the primary method (uses private socket, not D-Bus).
-# Delete ~/.local/share/raptor-hud-applied-v10 to re-run manually.
-ConditionPathExists=!%h/.local/share/raptor-hud-applied-v10
-
-[Service]
-Type=oneshot
-ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/bash -c 'mkdir -p %h/.local/share && touch %h/.local/share/raptor-hud-applied-v10'
-RemainAfterExit=yes
-
-[Install]
-WantedBy=default.target
-EOF
-systemctl --global enable raptor-hud-apply.service 2>/dev/null || true
-
-if command -v kbuildsycoca6 &>/dev/null; then
-    kbuildsycoca6 --noincremental 2>/dev/null || true
-elif command -v kbuildsycoca5 &>/dev/null; then
-    kbuildsycoca5 --noincremental 2>/dev/null || true
-fi
-
 echo "RAPTOR_HUD_READY"
 echo ""
-echo "To set your wallpaper (persists across logins):"
-echo "  raptor-set-wallpaper /path/to/image.jpg"
-echo "  — or search 'Set Wallpaper' in the app menu"
+echo "Raptor OS — Using KDE Plasma Default Taskbar"
+echo "The custom HUD theme (F-22 cockpit aesthetic) is applied through:"
+echo "  - Color scheme (RaptorOS)"
+echo "  - Window decoration (Aurorae with green accents)"
+echo "  - Plasma theme (neon glow effects)"
+echo ""
+echo "All taskbar configurations are now KDE defaults."
+echo "Categories should display properly with full scroll support."
