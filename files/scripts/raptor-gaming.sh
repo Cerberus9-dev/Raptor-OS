@@ -817,6 +817,18 @@ cat << 'INPUTRULES' > /usr/lib/udev/rules.d/61-raptor-input.rules
 ACTION=="add", SUBSYSTEM=="usb", DRIVERS=="usbhid", \
     ATTR{power/autosuspend}="-1"
 
+# Disable USB autosuspend for Bluetooth adapters (btusb driver). This is a
+# SEPARATE device from any HID rule above — a Bluetooth mouse/keyboard talks
+# to the OS through this adapter, not as its own USB HID node, so the usbhid
+# rule above never protected it. Applying autosuspend to a Bluetooth adapter
+# is a known way to leave it unresponsive after its next suspend cycle,
+# breaking every Bluetooth input device connected through it until a manual
+# USB reset or reboot. This affects internal laptop Bluetooth chips too —
+# most enumerate as USB devices even though they're physically built in.
+ACTION=="add", SUBSYSTEM=="usb", DRIVERS=="btusb", \
+    ATTR{power/control}="on", \
+    ATTR{power/autosuspend}="-1"
+
 # uinput: allow user-space to create virtual devices (antimicro, xpadneo, etc.)
 KERNEL=="uinput", SUBSYSTEM=="misc", \
     OPTIONS+="static_node=uinput", TAG+="uaccess", TAG+="udev-acl", \
