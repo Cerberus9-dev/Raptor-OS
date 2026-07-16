@@ -75,18 +75,42 @@ _apply_nvme_power() {
 
 _apply_usb_autosuspend() {
     # 1 = enable (power save), 0 = disable (performance)
-    if [ "$1" = "1" ]; then
-        for d in /sys/bus/usb/devices/*/power/autosuspend_delay_ms; do
-            echo 2000 > "$d" 2>/dev/null || true
+    #
+    # Skips any device (or interface) bound to btusb (Bluetooth adapters) or
+    # usbhid (USB keyboards/mice/HID). The previous version swept every USB
+    # device unconditionally, with no exclusions at all. Applying autosuspend
+    # to a Bluetooth adapter is a known way to leave it unresponsive after
+    # its next suspend/resume cycle — breaking Bluetooth mice, keyboards, and
+    # headsets connected through it until a manual USB reset or reboot. This
+    # affects laptops with internal Bluetooth chips too, since most of those
+    # enumerate as USB devices despite being physically built in. A boot-time
+    # udev rule (61-raptor-input.rules) also sets these to power/control=on
+    # persistently — this runtime exclusion stops per-mode switching from
+    # later overriding that protection.
+    local mode="$1"
+    for dev_path in /sys/bus/usb/devices/*/; do
+        dev_path="${dev_path%/}"
+        [ -f "$dev_path/power/control" ] || continue
+
+        local skip=0
+        for drv_link in "$dev_path"/*/driver "$dev_path/driver"; do
+            [ -L "$drv_link" ] || continue
+            local drv_name
+            drv_name=$(basename "$(readlink -f "$drv_link")" 2>/dev/null)
+            if [ "$drv_name" = "btusb" ] || [ "$drv_name" = "usbhid" ]; then
+                skip=1
+                break
+            fi
         done
-        for c in /sys/bus/usb/devices/*/power/control; do
-            echo auto > "$c" 2>/dev/null || true
-        done
-    else
-        for c in /sys/bus/usb/devices/*/power/control; do
-            echo on > "$c" 2>/dev/null || true
-        done
-    fi
+        [ "$skip" = "1" ] && continue
+
+        if [ "$mode" = "1" ]; then
+            echo 2000 > "$dev_path/power/autosuspend_delay_ms" 2>/dev/null || true
+            echo auto > "$dev_path/power/control" 2>/dev/null || true
+        else
+            echo on > "$dev_path/power/control" 2>/dev/null || true
+        fi
+    done
 }
 
 _apply_runtime_pm() {
