@@ -22,5 +22,29 @@ StandardError=journal
 # zenity returns 1 on "Skip" — treat as success so the chain continues
 SuccessExitStatus=0 1
 
+# ── Hardening: deliberately NOT applied here ────────────────────────────────
+# Unlike the other Raptor services, this one is not a good hardening
+# candidate — the scripts it runs need broad access that most sandboxing
+# directives would break outright:
+#
+#   NoNewPrivileges  — NOT SET: raptor-app-choice.sh calls `sudo rpm-ostree
+#     install` for a handful of optional packages (gcc/make/cmake, gh,
+#     btop, variety). sudo is a setuid binary; NoNewPrivileges blocks the
+#     exact privilege transition sudo depends on.
+#
+#   PrivateTmp        — NOT SET: both scripts write install logs to
+#     /tmp/raptor-*-install.log specifically so the user can check them
+#     after a failed install. PrivateTmp would give the service its own
+#     isolated /tmp, making those logs invisible from a normal terminal.
+#
+#   ProtectHome        — NOT SET: needs full read/write access to the
+#     user's own home directory (dotfiles, Flatpak user data, GTK/Qt
+#     config) as part of normal first-run setup.
+#
+# This service also needs network access (Flatpak installs) and a full
+# desktop session (Wayland/X11 display, D-Bus session bus) to show its
+# zenity dialogs — neither of which any standard hardening directive here
+# would preserve.
+
 [Install]
 WantedBy=graphical-session.target
