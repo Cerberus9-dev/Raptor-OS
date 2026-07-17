@@ -13,5 +13,23 @@ RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
 
+# ── Hardening ──────────────────────────────────────────────────────────────────
+# powerprofilesctl talks to power-profiles-daemon over the D-Bus system bus —
+# no direct filesystem writes, no /tmp usage, no privilege escalation needed.
+# Same safe candidate for full hardening as raptor-ensure-services.service.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
 [Install]
 WantedBy=multi-user.target
