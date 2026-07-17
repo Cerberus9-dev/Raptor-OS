@@ -689,13 +689,6 @@ Keywords=gpu;profile;performance;raptor;monitor;nvidia;amd;intel;
 StartupNotify=true
 EOF
 
-# ── System-wide theme defaults (written at BUILD TIME) ────────────────────────
-mkdir -p /etc/xdg
-cat << 'SYSPLASMARC' > /etc/xdg/plasmarc
-[Theme]
-name=RaptorOS
-SYSPLASMARC
-
 # ── Baloo: filename-only indexing, 1-thread, low priority ─────────────────────
 mkdir -p /etc/xdg
 cat << 'BALOORCEOF' > /etc/xdg/baloofilerc
@@ -742,152 +735,6 @@ Theme=breeze-dark
 LookAndFeelPackage=org.kde.breezedark.desktop
 SingleClick=false
 SYSKDEGLOBALS
-
-# ── Plasma desktop theme ──────────────────────────────────────────────────────
-mkdir -p /usr/share/plasma/desktoptheme/RaptorOS/widgets
-mkdir -p /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets
-
-cat << 'EOF' > /usr/share/plasma/desktoptheme/RaptorOS/metadata.desktop
-[Desktop Entry]
-Name=RaptorOS
-Comment=F-22 Fighter Jet Cockpit HUD theme for Raptor OS
-Type=Service
-X-KDE-ServiceTypes=Plasma/Theme
-X-KDE-PluginInfo-Name=RaptorOS
-X-KDE-PluginInfo-Version=2.6
-X-KDE-PluginInfo-License=GPL-2.0-or-later
-X-KDE-PluginInfo-EnabledByDefault=true
-
-[Plasmatarget]
-BaseTheme=breezedark
-EOF
-
-cat << 'EOF' > /usr/share/plasma/desktoptheme/RaptorOS/metadata.json
-{
-    "KPlugin": {
-        "Id": "RaptorOS",
-        "Name": "RaptorOS",
-        "Description": "F-22 Fighter Jet Cockpit HUD theme for Raptor OS",
-        "Authors": [{"Name": "Raptor OS", "Email": ""}],
-        "Category": "Plasma Theme",
-        "Version": "2.6",
-        "Website": "https://github.com/Cerberus9-dev/Raptor-OS",
-        "License": "GPL-2.0-or-later",
-        "EnabledByDefault": true
-    },
-    "X-Plasma-API-Minimum-Version": "6.0"
-}
-EOF
-
-cat << 'SVGEOF' > /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-  <!--
-    Raptor OS HUD panel background — F-22 cockpit aesthetic.
-    Nine-slice layout: topleft/top/topright/left/center/right/bottomleft/bottom/bottomright
-    Panel sits at the BOTTOM of the screen; the 'top' element is the visible edge facing
-    the desktop — this is where the neon green glow lives.
-
-    All accent/glow colours: #33FF33 (neon green, RGB 51,255,51)
-    Panel body: #0a0e12 (near-black with a hint of blue-green)
-    hint-stretch-borders: tells Plasma to stretch top/bottom/left/right elements
-  -->
-  <defs>
-    <!-- Neon green top-edge glow: bright at y=0, fades into the dark panel body -->
-    <linearGradient id="topglow" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#33FF33" stop-opacity="0.80"/>
-      <stop offset="6%"   stop-color="#33FF33" stop-opacity="0.45"/>
-      <stop offset="20%"  stop-color="#1a3a1a" stop-opacity="0.18"/>
-      <stop offset="55%"  stop-color="#0a0e12" stop-opacity="0.06"/>
-      <stop offset="100%" stop-color="#0a0e12" stop-opacity="0.00"/>
-    </linearGradient>
-    <!-- Subtle green inner body glow (very faint, just enough to break the flat look) -->
-    <radialGradient id="bodyglow" cx="50%" cy="0%" r="70%">
-      <stop offset="0%"   stop-color="#33FF33" stop-opacity="0.04"/>
-      <stop offset="100%" stop-color="#33FF33" stop-opacity="0.00"/>
-    </radialGradient>
-    <!-- Corner edge gradient for the left and right vertical lines -->
-    <linearGradient id="vlineglow" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#33FF33" stop-opacity="0.70"/>
-      <stop offset="30%"  stop-color="#33FF33" stop-opacity="0.20"/>
-      <stop offset="100%" stop-color="#33FF33" stop-opacity="0.00"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Plasma hints — stretch borders, tile center -->
-  <rect id="hint-stretch-borders" x="0" y="0" width="1" height="1" fill="none"/>
-  <rect id="hint-tile-center"     x="0" y="0" width="1" height="1" fill="none"/>
-
-  <!-- ── topleft corner ──────────────────────────────────────────────────── -->
-  <g id="topleft">
-    <!-- Dark body -->
-    <rect x="0" y="0" width="24" height="48" fill="#0a0e12" opacity="0.97"/>
-    <!-- Faint corner bevel -->
-    <polygon points="0,0 20,0 0,20" fill="#111a12" opacity="0.6"/>
-    <!-- Green top edge line -->
-    <line x1="0" y1="0" x2="24" y2="0" stroke="#33FF33" stroke-width="1.5" opacity="0.85"/>
-    <!-- Green left-side vertical glow line -->
-    <line x1="0" y1="0" x2="0"  y2="48" stroke="#33FF33" stroke-width="0.8"
-          stroke-opacity="0.40"/>
-  </g>
-
-  <!-- ── topright corner ─────────────────────────────────────────────────── -->
-  <g id="topright">
-    <rect x="0" y="0" width="24" height="48" fill="#0a0e12" opacity="0.97"/>
-    <polygon points="4,0 24,0 24,20" fill="#111a12" opacity="0.6"/>
-    <line x1="0"  y1="0" x2="24" y2="0"  stroke="#33FF33" stroke-width="1.5" opacity="0.85"/>
-    <line x1="24" y1="0" x2="24" y2="48" stroke="#33FF33" stroke-width="0.8"
-          stroke-opacity="0.40"/>
-  </g>
-
-  <!-- ── bottomleft / bottomright (no glow — bottom edge faces away) ──── -->
-  <g id="bottomleft">
-    <rect x="0" y="0" width="24" height="4" fill="#0a0e12" opacity="0.97"/>
-  </g>
-  <g id="bottomright">
-    <rect x="0" y="0" width="24" height="4" fill="#0a0e12" opacity="0.97"/>
-  </g>
-
-  <!-- ── top (main glow edge — stretched horizontally by Plasma) ──────── -->
-  <g id="top">
-    <!-- Dark panel body -->
-    <rect x="0" y="0" width="1" height="48" fill="#0a0e12" opacity="0.97"/>
-    <!-- Green glow fading down from the top edge -->
-    <rect x="0" y="0" width="1" height="48" fill="url(#topglow)"/>
-    <!-- Bright green 1.5px hot-line at the very top edge -->
-    <line x1="0" y1="0.75" x2="1" y2="0.75"
-          stroke="#33FF33" stroke-width="1.5" opacity="0.90"/>
-    <!-- Subtle body glow -->
-    <rect x="0" y="0" width="1" height="48" fill="url(#bodyglow)"/>
-  </g>
-
-  <!-- ── bottom (no glow) ───────────────────────────────────────────────── -->
-  <g id="bottom">
-    <rect x="0" y="0" width="1" height="4" fill="#080a0c" opacity="0.97"/>
-  </g>
-
-  <!-- ── left / right side edges ──────────────────────────────────────── -->
-  <g id="left">
-    <rect x="0" y="0" width="24" height="1" fill="#0a0e12" opacity="0.97"/>
-    <line x1="0" y1="0" x2="0" y2="1"
-          stroke="#33FF33" stroke-width="0.8" opacity="0.40"/>
-  </g>
-  <g id="right">
-    <rect x="0" y="0" width="24" height="1" fill="#0a0e12" opacity="0.97"/>
-    <line x1="24" y1="0" x2="24" y2="1"
-          stroke="#33FF33" stroke-width="0.8" opacity="0.40"/>
-  </g>
-
-  <!-- ── center (main panel body — stretched in both axes) ─────────────── -->
-  <g id="center">
-    <rect x="0" y="0" width="1" height="48" fill="#0a0e12" opacity="0.97"/>
-    <!-- Very faint body glow -->
-    <rect x="0" y="0" width="1" height="48" fill="url(#bodyglow)"/>
-  </g>
-</svg>
-SVGEOF
-
-cp /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg \
-   /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets/panel-background.svg
 
 # ── GTK theme ──────────────────────────────────────────────────────────────────
 mkdir -p /usr/share/themes/RaptorOS-GTK/gtk-3.0
@@ -1094,6 +941,71 @@ BlurRadius=12
 ColorRandomization=false
 Description=RaptorOS
 Opacity=0.92
+EOF
+
+# ── One-time migration: clean up leftover RaptorOS theme reference ────────────
+# This build no longer writes /etc/xdg/plasmarc or the desktoptheme/RaptorOS
+# package — but a user upgrading from a build that DID write them may still
+# have "name=RaptorOS" sitting in their own ~/.config/plasmarc, which always
+# takes priority over system defaults and is untouched by any system rebuild.
+# This runs once per user, checks for that specific stale line, removes it
+# if found, and restarts plasmashell so the fix is visible immediately —
+# using the same detached-subshell restart proven safe earlier (never
+# systemctl restart plasma-plasmashell.service, which caused a reboot hang).
+mkdir -p /usr/lib/raptor
+cat << 'MIGRATIONEOF' > /usr/lib/raptor/cleanup-legacy-panel-theme.sh
+#!/bin/bash
+set -euo pipefail
+
+STAMP_DIR="$HOME/.local/share/raptor"
+STAMP="$STAMP_DIR/legacy-panel-theme-cleaned"
+[ -f "$STAMP" ] && exit 0
+
+CHANGED=0
+PLASMARC="$HOME/.config/plasmarc"
+
+if [ -f "$PLASMARC" ] && grep -q "^name=RaptorOS$" "$PLASMARC" 2>/dev/null; then
+    sed -i '/^name=RaptorOS$/d' "$PLASMARC"
+    CHANGED=1
+    logger -t raptor-cleanup "Removed stale 'name=RaptorOS' from $PLASMARC"
+fi
+
+# Nothing this script can do about /usr — it's read-only on OSTree — but log
+# it for visibility if the old theme package is somehow still present.
+if [ -d /usr/share/plasma/desktoptheme/RaptorOS ]; then
+    logger -t raptor-cleanup \
+        "Note: /usr/share/plasma/desktoptheme/RaptorOS still exists on this deployment. A fresh rebase to a build without it should clear this."
+fi
+
+if [ "$CHANGED" = "1" ]; then
+    plasma-apply-colorscheme BreezeDark 2>/dev/null || true
+    (
+        sleep 2
+        killall plasmashell 2>/dev/null || true
+        sleep 2
+        WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" \
+        DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus}" \
+        plasmashell --replace &>/dev/null &
+        disown
+    ) &>/dev/null &
+    disown
+fi
+
+mkdir -p "$STAMP_DIR"
+touch "$STAMP"
+MIGRATIONEOF
+chmod +x /usr/lib/raptor/cleanup-legacy-panel-theme.sh
+
+cat << 'EOF' > /etc/xdg/autostart/raptor-cleanup-legacy-theme.desktop
+[Desktop Entry]
+Type=Application
+Name=Raptor OS Legacy Theme Cleanup
+Comment=One-time removal of the deprecated RaptorOS panel theme reference
+Exec=/usr/lib/raptor/cleanup-legacy-panel-theme.sh
+Terminal=false
+Hidden=false
+X-KDE-autostart-phase=1
+NoDisplay=true
 EOF
 
 echo "RAPTOR_HUD_READY"
