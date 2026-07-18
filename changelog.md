@@ -7,6 +7,153 @@
 - Better seamless fully custom wallpaper system like windows
 - Custom Icons for all Raptor OS Apps
 
+## [v2.6.8] - 2026-07-18 (Taskbar Reverted to Stock KDE, Wallpaper App, Service Hardening)
+
+### Removed
+
+- **Custom panel/taskbar theme reverted to stock KDE Breeze Dark** — the
+  entire `desktoptheme/RaptorOS` package (`panel-background.svg` and its
+  metadata) and the `/etc/xdg/plasmarc` override that forced it system-wide
+  have been removed. This ends the multi-version effort (v1 through v9 of
+  the panel appletsrc/theme logic) to build a custom nine-slice panel
+  background — the underlying rendering issues proved persistent enough
+  across different systems that reverting to KDE's own maintained default
+  is the more reliable choice. Still applied and unaffected by this change:
+  the green colour scheme (button/selection accents), Aurorae window
+  decoration (green titlebar accent, Windows-style min/max/close buttons),
+  and GTK/Kvantum/Konsole theming — none of that is panel-specific
+- **Radar Arc plasmoid removed entirely** — `files/usr/share/plasma/plasmoids/org.raptoros.radararc/`
+  (`main.qml`, `main.xml`, `metadata.json`) deleted from the repo. It was
+  purpose-built for the now-abandoned custom panel aesthetic, was never
+  auto-added to the default layout, and was pure unused maintenance surface
+  (QML can break across Plasma major versions) with a non-existent user base
+  once opted out
+- **Duplicate GPU Profiler removed** — `raptor-hud.sh` contained a complete,
+  independent, older bash-TUI GPU profiler (`raptor-gpu-profile-ui.sh` +
+  launcher wrapper) that predated the GTK4 rewrite in `raptor-gpu-profile.sh`
+  and was never cleaned up. Both wrote a `.desktop` entry named "Raptor GPU
+  Profiler" (the visible duplicate in the app menu), and — more seriously —
+  both wrote to the *same* destination paths: `/usr/lib/systemd/system/raptor-gpu-profile.service`
+  and `/etc/environment.d/raptor-gpu.conf`, with completely different
+  content. Whichever script ran last in the build silently won with no
+  warning. The old version still had `WINE_FULLSCREEN_FSR=1` set globally —
+  the exact setting previously diagnosed and removed for causing Project
+  Zomboid flickering — meaning that bug was one `recipe.yml` script reorder
+  away from silently returning. Removed all 453 lines of the old
+  implementation from `raptor-hud.sh`; the GTK4 version is now the only one
+
+### Fixed
+
+- **`build-iso.yml` failing instantly** — `jasonn3/build-container-installer@v1`
+  does not exist; that action has never published a plain `v1` tag, only
+  full semver releases. Pinned to `@v1.4.0`, matching what Bazzite itself
+  currently uses for the same purpose. Also added `arch: x86_64` explicitly
+  to match the action's documented usage
+- **Audio static specifically in Spotify and Discord/Vesktop** — both are
+  Electron/Chromium-based and route audio through `pipewire-pulse`, a
+  separate PulseAudio-compatibility daemon with its own independent config
+  and latency properties (`pulse.*` namespaced, not `default.clock.quantum`).
+  The existing `99-raptor-pipewire-lowlatency.conf` only tuned the native
+  PipeWire graph — `pipewire-pulse` had never been configured at all and was
+  running on stock defaults with no RT scheduling, explaining static that
+  was specific to Electron/Chromium apps while native clients (games, mpv)
+  were already fixed. Added `99-raptor-pipewire-pulse-lowlatency.conf`
+  matching request/quantum sizes to the native config and loading the same
+  real-time scheduling module. Also gave `pipewire-pulse.service` the same
+  crash-loop restart limiting already applied to `pipewire.service` and
+  `wireplumber.service`
+- **Bluetooth mice/keyboards losing connection after a mode switch or reboot** —
+  `_apply_usb_autosuspend()` in Cortex swept every USB device into
+  autosuspend with zero exclusions whenever Balanced or Power Saving mode
+  applied. An existing udev rule protected `usbhid`-driver devices (wired
+  keyboards/mice), but a Bluetooth *adapter* binds to `btusb`, a completely
+  different driver — that rule never touched it, and applying autosuspend to
+  a Bluetooth adapter is a known way to leave it unresponsive until a manual
+  USB reset or reboot. Affects laptops with internal Bluetooth chips too,
+  since most enumerate as USB devices despite being built in. Fixed by
+  excluding both `btusb` and `usbhid`-bound devices from the sweep in either
+  direction (verified against a synthetic sysfs tree before shipping). Added
+  a matching persistent udev rule for `btusb` devices, giving Bluetooth
+  adapters the same always-on boot-time baseline USB HID devices already had
+- **Mangled heredoc delimiter in `raptor-gpu-profile.sh`** — found during a
+  full-codebase audit for the same corruption class as the fix below. The
+  `/etc/drirc.d/99-raptor-mesa.conf` heredoc delimiter had stray
+  quote-escaping artifacts (`<< '"'"'DRIRC'"'"'` instead of `<< 'DRIRC'`)
+  left over from an earlier edit, meaning bash was looking for a delimiter
+  that could never match the correctly-formed closing line — the Mesa
+  GL-threading config write, and everything after it in the script, would
+  never have executed
+- **`raptor-hud.sh` contained a fully duplicated, truncated copy of itself** —
+  found via full-codebase audit: the entire file had been concatenated with
+  a second, incomplete copy of itself with no newline separator at the seam.
+  `bash -n` caught it as an unterminated heredoc. Truncated back to the
+  single complete copy; every other script was checked for the same
+  signature and confirmed clean
+- **`raptor-cpugovernor.service` and `raptor-ensure-services.service` regressed** —
+  both had reverted to pre-fix content (the `PartOf=` coupling bug and
+  redundant `gpu-detect.sh` call in cpugovernor; the missing powerprofile
+  check in ensure-services) because the corrected versions from earlier in
+  development had never actually been uploaded to the repo. Restored both
+  fixes as part of this pass
+- **Raptor OS never had its own application menu category** — every Raptor
+  app's `.desktop` file was tagged `Categories=X-RaptorOS;...`, but that tag
+  alone does nothing; KDE only creates a visible menu section for a category
+  once it's explicitly registered via a `.directory` file plus a menu XML
+  fragment. That registration was never built, so every app was falling
+  back into generic System/Settings categories. Added
+  `/usr/share/desktop-directories/raptor-os.directory` and
+  `/etc/xdg/menus/applications-merged/raptor-os.menu` (the standard
+  freedesktop.org mechanism for vendor menu additions), plus a dedicated
+  category icon matching the Cortex/GPU Profiler/Wallpaper visual family
+
+### Added
+
+- **Raptor Wallpaper v2.0 — full rewrite, now actually shipping** — the
+  previous version was never wired into `recipe.yml`'s build scripts, so it
+  had never actually shipped in any build regardless of its own bugs (a
+  missing `GdkPixbuf` import, an icon still on the pre-green-conversion blue
+  palette, a `.desktop` file pointing at a generic system icon instead of
+  its own). Full rewrite: gallery grid (click a thumbnail to apply, replacing
+  the old single browse-one-file flow), fit mode control (Fill/Fit/Stretch/Center/Tile
+  — the old version had no way to set this at all), four bundled
+  Raptor-branded SVG wallpapers (Grid, Radar, Circuit, Horizon, all in the
+  HUD green palette), a right-click "Set as Raptor Wallpaper" entry in
+  Dolphin for any image file (applies directly, no window opens — mirrors
+  behaviour Windows Explorer has had for years), and an icon/`.desktop` pair
+  matching the rest of the Raptor app family. Wired into `recipe.yml` for
+  the first time
+- **Raptor Cortex: Last Optimization timestamp** — new row in the System
+  Memory stats panel showing relative time ("Just now", "5 minutes ago", "2
+  hours ago", falling back to an absolute date after a week) since the last
+  completed optimization run. Tracks all three trigger paths — manual
+  "Optimize Memory Now", Pre-Game Boost, and Scheduled Cleanup — since all
+  three converge on the same completion handler. Persists across restarts,
+  updates live on the existing 2-second refresh timer. The relative-time
+  formatter was tested against 16 boundary cases (singular/plural at exact
+  1 min/hour/day transitions, the 7-day cutoff to absolute dates, and
+  clock-skew handling) before shipping
+- **One-time legacy theme migration** — a narrowly-scoped autostart script
+  that runs once per user, checks for a stale `name=RaptorOS` line in the
+  user's personal `~/.config/plasmarc` (left over from a build prior to the
+  panel theme removal above — a system rebuild alone can never reach into an
+  already-deployed user's home directory), removes it if found, and
+  restarts the panel using the proven safe detached-subshell method (never
+  `systemctl restart plasma-plasmashell.service`, which caused a reboot hang
+  in a much earlier version)
+- **Systemd sandboxing hardening across five `.service` files** — calibrated
+  per-service rather than blindly applied: `raptor-ensure-services.service`
+  and `raptor-powerprofile.service` are fully hardened (`ProtectSystem=strict`,
+  `NoNewPrivileges`, `ProtectKernelTunables`, and more — neither touches the
+  filesystem or needs privilege escalation). `raptor-cpugovernor.service` is
+  fully hardened except `ProtectKernelTunables`, deliberately omitted since
+  the service's entire job is writing to `/sys/devices/system/cpu/*/cpufreq/`.
+  `raptor-gpu-profile.service` only gets the hardening that doesn't conflict
+  with its real requirements (it calls `sudo -u` internally and writes to
+  arbitrary users' home directories, ruling out `NoNewPrivileges` and
+  `ProtectHome`). `raptor-firstboot.service` is deliberately left unhardened,
+  with the reasoning documented in the file itself — it needs `sudo`, and its
+  `/tmp` install logs are meant to stay readable for troubleshooting
+
 ## [v2.6.7] - 2026-07-12 (Power Saving Overhaul, RAM Reduction, Cortex Expansion)
 
 ### Fixed
