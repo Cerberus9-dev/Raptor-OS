@@ -236,458 +236,70 @@ cat << 'SVGEOF' > /usr/share/aurorae/themes/RaptorOS/RaptorOS.svg
 </svg>
 SVGEOF
 
-# ── GPU Profile Detection, Configuration & Profiler UI ───────────────────────
-mkdir -p /usr/bin /usr/lib/raptor /usr/lib/systemd/system \
-         /etc/environment.d /etc/sysctl.d /etc/polkit-1/rules.d \
-         /etc/sudoers.d /etc/raptor
+# ── Application menu category registration ────────────────────────────────────
+# Every Raptor app (Cortex, GPU Profiler, Wallpaper, Update Manager) is tagged
+# Categories=X-RaptorOS;... in its .desktop file, but that tag alone does
+# nothing — KDE (and any freedesktop.org menu-spec compliant launcher) only
+# creates a visible menu section for a category if it's been explicitly
+# registered via a .directory file (name/icon/comment for the section) plus
+# a menu XML fragment matching that category. Without this, X-RaptorOS was
+# simply ignored and every app fell back into its other listed categories
+# (System/Settings) instead of getting its own grouping.
+mkdir -p /usr/share/desktop-directories /etc/xdg/menus/applications-merged
 
-cat << 'ENVEOF' > /etc/environment.d/raptor-gpu.conf
-MESA_SHADER_CACHE_DISABLE=false
-WINE_LARGE_ADDRESS_AWARE=1
-PROTON_FORCE_LARGE_ADDRESS_AWARE=1
-STAGING_SHARED_MEMORY=1
-WINE_FULLSCREEN_FSR=1
-PROTON_NO_ESYNC=0
-PROTON_NO_FSYNC=0
-ENVEOF
-
-cat << 'SYSCTL' > /etc/sysctl.d/raptor-gaming.conf
-kernel.sched_autogroup_enabled=1
-kernel.sched_min_granularity_ns=500000
-kernel.sched_wakeup_granularity_ns=3000000
-kernel.sched_migration_cost_ns=250000
-fs.inotify.max_user_watches=524288
-fs.inotify.max_user_instances=256
-vm.swappiness=10
-vm.dirty_ratio=15
-vm.dirty_background_ratio=5
-kernel.split_lock_mitigate=0
-SYSCTL
-
-cat << 'DETECT' > /usr/lib/raptor/gpu-detect.sh
-#!/bin/bash
-set -euo pipefail
-LOG_TAG="raptor-gpu"
-log() { echo "$*"; logger -t "$LOG_TAG" "$*" 2>/dev/null || true; }
-
-GPU_VENDOR="unknown"; GPU_MODEL=""
-LSPCI_OUT=$(lspci 2>/dev/null | grep -iE "VGA|3D controller|Display controller" || true)
-
-if   echo "$LSPCI_OUT" | grep -qi "nvidia";            then GPU_VENDOR="nvidia"
-    GPU_MODEL=$(echo "$LSPCI_OUT" | grep -i nvidia   | head -1 | sed 's/.*: //')
-elif echo "$LSPCI_OUT" | grep -qiE "amd|radeon|ati";  then GPU_VENDOR="amd"
-    GPU_MODEL=$(echo "$LSPCI_OUT" | grep -iE "amd|radeon|ati" | head -1 | sed 's/.*: //')
-elif echo "$LSPCI_OUT" | grep -qi "intel";             then GPU_VENDOR="intel"
-    GPU_MODEL=$(echo "$LSPCI_OUT" | grep -i intel    | head -1 | sed 's/.*: //')
-fi
-log "Detected GPU vendor: $GPU_VENDOR  model: ${GPU_MODEL:-unknown}"
-
-IS_IGPU=false
-if echo "$LSPCI_OUT" | grep -qi "intel"; then
-    lsmod 2>/dev/null | grep -qiE "^nvidia |^amdgpu " || IS_IGPU=true
-elif [ "$GPU_VENDOR" = "amd" ]; then
-    VRAM=$(cat /sys/class/drm/card0/device/mem_info_vram_total 2>/dev/null || echo 0)
-    [ "$VRAM" -lt $((512 * 1024 * 1024)) ] && IS_IGPU=true || true
-fi
-
-IS_HYBRID=false
-DISPLAY_DEVS=$(echo "$LSPCI_OUT" | grep -c "" || true)
-[ "$DISPLAY_DEVS" -ge 2 ] && IS_HYBRID=true
-DRM_CARDS=$(ls /sys/class/drm/ 2>/dev/null | grep -c "^card[0-9]$" || echo 0)
-[ "$DRM_CARDS" -ge 2 ] && IS_HYBRID=true
-log "iGPU=$IS_IGPU  hybrid=$IS_HYBRID  display_devs=$DISPLAY_DEVS"
-
-PROFILE="auto"
-[ -f /etc/raptor-force-extreme ]     && PROFILE="extreme"
-[ -f /etc/raptor-force-performance ] && PROFILE="performance"
-[ -f /etc/raptor-force-powersave ]   && PROFILE="powersave"
-[ -f /etc/raptor-force-balanced ]    && PROFILE="balanced"
-log "Active profile: $PROFILE"
-
-COMMON_VARS="WINE_LARGE_ADDRESS_AWARE=1
-PROTON_FORCE_LARGE_ADDRESS_AWARE=1
-STAGING_SHARED_MEMORY=1
-WINE_FULLSCREEN_FSR=1
-PROTON_NO_ESYNC=0
-PROTON_NO_FSYNC=0"
-
-write_env() {
-    local COMMENT="$1"; shift
-    { echo "# ── Raptor OS: $COMMENT ──"; printf '%s\n' "$@"; } \
-        > /etc/environment.d/raptor-gpu.conf
-    # Re-apply any manual VRAM override if one has been set
-    if [ -f /etc/raptor/vram-override.conf ]; then
-        cat /etc/raptor/vram-override.conf >> /etc/environment.d/raptor-gpu.conf
-    fi
-}
-
-case "$PROFILE" in
-  extreme)
-    write_env "EXTREME PERFORMANCE profile" \
-        "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" \
-        "MESA_SHADER_CACHE_MAX_SIZE=4G" "__GL_SHADER_DISK_CACHE=1" \
-        "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1" "__GL_THREADED_OPTIMIZATIONS=1" \
-        "AMDGPU_HIGH_POWER=1" "PROTON_ENABLE_NVAPI=1" "DXVK_ASYNC=1" \
-        "DXVK_FRAME_RATE=0" "RADV_DEBUG=nocompute" \
-        "VKD3D_CONFIG=dxr11,dxr" "VKD3D_FEATURE_LEVEL=12_2" $COMMON_VARS
-    if [ "$GPU_VENDOR" = "amd" ]; then
-        for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do echo "high" > "$f" 2>/dev/null || true; done
-        for f in /sys/class/drm/card*/device/pp_power_profile_mode; do echo 1 > "$f" 2>/dev/null || true; done
-    fi
-    [ "$GPU_VENDOR" = "nvidia" ] && { nvidia-smi -pm 1 >/dev/null 2>&1 || true; nvidia-smi --auto-boost-default=0 >/dev/null 2>&1 || true; }
-    ;;
-  performance)
-    write_env "MAX PERFORMANCE profile" \
-        "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" \
-        "MESA_SHADER_CACHE_MAX_SIZE=2G" "__GL_SHADER_DISK_CACHE=1" \
-        "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1" "__GL_THREADED_OPTIMIZATIONS=1" \
-        "PROTON_ENABLE_NVAPI=1" "DXVK_ASYNC=1" \
-        "VKD3D_CONFIG=dxr11" "VKD3D_FEATURE_LEVEL=12_1" $COMMON_VARS
-    if [ "$GPU_VENDOR" = "amd" ]; then
-        for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do echo "high" > "$f" 2>/dev/null || true; done
-    fi
-    [ "$GPU_VENDOR" = "nvidia" ] && { nvidia-smi -pm 1 >/dev/null 2>&1 || true; }
-    ;;
-  balanced)
-    write_env "BALANCED profile" \
-        "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" \
-        "__GL_SHADER_DISK_CACHE=1" "PROTON_ENABLE_NVAPI=1" $COMMON_VARS
-    if [ "$GPU_VENDOR" = "amd" ]; then
-        for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do echo "auto" > "$f" 2>/dev/null || true; done
-    fi
-    ;;
-  powersave)
-    write_env "POWER SAVING profile" "MESA_SHADER_CACHE_DISABLE=true" $COMMON_VARS
-    if [ "$GPU_VENDOR" = "amd" ]; then
-        for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do echo "low" > "$f" 2>/dev/null || true; done
-    fi
-    [ "$GPU_VENDOR" = "nvidia" ] && { nvidia-smi -pm 0 >/dev/null 2>&1 || true; }
-    ;;
-  auto|*)
-    if [ "$GPU_VENDOR" = "nvidia" ]; then
-        write_env "NVIDIA auto profile" \
-            "__GL_SHADER_DISK_CACHE=1" "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1" \
-            "__GL_THREADED_OPTIMIZATIONS=1" "PROTON_ENABLE_NVAPI=1" \
-            "DXVK_ASYNC=1" "VKD3D_CONFIG=dxr11" $COMMON_VARS
-    elif [ "$GPU_VENDOR" = "amd" ] && [ "$IS_IGPU" = true ]; then
-        write_env "AMD iGPU auto profile" \
-            "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" $COMMON_VARS
-    elif [ "$GPU_VENDOR" = "amd" ]; then
-        write_env "AMD dGPU auto profile" \
-            "AMD_VULKAN_ICD=RADV" "MESA_SHADER_CACHE_DISABLE=false" \
-            "MESA_SHADER_CACHE_MAX_SIZE=2G" "__GL_SHADER_DISK_CACHE=1" \
-            "DXVK_ASYNC=1" $COMMON_VARS
-    elif [ "$GPU_VENDOR" = "intel" ]; then
-        write_env "Intel auto profile" \
-            "MESA_LOADER_DRIVER_OVERRIDE=iris" "LIBGL_DRI3_DISABLE=0" \
-            "vblank_mode=0" $COMMON_VARS
-    else
-        write_env "fallback profile" "MESA_SHADER_CACHE_DISABLE=false" $COMMON_VARS
-    fi
-    ;;
-esac
-
-set_cpu_governor() {
-    ls /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor &>/dev/null || { log "cpufreq not available"; return; }
-    for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo "$1" > "$f" 2>/dev/null || true; done
-    log "CPU governor → $1"
-}
-case "$PROFILE" in
-    extreme|performance) set_cpu_governor "performance" ;;
-    balanced)            set_cpu_governor "schedutil"   ;;
-    powersave)           set_cpu_governor "powersave"   ;;
-    auto|*)              set_cpu_governor "schedutil"   ;;
-esac
-
-ENVFILE=/etc/environment.d/raptor-gpu.conf
-if [ -f "$ENVFILE" ]; then
-    ENV_KEYS=()
-    while IFS= read -r line; do
-        [[ "$line" =~ ^# ]] && continue; [[ -z "$line" ]] && continue
-        ENV_KEYS+=("${line%%=*}")
-    done < "$ENVFILE"
-    if [ ${#ENV_KEYS[@]} -gt 0 ]; then
-        set -a; source "$ENVFILE"; set +a
-        while read -r UID_VAL _REST; do
-            [[ "$UID_VAL" =~ ^[0-9]+$ ]] || continue
-            RUNTIME_DIR="/run/user/$UID_VAL"; [ -d "$RUNTIME_DIR" ] || continue
-            DBUS="unix:path=$RUNTIME_DIR/bus"
-            sudo -u "#$UID_VAL" DBUS_SESSION_BUS_ADDRESS="$DBUS" \
-                systemctl --user import-environment "${ENV_KEYS[@]}" 2>/dev/null || true
-            USER_HOME=$(getent passwd "$UID_VAL" | cut -d: -f6)
-            mkdir -p "$USER_HOME/.config/environment.d" 2>/dev/null || true
-            cp "$ENVFILE" "$USER_HOME/.config/environment.d/raptor-gpu.conf" 2>/dev/null || true
-        done < <(loginctl list-users --no-legend 2>/dev/null || true)
-    fi
-fi
-
-sysctl --system >/dev/null 2>&1 || true
-log "GPU_PROFILE_READY  profile=$PROFILE  vendor=$GPU_VENDOR  igpu=$IS_IGPU  hybrid=$IS_HYBRID"
-DETECT
-chmod +x /usr/lib/raptor/gpu-detect.sh
-
-# ── Interactive GPU Profiler TUI ──────────────────────────────────────────────
-cat << 'UIEOF' > /usr/bin/raptor-gpu-profile-ui.sh
-#!/bin/bash
-DETECT_SCRIPT="/usr/lib/raptor/gpu-detect.sh"
-ENV_FILE="/etc/environment.d/raptor-gpu.conf"
-FORCE_DIR="/etc"
-
-R='\033[0m'; BLUE='\033[38;5;33m'; AMBER='\033[38;5;214m'
-GREEN='\033[38;5;42m'; DIM='\033[38;5;60m'; BOLD='\033[1m'; RED='\033[38;5;160m'
-
-current_profile() {
-    for p in extreme performance balanced powersave; do
-        [ -f "$FORCE_DIR/raptor-force-$p" ] && { echo "$p"; return; }
-    done; echo "auto"
-}
-read_gpu_model()  { lspci 2>/dev/null | grep -iE "VGA|3D|Display" | head -1 | sed 's/.*: //' | cut -c1-56 || echo "Unknown GPU"; }
-read_gpu_vendor() {
-    local l; l=$(lspci 2>/dev/null | grep -iE "VGA|3D|Display" | head -1 || true)
-    if   echo "$l" | grep -qi nvidia;        then echo "NVIDIA"
-    elif echo "$l" | grep -qiE "amd|radeon"; then echo "AMD"
-    elif echo "$l" | grep -qi intel;         then echo "Intel"
-    else echo "Unknown"; fi
-}
-read_vram() {
-    local v; v=$(cat /sys/class/drm/card0/device/mem_info_vram_total 2>/dev/null || true)
-    [ -n "$v" ] && [ "$v" -gt 0 ] 2>/dev/null && { echo "$(( v / 1024 / 1024 )) MiB"; return; }
-    v=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 || true)
-    [ -n "$v" ] && { echo "${v} MiB"; return; }; echo "N/A"
-}
-read_gpu_temp() {
-    local t; t=$(cat /sys/class/drm/card0/device/hwmon/hwmon*/temp1_input 2>/dev/null | head -1 || true)
-    [ -n "$t" ] && [ "$t" -gt 0 ] 2>/dev/null && { echo "$(( t / 1000 ))°C"; return; }
-    t=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader 2>/dev/null | head -1 || true)
-    [ -n "$t" ] && { echo "${t}°C"; return; }; echo "N/A"
-}
-read_gpu_util() {
-    local u; u=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -1 || true)
-    [ -n "$u" ] && { echo "${u}%"; return; }
-    u=$(cat /sys/class/drm/card0/device/gpu_busy_percent 2>/dev/null || true)
-    [ -n "$u" ] && { echo "${u}%"; return; }; echo "N/A"
-}
-read_vram_override() {
-    grep -E "^MESA_VRAM_LIMIT=|^__GL_VRAM_LIMIT=" /etc/raptor/vram-override.conf 2>/dev/null \
-        | head -1 | sed 's/.*=//' || echo "none"
-}
-
-draw_header() {
-    clear
-    echo -e "${BLUE}${BOLD}"
-    echo "  ██████╗  █████╗ ██████╗ ████████╗ ██████╗ ██████╗      ██████╗ ██████╗ ███████╗"
-    echo "  ██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔═══██╗██╔══██╗    ██╔═══██╗██╔══██╗██╔════╝"
-    echo "  ██████╔╝███████║██████╔╝   ██║   ██║   ██║██████╔╝    ██║   ██║███████║███████╗"
-    echo "  ██╔══██╗██╔══██║██╔═══╝    ██║   ██║   ██║██╔══██╗    ██║   ██║╚════██║╚════██║"
-    echo "  ██║  ██║██║  ██║██║        ██║   ╚██████╔╝██║  ██║    ╚██████╔╝███████║███████║"
-    echo "  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝        ╚═╝    ╚═════╝ ╚═╝  ╚═╝     ╚═════╝ ╚══════╝╚══════╝"
-    echo -e "${R}"
-    echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
-    echo -e "  ${AMBER}▸ GPU PROFILER  ${DIM}│${R}  F-22 RAPTOR HUD  ${DIM}│${R}  $(date '+%Y-%m-%d %H:%M:%S')"
-    echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
-    echo ""
-}
-
-draw_status() {
-    local PROF; PROF=$(current_profile)
-    echo -e "  ${BOLD}HARDWARE${R}"
-    echo -e "  ${DIM}┌─────────────────────────────────────────────────┐${R}"
-    printf   "  ${DIM}│${R}  Vendor   ${BLUE}%-38s${R}${DIM}│${R}\n" "$(read_gpu_vendor)"
-    printf   "  ${DIM}│${R}  Model    ${BLUE}%-38s${R}${DIM}│${R}\n" "$(read_gpu_model)"
-    printf   "  ${DIM}│${R}  VRAM     ${BLUE}%-38s${R}${DIM}│${R}\n" "$(read_vram)"
-    printf   "  ${DIM}│${R}  Override ${AMBER}%-38s${R}${DIM}│${R}\n" "$(read_vram_override)"
-    echo -e  "  ${DIM}└─────────────────────────────────────────────────┘${R}"
-    echo ""
-    echo -e "  ${BOLD}LIVE TELEMETRY${R}"
-    echo -e "  ${DIM}┌─────────────────────────────────────────────────┐${R}"
-    printf   "  ${DIM}│${R}  Temp     ${AMBER}%-38s${R}${DIM}│${R}\n" "$(read_gpu_temp)"
-    printf   "  ${DIM}│${R}  Usage    ${GREEN}%-38s${R}${DIM}│${R}\n" "$(read_gpu_util)"
-    printf   "  ${DIM}│${R}  Profile  "
-    case "$PROF" in
-        extreme)     printf "${RED}%-38s${R}"   "■ EXTREME"         ;;
-        performance) printf "${AMBER}%-38s${R}" "▲ PERFORMANCE"     ;;
-        balanced)    printf "${GREEN}%-38s${R}" "● BALANCED"        ;;
-        powersave)   printf "${BLUE}%-38s${R}"  "▼ POWER SAVE"      ;;
-        auto|*)      printf "${DIM}%-38s${R}"   "○ AUTO (detected)" ;;
-    esac
-    echo -e "${DIM}│${R}"
-    echo -e "  ${DIM}└─────────────────────────────────────────────────┘${R}"
-    echo ""
-}
-
-draw_menu() {
-    echo -e "  ${BOLD}SELECT PROFILE${R}"
-    echo -e "  ${DIM}──────────────────────────────────────────────────${R}"
-    echo -e "  ${RED}[1]${R}  ■  EXTREME     Max clocks, no power cap"
-    echo -e "  ${AMBER}[2]${R}  ▲  PERFORMANCE High clocks, GPU persistence on"
-    echo -e "  ${GREEN}[3]${R}  ●  BALANCED    Auto clocks, schedutil CPU"
-    echo -e "  ${BLUE}[4]${R}  ▼  POWER SAVE  Low clocks, minimal draw"
-    echo -e "  ${DIM}[5]${R}  ○  AUTO        Detect and apply best profile"
-    echo -e "  ${DIM}──────────────────────────────────────────────────${R}"
-    echo -e "  ${DIM}[v]${R}  Set VRAM override   ${DIM}[V]${R}  Clear VRAM override"
-    echo -e "  ${DIM}[r]${R}  Refresh   ${DIM}[l]${R}  Show env vars   ${DIM}[q]${R}  Quit"
-    echo ""
-    echo -ne "  ${BLUE}RAPTOR>${R}  "
-}
-
-apply_profile() {
-    local TARGET="$1"
-    echo -e "\n  ${AMBER}Applying profile: ${BOLD}${TARGET}${R}"
-    sudo rm -f \
-        "$FORCE_DIR/raptor-force-extreme" \
-        "$FORCE_DIR/raptor-force-performance" \
-        "$FORCE_DIR/raptor-force-balanced" \
-        "$FORCE_DIR/raptor-force-powersave" 2>/dev/null || true
-    if [ "$TARGET" != "auto" ]; then
-        sudo touch "$FORCE_DIR/raptor-force-$TARGET" 2>/dev/null || {
-            echo -e "  ${RED}[ERROR]${R} Could not write flag — check sudoers."; sleep 2; return
-        }
-    fi
-    echo -e "  ${DIM}Running gpu-detect.sh…${R}"
-    if sudo "$DETECT_SCRIPT"; then
-        echo -e "  ${GREEN}[OK]${R} Profile applied. Open apps need restart to pick up new env vars."
-    else
-        echo -e "  ${RED}[WARN]${R} gpu-detect.sh exited non-zero — check output above."
-    fi
-    sleep 2
-}
-
-set_vram_override() {
-    echo ""
-    echo -e "  ${BOLD}SET VRAM OVERRIDE${R}"
-    echo -e "  ${DIM}Enter VRAM limit in MiB (e.g. 4096 for 4 GB), or 0 to cancel:${R}"
-    echo -ne "  ${BLUE}MiB>${R}  "
-    read -r MB
-    [[ "$MB" =~ ^[0-9]+$ ]] || { echo -e "  ${RED}Invalid — numbers only.${R}"; sleep 2; return; }
-    [ "$MB" -eq 0 ] && { echo -e "  ${DIM}Cancelled.${R}"; sleep 1; return; }
-    sudo mkdir -p /etc/raptor
-    # Write both vars so it works on Mesa (AMD/Intel) and NVIDIA
-    printf '# Raptor VRAM override — written by raptor-gpu-profile-ui\nMESA_VRAM_LIMIT=%s\n__GL_VRAM_LIMIT=%s\n' \
-        "$MB" "$MB" | sudo tee /etc/raptor/vram-override.conf > /dev/null
-    echo -e "  ${GREEN}[OK]${R} VRAM override set to ${MB} MiB. Re-applying current profile…"
-    sudo "$DETECT_SCRIPT" 2>/dev/null || true
-    sleep 2
-}
-
-clear_vram_override() {
-    sudo rm -f /etc/raptor/vram-override.conf 2>/dev/null || true
-    echo -e "\n  ${GREEN}[OK]${R} VRAM override cleared. Re-applying current profile…"
-    sudo "$DETECT_SCRIPT" 2>/dev/null || true
-    sleep 2
-}
-
-show_env() {
-    echo ""
-    echo -e "  ${BOLD}CURRENT ENV  ${DIM}(${ENV_FILE})${R}"
-    echo -e "  ${DIM}──────────────────────────────────────────────────${R}"
-    if [ -f "$ENV_FILE" ]; then
-        grep -v '^#' "$ENV_FILE" | grep -v '^$' | while IFS= read -r line; do
-            printf "  ${BLUE}%-36s${R}${DIM}=${R}${AMBER}%s${R}\n" "${line%%=*}" "${line#*=}"
-        done
-    else
-        echo -e "  ${DIM}(env file not found)${R}"
-    fi
-    echo ""; echo -ne "  ${DIM}Press Enter to return…${R}  "; read -r
-}
-
-while true; do
-    draw_header; draw_status; draw_menu
-    read -r -t 30 CHOICE || { echo ""; continue; }
-    case "$CHOICE" in
-        1) apply_profile "extreme"     ;;
-        2) apply_profile "performance" ;;
-        3) apply_profile "balanced"    ;;
-        4) apply_profile "powersave"   ;;
-        5) apply_profile "auto"        ;;
-        v) set_vram_override           ;;
-        V) clear_vram_override         ;;
-        r|R) continue ;;
-        l|L) draw_header; show_env ;;
-        q|Q) echo -e "\n  ${DIM}Raptor GPU Profiler closed.${R}\n"; exit 0 ;;
-        *) echo -e "  ${DIM}Unknown — use 1-5, v, V, r, l, q${R}"; sleep 1 ;;
-    esac
-done
-UIEOF
-chmod +x /usr/bin/raptor-gpu-profile-ui.sh
-
-cat << 'LAUNCHEOF' > /usr/bin/raptor-gpu-profile-launcher
-#!/bin/bash
-TUI="/usr/bin/raptor-gpu-profile-ui.sh"
-TITLE="Raptor GPU Profiler"
-if   command -v konsole   &>/dev/null; then konsole --title "$TITLE" --profile RaptorOS --noclose -e bash "$TUI"
-elif command -v alacritty &>/dev/null; then alacritty --title "$TITLE" --config-file /dev/null -e bash "$TUI"
-elif command -v kitty     &>/dev/null; then kitty --title "$TITLE" bash "$TUI"
-elif command -v xterm     &>/dev/null; then xterm -title "$TITLE" -fa "JetBrains Mono" -fs 11 -bg "#0d0f12" -fg "#c8d6e8" -e bash "$TUI"
-else bash "$TUI"
-fi
-LAUNCHEOF
-chmod +x /usr/bin/raptor-gpu-profile-launcher
-
-cat << 'SVCEOF' > /usr/lib/systemd/system/raptor-gpu-profile.service
-[Unit]
-Description=Raptor OS — GPU Profile Detection & Configuration
-After=sysinit.target
-Before=display-manager.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/lib/raptor/gpu-detect.sh
-RemainAfterExit=yes
-SuccessExitStatus=0 1
-
-[Install]
-WantedBy=multi-user.target
-SVCEOF
-systemctl enable raptor-gpu-profile.service 2>/dev/null || true
-
-cat << 'POLKIT' > /etc/polkit-1/rules.d/49-raptor-gpu.rules
-polkit.addRule(function(action, subject) {
-    var allowedActions = ["org.freedesktop.policykit.exec"];
-    if (allowedActions.indexOf(action.id) >= 0 &&
-        action.lookup("program") &&
-        (action.lookup("program").indexOf("raptor-gpu-profile") !== -1 ||
-         action.lookup("program").indexOf("raptor-profile-switcher") !== -1) &&
-        subject.active && subject.local) {
-        return polkit.Result.YES;
-    }
-});
-POLKIT
-
-cat << 'SUDOERS' > /etc/sudoers.d/raptor-gpu
-ALL ALL=(root) NOPASSWD: /usr/lib/raptor/gpu-detect.sh
-ALL ALL=(root) NOPASSWD: /usr/bin/touch /etc/raptor-force-extreme
-ALL ALL=(root) NOPASSWD: /usr/bin/touch /etc/raptor-force-performance
-ALL ALL=(root) NOPASSWD: /usr/bin/touch /etc/raptor-force-balanced
-ALL ALL=(root) NOPASSWD: /usr/bin/touch /etc/raptor-force-powersave
-ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-extreme
-ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-performance
-ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-balanced
-ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor-force-powersave
-ALL ALL=(root) NOPASSWD: /usr/sbin/sysctl --system
-ALL ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/raptor
-ALL ALL=(root) NOPASSWD: /usr/bin/tee /etc/raptor/vram-override.conf
-ALL ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/raptor/vram-override.conf
-SUDOERS
-chmod 440 /etc/sudoers.d/raptor-gpu
-command -v visudo &>/dev/null && visudo -c -f /etc/sudoers.d/raptor-gpu \
-    && echo "[OK] sudoers valid" || echo "[WARN] check /etc/sudoers.d/raptor-gpu"
-
-mkdir -p /usr/share/applications
-cat << 'EOF' > /usr/share/applications/raptor-gpu-profile.desktop
+cat << 'EOF' > /usr/share/desktop-directories/raptor-os.directory
 [Desktop Entry]
-Type=Application
-Name=Raptor GPU Profiler
-GenericName=GPU Monitor
-Comment=Monitor and manage GPU performance profiles
-Exec=/usr/bin/raptor-gpu-profile-launcher
-TryExec=/usr/bin/raptor-gpu-profile-launcher
-Icon=preferences-system-performance
-Terminal=false
-NoDisplay=false
-Categories=X-RaptorOS;System;Monitor;
-Keywords=gpu;profile;performance;raptor;monitor;nvidia;amd;intel;
-StartupNotify=true
+Type=Directory
+Name=Raptor OS
+Comment=Raptor OS performance and system tools
+Icon=raptor-os-category
 EOF
+
+cat << 'EOF' > /etc/xdg/menus/applications-merged/raptor-os.menu
+<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
+ "http://www.freedesktop.org/standards/menu-spec/1.0/menu.dtd">
+<Menu>
+  <Name>Applications</Name>
+  <Menu>
+    <Name>Raptor OS</Name>
+    <Directory>raptor-os.directory</Directory>
+    <Include>
+      <Category>X-RaptorOS</Category>
+    </Include>
+  </Menu>
+</Menu>
+EOF
+
+# Category folder icon — same purple radial badge / dashed ring / cardinal
+# tick visual family as Cortex, GPU Profiler, and Wallpaper, but with a
+# generic "R" monogram rather than borrowing any one specific app's glyph,
+# since this icon represents the OS/brand grouping, not any single app.
+mkdir -p /usr/share/icons/hicolor/scalable/places
+cat << 'SVGEOF' > /usr/share/icons/hicolor/scalable/places/raptor-os-category.svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#4c1d95"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#bg)"/>
+  <circle cx="32" cy="32" r="24" fill="none" stroke="#a78bfa" stroke-width="1.5"
+          stroke-dasharray="12 4" stroke-linecap="round"/>
+  <line x1="32" y1="10" x2="32" y2="18" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="32" y1="46" x2="32" y2="54" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="10" y1="32" x2="18" y2="32" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="46" y1="32" x2="54" y2="32" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round"/>
+  <line x1="16.7" y1="16.7" x2="22.4" y2="22.4" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="41.6" y1="41.6" x2="47.3" y2="47.3" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="47.3" y1="16.7" x2="41.6" y2="22.4" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="22.4" y1="41.6" x2="16.7" y2="47.3" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- "R" monogram -->
+  <text x="32" y="42" font-family="sans-serif" font-weight="bold" font-size="26"
+        fill="white" text-anchor="middle">R</text>
+</svg>
+SVGEOF
+gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true
 
 # ── Baloo: filename-only indexing, 1-thread, low priority ─────────────────────
 mkdir -p /etc/xdg
