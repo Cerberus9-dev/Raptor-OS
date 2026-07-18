@@ -5,6 +5,7 @@
 - Custom KDE splash screen
 - Custom Raptor OS logo
 - Better seamless fully custom wallpaper system like windows
+- Custom Icons for all Raptor OS Apps
 
 ## [v2.6.7] - 2026-07-12 (Power Saving Overhaul, RAM Reduction, Cortex Expansion)
 
