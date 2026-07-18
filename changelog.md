@@ -4,7 +4,6 @@
 - Custom GRUB bootloader theme
 - Custom KDE splash screen
 - Custom Raptor OS logo
-- Better seamless fully custom wallpaper system like windows
 - Custom Icons for all Raptor OS Apps
 
 ## [v2.6.8] - 2026-07-18 (Taskbar Reverted to Stock KDE, Wallpaper App, Service Hardening)
