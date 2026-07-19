@@ -57,13 +57,23 @@ jobs:
 
       - name: Verify ISO
         run: |
-          ISO_PATH="${{ steps.build.outputs.iso_path }}"
-          if [ ! -f "$ISO_PATH" ]; then
-            echo "ERROR: ISO not found at $ISO_PATH"
+          # iso_path is the DIRECTORY the ISO was placed in, not the file
+          # itself — the previous version treated it as the full path, which
+          # evaluated to "." and failed every run. Combine with iso_name for
+          # the actual file, matching the action's own documented usage.
+          ISO_DIR="${{ steps.build.outputs.iso_path }}"
+          ISO_NAME="${{ steps.build.outputs.iso_name }}"
+          ISO_FILE="${ISO_DIR}/${ISO_NAME}"
+
+          if [ ! -f "$ISO_FILE" ]; then
+            echo "ERROR: ISO not found at $ISO_FILE"
+            echo "Directory contents of $ISO_DIR:"
+            ls -la "$ISO_DIR" 2>&1 || echo "(directory does not exist)"
             exit 1
           fi
-          echo "ISO: $ISO_PATH ($(du -sh "$ISO_PATH" | cut -f1))"
-          sha256sum "$ISO_PATH" | tee "${ISO_PATH}.sha256"
+
+          echo "ISO: $ISO_FILE ($(du -sh "$ISO_FILE" | cut -f1))"
+          sha256sum "$ISO_FILE" | tee "${ISO_FILE}.sha256"
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
@@ -72,5 +82,5 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: |
-            ${{ steps.build.outputs.iso_path }}
-            ${{ steps.build.outputs.iso_path }}.sha256
+            ${{ steps.build.outputs.iso_path }}/${{ steps.build.outputs.iso_name }}
+            ${{ steps.build.outputs.iso_path }}/${{ steps.build.outputs.iso_name }}.sha256
