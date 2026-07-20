@@ -22,7 +22,7 @@ A custom Bazzite-based Linux distribution built for gaming — automatic GPU opt
 
 ## Installation
 
-Download the latest ISO from the [Releases page](https://archive.org/details/raptor-os_202605), then flash it to a USB drive:
+Download the latest ISO from Internet Archive [Internet Archive](https://archive.org/details/raptor-os_202605), then flash it to a USB drive:
 
 - **[Rufus](https://rufus.ie/en/)** — select **DD image mode** + **GPT** partition scheme
 - **[Ventoy](https://www.ventoy.net)** — copy ISO to Ventoy USB, boot and select it
