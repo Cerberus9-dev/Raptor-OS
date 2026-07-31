@@ -76,17 +76,14 @@ _apply_nvme_power() {
 _apply_usb_autosuspend() {
     # 1 = enable (power save), 0 = disable (performance)
     #
-    # Skips any device (or interface) bound to btusb (Bluetooth adapters) or
-    # usbhid (USB keyboards/mice/HID). The previous version swept every USB
-    # device unconditionally, with no exclusions at all. Applying autosuspend
-    # to a Bluetooth adapter is a known way to leave it unresponsive after
-    # its next suspend/resume cycle — breaking Bluetooth mice, keyboards, and
-    # headsets connected through it until a manual USB reset or reboot. This
-    # affects laptops with internal Bluetooth chips too, since most of those
-    # enumerate as USB devices despite being physically built in. A boot-time
-    # udev rule (61-raptor-input.rules) also sets these to power/control=on
-    # persistently — this runtime exclusion stops per-mode switching from
-    # later overriding that protection.
+    # Skips any device (or interface) bound to btusb (Bluetooth adapters),
+    # usbhid (USB keyboards/mice/HID), or snd-usb-audio (USB audio devices —
+    # this covers wireless headset/gaming dongles, which almost always
+    # enumerate as a USB audio device regardless of the RF protocol they use
+    # internally). The previous version only excluded btusb/usbhid, missing
+    # this class entirely — applying autosuspend to a USB audio device mid-
+    # stream is a well-known cause of exactly the kind of crackling/dropout
+    # this was producing.
     local mode="$1"
     for dev_path in /sys/bus/usb/devices/*/; do
         dev_path="${dev_path%/}"
@@ -97,7 +94,7 @@ _apply_usb_autosuspend() {
             [ -L "$drv_link" ] || continue
             local drv_name
             drv_name=$(basename "$(readlink -f "$drv_link")" 2>/dev/null)
-            if [ "$drv_name" = "btusb" ] || [ "$drv_name" = "usbhid" ]; then
+            if [ "$drv_name" = "btusb" ] || [ "$drv_name" = "usbhid" ] || [ "$drv_name" = "snd-usb-audio" ]; then
                 skip=1
                 break
             fi
