@@ -829,6 +829,15 @@ ACTION=="add", SUBSYSTEM=="usb", DRIVERS=="btusb", \
     ATTR{power/control}="on", \
     ATTR{power/autosuspend}="-1"
 
+# Disable USB autosuspend for USB audio devices (snd-usb-audio driver).
+# Wireless headset/gaming dongles almost always enumerate as USB audio
+# regardless of the RF protocol used internally — this covers those in
+# addition to any wired USB DAC/audio interface. Autosuspend mid-stream on
+# a USB audio device is a well-known cause of crackling and audio dropouts.
+ACTION=="add", SUBSYSTEM=="usb", DRIVERS=="snd-usb-audio", \
+    ATTR{power/control}="on", \
+    ATTR{power/autosuspend}="-1"
+
 # uinput: allow user-space to create virtual devices (antimicro, xpadneo, etc.)
 KERNEL=="uinput", SUBSYSTEM=="misc", \
     OPTIONS+="static_node=uinput", TAG+="uaccess", TAG+="udev-acl", \
