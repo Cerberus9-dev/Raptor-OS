@@ -665,6 +665,8 @@ import threading
 import os
 import sys
 import time
+import json
+import uuid
 
 CORTEX_CONFIG  = "/etc/raptor/cortex-suspend.conf"
 HELPER         = "/usr/lib/raptor/cortex-helper"
@@ -883,19 +885,178 @@ def format_relative_time(timestamp):
     return time.strftime("%b %-d, %Y", time.localtime(timestamp))
 
 
+GAMES_CONFIG_FILE = os.path.expanduser("~/.config/raptor-cortex-games.json")
+
+
+def load_game_library():
+    try:
+        with open(GAMES_CONFIG_FILE) as f:
+            data = json.load(f)
+        return data.get("games", [])
+    except Exception:
+        return []
+
+
+def save_game_library(games: list):
+    try:
+        os.makedirs(os.path.dirname(GAMES_CONFIG_FILE), exist_ok=True)
+        with open(GAMES_CONFIG_FILE, "w") as f:
+            json.dump({"games": games}, f, indent=2)
+    except Exception as e:
+        print(f"[cortex] Could not save game library: {e}", file=sys.stderr)
+
+
+def _read_proc_stat(pid):
+    """Return (utime_ticks, stime_ticks) for a PID, or None if it's gone."""
+    try:
+        # comm field (index 1) is in parens and may itself contain spaces,
+        # so locate the closing ')' and split only what comes after it to
+        # stay correctly aligned regardless of the process name's contents.
+        with open(f"/proc/{pid}/stat") as f:
+            raw = f.read()
+        after = raw[raw.rfind(")") + 2:].split()
+        utime = int(after[11])
+        stime = int(after[12])
+        return (utime, stime)
+    except Exception:
+        return None
+
+
+def _read_proc_rss_mb(pid):
+    try:
+        with open(f"/proc/{pid}/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    kb = int(line.split()[1])
+                    return kb / 1024
+    except Exception:
+        pass
+    return 0.0
+
+
+def is_pid_alive(pid):
+    return os.path.exists(f"/proc/{pid}")
+
+
+def find_child_pids(parent_pid):
+    """Direct children only — good enough for a resource-usage estimate
+    without walking the full process tree."""
+    children = []
+    try:
+        for pid_str in os.listdir("/proc"):
+            if not pid_str.isdigit():
+                continue
+            try:
+                with open(f"/proc/{pid_str}/stat") as f:
+                    raw = f.read()
+                after = raw[raw.rfind(")") + 2:].split()
+                ppid = int(after[1])
+                if ppid == parent_pid:
+                    children.append(int(pid_str))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return children
+
+
+class ProcessMonitor:
+    """Tracks CPU% and RAM for a PID (plus its direct children) across ticks.
+    CPU% requires two time-separated samples — this holds the previous
+    sample so each tick only needs one /proc read per process."""
+
+    def __init__(self, pid):
+        self.pid = pid
+        self._prev_ticks = None
+        self._prev_time = None
+        self._clk_tck = os.sysconf("SC_CLK_TCK")
+
+    def alive(self):
+        return is_pid_alive(self.pid)
+
+    def sample(self):
+        """Returns (cpu_percent, rss_mb) summed across the tracked PID and
+        its direct children. Returns (0.0, 0.0) if the process is gone."""
+        if not self.alive():
+            return (0.0, 0.0)
+
+        pids = [self.pid] + find_child_pids(self.pid)
+        total_ticks = 0
+        total_rss = 0.0
+        now = time.time()
+
+        for pid in pids:
+            stat = _read_proc_stat(pid)
+            if stat is not None:
+                total_ticks += stat[0] + stat[1]
+            total_rss += _read_proc_rss_mb(pid)
+
+        cpu_pct = 0.0
+        if self._prev_ticks is not None and self._prev_time is not None:
+            elapsed = now - self._prev_time
+            if elapsed > 0:
+                delta_ticks = total_ticks - self._prev_ticks
+                cpu_pct = 100.0 * (delta_ticks / self._clk_tck) / elapsed
+
+        self._prev_ticks = total_ticks
+        self._prev_time = now
+        return (max(0.0, cpu_pct), total_rss)
+
+
+def find_new_process_after_launch(exclude_pids: set, hint_exclude_names=("steam", "steamwebhelper", "reaper"),
+                                   timeout_sec=20, poll_interval=1.5):
+    """Best-effort detection of a newly-launched game process, for launchers
+    (Steam) that don't hand back a direct PID. Polls /proc for new PIDs that
+    weren't running before launch and don't look like launcher infrastructure,
+    picking the one using the most RAM as the likely game process — actual
+    games are almost always the largest new process, launcher helpers are not.
+    This is inherently heuristic; it can fail to find the right process,
+    especially for games that spawn many worker processes."""
+    deadline = time.time() + timeout_sec
+    best_pid = None
+    best_rss = 0.0
+
+    while time.time() < deadline:
+        try:
+            current_pids = {int(p) for p in os.listdir("/proc") if p.isdigit()}
+        except Exception:
+            current_pids = set()
+        new_pids = current_pids - exclude_pids
+
+        for pid in new_pids:
+            try:
+                with open(f"/proc/{pid}/comm") as f:
+                    comm = f.read().strip().lower()
+            except Exception:
+                continue
+            if any(h in comm for h in hint_exclude_names):
+                continue
+            rss = _read_proc_rss_mb(pid)
+            if rss > best_rss:
+                best_rss = rss
+                best_pid = pid
+
+        # Require a minimum RSS before trusting the guess — avoids locking
+        # onto a tiny short-lived helper process that happens to appear first.
+        if best_pid is not None and best_rss > 150:
+            return best_pid
+
+        time.sleep(poll_interval)
+
+    return best_pid  # may be None, or a low-confidence guess
+
+
 def load_persistent_settings():
     """Load persistent Cortex settings from ~/.config/raptor-cortex-settings.json."""
     defaults = {
         "auto_apply_mode_on_boot": True,
-        "auto_performance_on_game": False,
-        "auto_restore_after_game": False,
+        "auto_restore_after_game": True,
         "sched_cleanup_enabled": False,
         "sched_cleanup_interval_min": 30,
         "last_optimize_timestamp": None,
     }
     settings_file = os.path.expanduser("~/.config/raptor-cortex-settings.json")
     try:
-        import json
         with open(settings_file) as f:
             loaded = json.load(f)
         defaults.update(loaded)
@@ -906,7 +1067,6 @@ def load_persistent_settings():
 
 def save_persistent_settings(settings: dict):
     """Save persistent Cortex settings."""
-    import json
     settings_file = os.path.expanduser("~/.config/raptor-cortex-settings.json")
     try:
         os.makedirs(os.path.dirname(settings_file), exist_ok=True)
@@ -1090,25 +1250,63 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
 
         self._refresh_mode_buttons()
 
-        opts_group = Adw.PreferencesGroup(title="Manual Optimization Options")
-        opts_group.set_description("Choose what to run when you click Optimize Memory Now.")
+        # ── Game Library ─────────────────────────────────────────────────────────
+        # The primary, front-and-centre feature: add a game once, then launch
+        # it directly from Cortex. Launching automatically applies the game's
+        # boost mode and tracks its CPU/RAM live while it runs — no manual
+        # mode-switching or optimize-clicking needed for games in the library.
+        game_group = Adw.PreferencesGroup(title="Game Library")
+        game_group.set_description(
+            "Launch a game from here to boost automatically and monitor it live.")
+        content.append(game_group)
+        self._game_group = game_group
+        self._game_rows = {}       # game id -> (Adw.ActionRow, monitor_labels dict)
+        self._active_monitor = None  # ProcessMonitor for the currently-running tracked game
+        self._active_game_id = None
+        self._monitor_timer_id = None
+        self._pre_launch_mode = None  # mode to restore to when the game exits
+
+        self._games = load_game_library()
+        self._rebuild_game_rows()
+
+        add_game_row = Adw.ActionRow(title="Add a Game")
+        add_game_row.set_subtitle("Point at a game executable, or launch by Steam App ID")
+        add_game_row.set_activatable(True)
+        add_icon = Gtk.Image.new_from_icon_name("list-add-symbolic")
+        add_icon.set_pixel_size(18)
+        add_game_row.add_prefix(add_icon)
+        add_game_row.connect("activated", self._on_add_game_clicked)
+        game_group.add(add_game_row)
+
+        # ── Simplified optimization ─────────────────────────────────────────────
+        # One preset button for the common case, with the previous 6 raw
+        # toggles moved into a collapsed "Advanced" row for anyone who wants
+        # fine control — most people just want "make it faster" without
+        # reading through 6 technical checkboxes first.
+        opts_group = Adw.PreferencesGroup(title="Optimize Memory")
+        opts_group.set_description(
+            "Quick Optimize covers the common case. Advanced options are available below if you want finer control.")
         content.append(opts_group)
+
+        advanced_expander = Adw.ExpanderRow(title="Advanced Options")
+        advanced_expander.set_subtitle("Choose exactly what runs — off by default, Quick Optimize below covers most cases")
+        opts_group.add(advanced_expander)
 
         self.opt_caches  = self._switch_row("Drop caches + reclaim app memory",
                                              "Frees kernel caches AND asks running apps (Firefox, Vesktop, Steam) to release cold pages",
                                              True)
-        opts_group.add(self.opt_caches)
+        advanced_expander.add_row(self.opt_caches)
         self.opt_compact = self._switch_row("Memory compaction",                 "Reduces fragmentation",                          True)
-        opts_group.add(self.opt_compact)
+        advanced_expander.add_row(self.opt_compact)
         self.opt_zram    = self._switch_row("zram recompress",                   "Re-squeeze compressed swap pages",               True)
-        opts_group.add(self.opt_zram)
+        advanced_expander.add_row(self.opt_zram)
         self.opt_swap    = self._switch_row("Swap pressure flush",               "Push cold pages to ZRAM swap (aggressive — use before gaming)",
                                              False)
-        opts_group.add(self.opt_swap)
+        advanced_expander.add_row(self.opt_swap)
         self.opt_oom     = self._switch_row("Adjust OOM scores",                 "Protect KDE shell; make browsers killable",      True)
-        opts_group.add(self.opt_oom)
+        advanced_expander.add_row(self.opt_oom)
         self.opt_deep    = self._switch_row("Deep Clean (slow)",                 "Flush hugepages + NUMA + slab caches + reclaim 3 GiB", False)
-        opts_group.add(self.opt_deep)
+        advanced_expander.add_row(self.opt_deep)
 
         cortex_group = Adw.PreferencesGroup(title="Raptor Cortex — Game Mode")
         cortex_group.set_description(
@@ -1194,19 +1392,11 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         self.boot_mode_row.connect("notify::active", self._on_setting_toggle, "auto_apply_mode_on_boot")
         persist_group.add(self.boot_mode_row)
 
-        self.auto_perf_row = Adw.SwitchRow()
-        self.auto_perf_row.set_title("Auto-switch to Performance when game starts")
-        self.auto_perf_row.set_subtitle(
-            "Watches gamemode — when a game launches Cortex switches to Performance automatically")
-        self.auto_perf_row.set_active(self._settings.get("auto_performance_on_game", False))
-        self.auto_perf_row.connect("notify::active", self._on_setting_toggle, "auto_performance_on_game")
-        persist_group.add(self.auto_perf_row)
-
         self.auto_restore_row = Adw.SwitchRow()
-        self.auto_restore_row.set_title("Restore Balanced mode after game exits")
+        self.auto_restore_row.set_title("Auto-restore mode when a game closes")
         self.auto_restore_row.set_subtitle(
-            "Automatically switches back to Balanced when the game process ends")
-        self.auto_restore_row.set_active(self._settings.get("auto_restore_after_game", False))
+            "Applies to games launched from your Game Library — switches back to your previous mode when the game exits")
+        self.auto_restore_row.set_active(self._settings.get("auto_restore_after_game", True))
         self.auto_restore_row.connect("notify::active", self._on_setting_toggle, "auto_restore_after_game")
         persist_group.add(self.auto_restore_row)
 
@@ -1246,7 +1436,7 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         btn_box.set_halign(Gtk.Align.CENTER)
         content.append(btn_box)
 
-        self.run_btn = Gtk.Button(label="Optimize Memory Now")
+        self.run_btn = Gtk.Button(label="Quick Optimize")
         self.run_btn.add_css_class("suggested-action")
         self.run_btn.add_css_class("pill")
         self.run_btn.connect("clicked", self.on_optimize)
@@ -1399,6 +1589,225 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
         )
         # Re-schedule (return True keeps the timer alive)
         return True
+
+    # ── Game Library ──────────────────────────────────────────────────────────
+
+    def _rebuild_game_rows(self):
+        """Clear and redraw every row in the Game Library group from
+        self._games. Called after add/edit/remove."""
+        for game_id, (row, _labels) in list(self._game_rows.items()):
+            self._game_group.remove(row)
+        self._game_rows.clear()
+
+        for game in self._games:
+            row = self._build_game_row(game)
+            # Insert before the "Add a Game" row, which is always last —
+            # PreferencesGroup doesn't expose insert-at-index, so remove and
+            # re-add "Add a Game" isn't needed since new rows always append
+            # above it as long as we build games first at startup. For rows
+            # added after the fact, the group naturally appends to the end;
+            # this is a minor cosmetic ordering quirk, not a functional one.
+            self._game_group.add(row)
+            self._game_rows[game["id"]] = (row, {})
+
+    def _build_game_row(self, game: dict) -> Adw.ActionRow:
+        row = Adw.ActionRow(title=game["name"])
+        row.set_subtitle("Not running")
+
+        icon = Gtk.Image.new_from_icon_name("input-gaming-symbolic")
+        icon.set_pixel_size(20)
+        row.add_prefix(icon)
+
+        play_btn = Gtk.Button()
+        play_btn.set_child(Gtk.Image.new_from_icon_name("media-playback-start-symbolic"))
+        play_btn.add_css_class("flat")
+        play_btn.set_valign(Gtk.Align.CENTER)
+        play_btn.set_tooltip_text(f"Launch {game['name']}")
+        play_btn.connect("clicked", lambda _b, g=game: self._on_play_button_clicked(g))
+        row.add_suffix(play_btn)
+        row._raptor_play_btn = play_btn  # stash for later state updates
+
+        menu_btn = Gtk.MenuButton()
+        menu_btn.set_icon_name("view-more-symbolic")
+        menu_btn.add_css_class("flat")
+        menu_btn.set_valign(Gtk.Align.CENTER)
+        popover = Gtk.Popover()
+        menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        menu_box.set_margin_top(6)
+        menu_box.set_margin_bottom(6)
+        menu_box.set_margin_start(6)
+        menu_box.set_margin_end(6)
+        edit_btn = Gtk.Button(label="Edit")
+        edit_btn.add_css_class("flat")
+        edit_btn.connect("clicked", lambda _b, g=game, p=popover: (p.popdown(), self._on_edit_game_clicked(g)))
+        remove_btn = Gtk.Button(label="Remove")
+        remove_btn.add_css_class("flat")
+        remove_btn.add_css_class("destructive-action")
+        remove_btn.connect("clicked", lambda _b, g=game, p=popover: (p.popdown(), self._on_remove_game(g)))
+        menu_box.append(edit_btn)
+        menu_box.append(remove_btn)
+        popover.set_child(menu_box)
+        menu_btn.set_popover(popover)
+        row.add_suffix(menu_btn)
+
+        return row
+
+    def _on_play_button_clicked(self, game):
+        if self._active_game_id == game["id"]:
+            self._on_stop_monitoring_only(game)
+        else:
+            self._on_launch_game(game)
+
+    def _on_add_game_clicked(self, _row):
+        dialog = GameEditDialog(self, game=None, on_save=self._on_game_saved)
+        dialog.present()
+
+    def _on_edit_game_clicked(self, game):
+        dialog = GameEditDialog(self, game=game, on_save=self._on_game_saved)
+        dialog.present()
+
+    def _on_game_saved(self, game: dict):
+        existing_ids = {g["id"] for g in self._games}
+        if game["id"] in existing_ids:
+            self._games = [game if g["id"] == game["id"] else g for g in self._games]
+        else:
+            self._games.append(game)
+        save_game_library(self._games)
+        self._rebuild_game_rows()
+
+    def _on_remove_game(self, game):
+        self._games = [g for g in self._games if g["id"] != game["id"]]
+        save_game_library(self._games)
+        self._rebuild_game_rows()
+
+    def _on_launch_game(self, game: dict):
+        if self._active_monitor is not None:
+            toast = Adw.Toast.new("A game is already being monitored — stop it first")
+            toast.set_timeout(3)
+            self._toast_overlay.add_toast(toast)
+            return
+
+        # Remember the current mode so we can restore it on exit
+        self._pre_launch_mode = self._current_mode
+
+        # Apply the game's configured boost mode before launching
+        boost_mode = game.get("boost_mode", "performance")
+        self._on_mode_switch(None, boost_mode)
+
+        row, _ = self._game_rows.get(game["id"], (None, None))
+        if row is not None:
+            row.set_subtitle("Starting…")
+
+        threading.Thread(target=self._launch_and_track, args=(game,), daemon=True).start()
+
+    def _launch_and_track(self, game: dict):
+        launch_type = game.get("launch_type", "direct")
+        pid = None
+
+        try:
+            if launch_type == "steam":
+                appid = game.get("target", "")
+                before_pids = {int(p) for p in os.listdir("/proc") if p.isdigit()}
+                subprocess.Popen(
+                    ["steam", "-applaunch", appid],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                GLib.idle_add(self._set_game_subtitle, game["id"], "Detecting game process…")
+                pid = find_new_process_after_launch(before_pids)
+            else:
+                exec_path = game.get("target", "")
+                proc = subprocess.Popen(
+                    [exec_path],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                pid = proc.pid
+        except Exception as e:
+            GLib.idle_add(self._on_launch_failed, game, str(e))
+            return
+
+        if pid is None:
+            GLib.idle_add(self._on_launch_failed, game,
+                           "Couldn't detect the game process — boost is still active, but live monitoring isn't available for this session.")
+            return
+
+        GLib.idle_add(self._start_monitoring, game, pid)
+
+    def _on_launch_failed(self, game, err_msg):
+        row, _ = self._game_rows.get(game["id"], (None, None))
+        if row is not None:
+            row.set_subtitle("Not running")
+        toast = Adw.Toast.new(f"{game['name']}: {err_msg}")
+        toast.set_timeout(5)
+        self._toast_overlay.add_toast(toast)
+
+    def _start_monitoring(self, game, pid):
+        self._active_monitor = ProcessMonitor(pid)
+        self._active_game_id = game["id"]
+
+        row, _ = self._game_rows.get(game["id"], (None, None))
+        if row is not None:
+            row.set_subtitle("Running — 0:00, 0% CPU, 0 MB")
+            row._raptor_play_btn.set_child(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic"))
+            row._raptor_play_btn.set_tooltip_text(f"Stop monitoring {game['name']}")
+
+        self._monitor_start_time = time.time()
+        self._monitor_timer_id = GLib.timeout_add_seconds(2, self._game_monitor_tick, game)
+
+        toast = Adw.Toast.new(f"{game['name']} launched — boost active, now monitoring")
+        toast.set_timeout(3)
+        self._toast_overlay.add_toast(toast)
+
+    def _set_game_subtitle(self, game_id, text):
+        row, _ = self._game_rows.get(game_id, (None, None))
+        if row is not None:
+            row.set_subtitle(text)
+
+    def _game_monitor_tick(self, game):
+        if self._active_monitor is None:
+            return False
+
+        if not self._active_monitor.alive():
+            self._on_game_exited(game)
+            return False
+
+        cpu, rss = self._active_monitor.sample()
+        elapsed = int(time.time() - self._monitor_start_time)
+        mins, secs = divmod(elapsed, 60)
+
+        row, _ = self._game_rows.get(game["id"], (None, None))
+        if row is not None:
+            row.set_subtitle(f"Running — {mins}:{secs:02d}, {cpu:.0f}% CPU, {rss:.0f} MB")
+
+        return True  # keep the timer running
+
+    def _on_game_exited(self, game):
+        row, _ = self._game_rows.get(game["id"], (None, None))
+        if row is not None:
+            row.set_subtitle("Not running")
+            row._raptor_play_btn.set_child(Gtk.Image.new_from_icon_name("media-playback-start-symbolic"))
+            row._raptor_play_btn.set_tooltip_text(f"Launch {game['name']}")
+
+        self._active_monitor = None
+        self._active_game_id = None
+
+        if self._settings.get("auto_restore_after_game", True) and self._pre_launch_mode:
+            self._on_mode_switch(None, self._pre_launch_mode)
+            toast_msg = f"{game['name']} closed — restored {self._pre_launch_mode.title()} mode"
+        else:
+            toast_msg = f"{game['name']} closed"
+
+        toast = Adw.Toast.new(toast_msg)
+        toast.set_timeout(3)
+        self._toast_overlay.add_toast(toast)
+        self._pre_launch_mode = None
+
+    def _on_stop_monitoring_only(self, game):
+        """Stop watching a game without killing it — used when the user
+        clicks the stop icon rather than actually closing the game."""
+        if self._monitor_timer_id is not None:
+            GLib.source_remove(self._monitor_timer_id)
+            self._monitor_timer_id = None
+        self._on_game_exited(game)
 
     def _update_mode_banner(self):
         label, desc, _, _ = PERFORMANCE_MODES[self._current_mode]
@@ -1619,6 +2028,139 @@ class RaptorCortexWindow(Adw.ApplicationWindow):
             target=lambda: subprocess.run(["sudo", HELPER, "restore-background"], capture_output=True),
             daemon=True,
         ).start()
+
+
+class GameEditDialog(Adw.Window):
+    """Add or edit a single Game Library entry."""
+
+    BOOST_MODES = [("performance", "Performance"), ("balanced", "Balanced"), ("power_saving", "Power Saving")]
+
+    def __init__(self, parent, game: dict | None, on_save):
+        super().__init__(transient_for=parent, modal=True)
+        self._on_save = on_save
+        self._editing = game is not None
+        self._game = dict(game) if game else {
+            "id": None, "name": "", "launch_type": "direct",
+            "target": "", "boost_mode": "performance",
+        }
+        self.set_title("Edit Game" if self._editing else "Add a Game")
+        self.set_default_size(420, 340)
+        self._build_ui()
+
+    def _build_ui(self):
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.set_content(root)
+
+        hb = Adw.HeaderBar()
+        root.append(hb)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(20)
+        content.set_margin_end(20)
+        root.append(content)
+
+        group = Adw.PreferencesGroup()
+        content.append(group)
+
+        self.name_row = Adw.EntryRow(title="Game name")
+        self.name_row.set_text(self._game.get("name", ""))
+        group.add(self.name_row)
+
+        self.launch_type_row = Adw.ComboRow(title="Launch method")
+        launch_model = Gtk.StringList.new(["Direct executable", "Steam App ID"])
+        self.launch_type_row.set_model(launch_model)
+        self.launch_type_row.set_selected(0 if self._game.get("launch_type", "direct") == "direct" else 1)
+        self.launch_type_row.connect("notify::selected", self._on_launch_type_changed)
+        group.add(self.launch_type_row)
+
+        self.target_row = Adw.EntryRow(title="Executable path")
+        self.target_row.set_text(self._game.get("target", ""))
+        group.add(self.target_row)
+
+        browse_btn = Gtk.Button()
+        browse_btn.set_child(Gtk.Image.new_from_icon_name("folder-open-symbolic"))
+        browse_btn.add_css_class("flat")
+        browse_btn.set_valign(Gtk.Align.CENTER)
+        browse_btn.connect("clicked", self._on_browse_clicked)
+        self.target_row.add_suffix(browse_btn)
+        self._browse_btn = browse_btn
+
+        self.boost_row = Adw.ComboRow(title="Boost mode on launch")
+        self.boost_row.set_subtitle("Mode Cortex switches to when you launch this game")
+        boost_model = Gtk.StringList.new([label for _key, label in self.BOOST_MODES])
+        self.boost_row.set_model(boost_model)
+        current_boost = self._game.get("boost_mode", "performance")
+        idx = next((i for i, (k, _l) in enumerate(self.BOOST_MODES) if k == current_boost), 0)
+        self.boost_row.set_selected(idx)
+        group.add(self.boost_row)
+
+        self._update_target_row_label()
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_box.set_margin_top(8)
+        content.append(btn_box)
+
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.connect("clicked", lambda _b: self.close())
+        btn_box.append(cancel_btn)
+
+        save_btn = Gtk.Button(label="Save")
+        save_btn.add_css_class("suggested-action")
+        save_btn.connect("clicked", self._on_save_clicked)
+        btn_box.append(save_btn)
+
+    def _update_target_row_label(self):
+        is_direct = self.launch_type_row.get_selected() == 0
+        self.target_row.set_title("Executable path" if is_direct else "Steam App ID")
+        self._browse_btn.set_visible(is_direct)
+
+    def _on_launch_type_changed(self, _row, _param):
+        self._update_target_row_label()
+
+    def _on_browse_clicked(self, _btn):
+        dialog = Gtk.FileChooserDialog(
+            title="Select Game Executable",
+            transient_for=self,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        dialog.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Select", Gtk.ResponseType.OK)
+        dialog.connect("response", self._on_file_chosen)
+        dialog.present()
+
+    def _on_file_chosen(self, dialog, response):
+        if response == Gtk.ResponseType.OK:
+            file = dialog.get_file()
+            if file:
+                self.target_row.set_text(file.get_path())
+        dialog.close()
+
+    def _on_save_clicked(self, _btn):
+        name = self.name_row.get_text().strip()
+        target = self.target_row.get_text().strip()
+        if not name or not target:
+            toast = Adw.Toast.new("Name and target are both required")
+            toast.set_timeout(3)
+            # Best effort — this dialog has no toast overlay of its own,
+            # so surface it as a simple inline title change instead.
+            self.set_title("Name and target are required")
+            return
+
+        is_direct = self.launch_type_row.get_selected() == 0
+        boost_key, _label = self.BOOST_MODES[self.boost_row.get_selected()]
+
+        game_id = self._game.get("id") or str(uuid.uuid4())
+        result = {
+            "id": game_id,
+            "name": name,
+            "launch_type": "direct" if is_direct else "steam",
+            "target": target,
+            "boost_mode": boost_key,
+        }
+        self._on_save(result)
+        self.close()
 
 
 if __name__ == "__main__":
