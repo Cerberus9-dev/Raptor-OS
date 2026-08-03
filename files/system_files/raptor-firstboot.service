@@ -6,15 +6,17 @@ After=plasma-plasmashell.service
 # (it's the /run/user/<uid> directory). This replaces the broken
 # ConditionEnvironment=DISPLAY which was never set on Wayland.
 ConditionEnvironment=XDG_RUNTIME_DIR
-# Run until BOTH stamps exist; skip if already complete
+# Run until ALL THREE stamps exist; skip if already complete
 ConditionPathExists=|!%h/.local/share/raptor/browser-choice-done
+ConditionPathExists=|!%h/.local/share/raptor/chat-choice-done
 ConditionPathExists=|!%h/.local/share/raptor/app-choice-done
 
 [Service]
 Type=oneshot
 # Each script checks its own stamp and exits 0 immediately if already done,
-# so it's always safe to call both in sequence.
+# so it's always safe to call all three in sequence.
 ExecStart=/usr/bin/raptor-browser-choice.sh
+ExecStart=/usr/bin/raptor-chat-choice.sh
 ExecStart=/usr/bin/raptor-app-choice.sh
 RemainAfterExit=yes
 StandardOutput=journal
@@ -25,14 +27,17 @@ SuccessExitStatus=0 1
 # ── Hardening: deliberately NOT applied here ────────────────────────────────
 # Unlike the other Raptor services, this one is not a good hardening
 # candidate — the scripts it runs need broad access that most sandboxing
-# directives would break outright:
+# directives would break outright. All three ExecStart lines run under the
+# same service unit, so hardening has to accommodate the most permissive of
+# them (raptor-app-choice.sh's sudo requirement) even though the other two
+# scripts alone wouldn't need it:
 #
 #   NoNewPrivileges  — NOT SET: raptor-app-choice.sh calls `sudo rpm-ostree
 #     install` for a handful of optional packages (gcc/make/cmake, gh,
 #     btop, variety). sudo is a setuid binary; NoNewPrivileges blocks the
 #     exact privilege transition sudo depends on.
 #
-#   PrivateTmp        — NOT SET: both scripts write install logs to
+#   PrivateTmp        — NOT SET: all three scripts write install logs to
 #     /tmp/raptor-*-install.log specifically so the user can check them
 #     after a failed install. PrivateTmp would give the service its own
 #     isolated /tmp, making those logs invisible from a normal terminal.
