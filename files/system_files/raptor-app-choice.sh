@@ -112,7 +112,9 @@ fi
 # ── App catalogue ─────────────────────────────────────────────────────────────
 # Format: "PRESELECT|DISPLAY_NAME|FLATPAK_ID|DESCRIPTION"
 # Only list apps NOT already installed by the default Flatpak list in recipe.yml.
-# Mandatory defaults (Vesktop, Heroic, ProtonUp, VSCodium, VLC, Flatseal, MissionCenter)
+# Mandatory defaults (Heroic, ProtonUp, Firefox, Nautilus) — bare basics only.
+# Vesktop moved to raptor-chat-choice.sh; VSCodium, VLC, Flatseal, Mission
+# Center, BleachBit, Filelight, and qbittorrent all moved here (optional).
 # are never shown here — they are always installed.
 APP_CATALOGUE=(
     # ── Communication ──────────────────────────────────────────────────────
@@ -142,6 +144,8 @@ APP_CATALOGUE=(
     "FALSE|Boatswain|com.feaneron.Boatswain|Elgato Stream Deck controller"
     "FALSE|HandBrake|fr.handbrake.ghb|Video transcoder — convert, compress, and re-encode video files"
     # ── Development ────────────────────────────────────────────────────────
+    "FALSE|VSCodium|com.vscodium.codium|Open-source VS Code build, no telemetry — previously a default install"
+    "FALSE|Developer Runtime|None|Git + Node.js + pip — for running dev tools and scripts (install via: sudo rpm-ostree install git nodejs python3-pip)"
     "FALSE|Godot Engine|org.godotengine.Godot|Free, open-source game engine"
     "FALSE|GitHub Desktop|io.github.shiftey.Desktop|Git GUI for GitHub repos"
     "FALSE|Pods|com.github.marhkb.Pods|Podman/Docker container GUI"
@@ -151,6 +155,7 @@ APP_CATALOGUE=(
     "FALSE|Protontricks|com.github.Matoking.protontricks|Configure Steam/Proton games — install DirectX, runtimes, VC++, etc."
     "FALSE|Spotify|com.spotify.Client|Music and podcast streaming"
     "FALSE|Plex|tv.plex.PlexDesktop|Media server desktop client"
+    "FALSE|VLC|org.videolan.VLC|Plays virtually any media format/codec — previously a default install, mpv is the built-in lightweight player"
     # ── Audio ──────────────────────────────────────────────────────────────
     "FALSE|EasyEffects|com.github.wwmm.easyeffects|Headset EQ, bass boost, noise reduction via PipeWire"
     # ── System tools ───────────────────────────────────────────────────────
@@ -158,6 +163,10 @@ APP_CATALOGUE=(
     "FALSE|Impression|io.gitlab.adhami3310.Impression|Flash OS images to USB drives"
     "FALSE|CoreCtrl|org.corectrl.CoreCtrl|AMD GPU and CPU control — overclocking, fan curves, power limits"
     "FALSE|GNOME Backups|org.gnome.DejaDup|Automatic encrypted backups of your home folder"
+    "FALSE|Mission Center|io.missioncenter.MissionCenter|GPU/CPU/RAM monitor — Cortex now covers live stats, but this gives a fuller system view"
+    "FALSE|Flatseal|com.github.tchx84.Flatseal|Flatpak permission manager — previously a default install"
+    "FALSE|BleachBit|None|Deep system/cache cleanup tool (install via: sudo rpm-ostree install bleachbit)"
+    "FALSE|Filelight|None|Visual disk usage analyser (install via: sudo rpm-ostree install filelight)"
     # ── Communication ──────────────────────────────────────────────────────
     "FALSE|Thunderbird|org.mozilla.Thunderbird|Email and calendar client"
     # ── Terminal & Developer tools ─────────────────────────────────────────
@@ -172,6 +181,7 @@ APP_CATALOGUE=(
     "FALSE|Kooha|io.github.seadve.Kooha|Simple screen recorder (no OBS needed for basic capture)"
     "FALSE|Clapper|com.github.rafostar.Clapper|Lightweight video player (GPU-accelerated)"
     "FALSE|Amberol|io.bassi.Amberol|Simple music player"
+    "FALSE|qBittorrent|None|Torrent client — previously a default install (install via: sudo rpm-ostree install qbittorrent)"
     # ── Utilities ──────────────────────────────────────────────────────────
     "FALSE|Metadata Cleaner|fr.romainvigier.MetadataCleaner|Remove metadata from files before sharing"
     "FALSE|Flatsweep|io.github.gmodena.flatsweep|Clean up leftover Flatpak app data"
@@ -267,6 +277,8 @@ for flatpak_id in "${TO_INSTALL[@]}"; do
                 APP_LOWER="ninja-build meson";;
             "GitHub CLI (gh)")
                 APP_LOWER="gh";;
+            "Developer Runtime")
+                APP_LOWER="git nodejs python3-pip";;
             *)
                 APP_LOWER="${app_name,,}";;
         esac
