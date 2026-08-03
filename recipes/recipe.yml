@@ -22,6 +22,12 @@ modules:
         destination: /usr/bin/raptor-app-choice.sh
       - source: ../files/system_files/raptor-browser-choice.sh
         destination: /usr/bin/raptor-browser-choice.sh
+      - source: ../files/system_files/raptor-chat-choice.sh
+        destination: /usr/bin/raptor-chat-choice.sh
+      # Default file manager — GNOME Files (Nautilus). System-wide XDG
+      # default association; Dolphin remains installed from the base image.
+      - source: ../files/system_files/raptor-mimeapps.list
+        destination: /usr/share/applications/mimeapps.list
       # ── Audio: PipeWire low-latency gaming config ──────────────────────────
       - source: ../files/system_files/99-raptor-pipewire-lowlatency.conf
         destination: /etc/pipewire/pipewire.conf.d/99-raptor-lowlatency.conf
@@ -46,11 +52,11 @@ modules:
       # Browser
       # firefox removed temporarily from RPM install due to mozilla-openh264 depsolve
 
-      # System utilities
+      # System utilities — kept minimal. BleachBit and Filelight moved to the
+      # optional picker; not everyone wants a cleanup tool or disk visualiser
+      # taking up space by default.
       - fastfetch
       - htop
-      - bleachbit
-      - filelight
       - p7zip
       - curl
       - wget
@@ -71,13 +77,12 @@ modules:
       - mpv
 
       # Creative & Office apps (GIMP, Inkscape, Krita, Darktable, LibreOffice)
-      # moved to the firstboot optional app picker — these RPMs pull in
+      # all moved to the firstboot optional app picker — these RPMs pull in
       # large dependency trees (Qt/GTK image processing libs, color
       # management, spell-check dictionaries) that add significant size to
-      # every install regardless of whether the user ever opens them.
-
-      # Creative (lightweight compared to full GIMP/Inkscape/Darktable dependency trees)
-      - krita
+      # every install regardless of whether the user ever opens them. Krita
+      # was previously a default; moved to optional for a truly bare-basics
+      # default install.
 
       # CPU interrupt distribution — spreads hardware IRQs across all cores.
       # Prevents a single core from handling all NIC/USB/audio interrupts while
@@ -92,25 +97,24 @@ modules:
       - winetricks
       - protontricks
 
-      # Development — runtimes
-      - git
-      - nodejs
+      # Python + GObject bindings — REQUIRED runtime dependency of Raptor's
+      # own GTK4/Adwaita apps (Cortex, GPU Profiler, Wallpaper all use
+      # `from gi.repository import Gtk, Adw`). Not a "developer tool" — this
+      # is core infrastructure and must stay regardless of any bare-basics
+      # trimming. git, nodejs, and python3-pip are NOT required by anything
+      # Raptor ships and have moved to the optional picker as a bundled
+      # "Developer Runtime" entry.
       - python3
-      - python3-pip
       - python3-gobject
-
-
 
       # Development — build tools moved to optional firstboot picker.
       # Most gaming users never compile code; gcc alone adds ~80 MB.
       # Available via: sudo rpm-ostree install gcc make cmake
       # ninja-build, meson → optional picker (build-system tools, niche)
 
-      # GTK / theming
+      # GTK / theming — required by Raptor's own apps and HUD theme system,
+      # not user-facing preference packages.
       - libadwaita
-
-      # Networking / downloads
-      - qbittorrent
 
       # Disk management
       - kde-partitionmanager
@@ -128,6 +132,10 @@ modules:
       #   thunderbird                     — email (most use browser)
       #   variety                         — wallpaper manager
       #   btop, variety                   — redundant; btop→optional, variety→optional
+      #   bleachbit, filelight            — cleanup/disk tools, not bare-basic
+      #   krita                           — creative app, not bare-basic
+      #   git, nodejs, python3-pip        — dev tools, bundled into optional "Developer Runtime"
+      #   qbittorrent                     — not everyone torrents; optional
 
     remove:
       - tuned-ppd
@@ -141,16 +149,19 @@ modules:
     system:
       install:
         # Core gaming stack — always present
-        - dev.vencord.Vesktop            # Discord replacement (mandatory)
         - com.heroicgameslauncher.hgl    # Epic/GOG/Amazon game launcher
         - net.davidotek.pupgui2          # ProtonUp-Qt
-        # System utilities — always present
-        - io.missioncenter.MissionCenter # GPU/CPU/RAM monitor
-        - com.github.tchx84.Flatseal    # Flatpak permission manager
-        - com.vscodium.codium           # VSCodium — open-source VS Code (no telemetry)
-        - org.videolan.VLC              # VLC — plays any media format, no codec hunting
+        # File manager — GNOME Files (Nautilus) is the default; Dolphin stays
+        # installed from the base Plasma image for KDE-specific integrations
+        # (e.g. the Raptor Wallpaper right-click service menu, which relies
+        # on KDE's KIO servicemenu mechanism that Nautilus doesn't support).
+        - org.gnome.Nautilus
         # Firefox added as a Flatpak to avoid RPM openh264 depsolve issues
         - org.mozilla.firefox
+        # Vesktop moved to raptor-chat-choice.sh (firstboot Discord/Vesktop
+        # choice) — was previously a forced mandatory install; not bare-basic.
+        # Mission Center, Flatseal, VSCodium, VLC moved to the optional
+        # picker for the same reason — see raptor-app-choice.sh.
 
   # ── Kernel boot arguments ─────────────────────────────────────────────────────
   # split_lock_detect=off   — prevents costly split-lock penalties in game loops
