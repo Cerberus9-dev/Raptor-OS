@@ -60,10 +60,10 @@ Two dialogs appear on the first login, in sequence:
 | Category | Apps |
 |---|---|
 | **Communication** | Vesktop (Discord client — native Wayland) |
-| **Browser** | Firefox (memory-optimised: 64 MB cache, 4 processes, tab unloading), VLC |
+| **Browser** | Firefox (memory-optimised: 64 MB cache, 4 processes, tab unloading)|
 | **Gaming** | Heroic Games Launcher (Epic/GOG/Amazon), ProtonUp-Qt, Protontricks, Wine, Winetricks |
 | **Creative** | Krita (digital painting and illustration) |
-| **Media** | mpv (lightweight playback) |
+| **Media** | mpv (lightweight playback), VLC|
 | **Development** | VSCodium, Git, Node.js, Python 3 |
 | **System** | htop, KDE Partition Manager, BleachBit, Filelight, Mission Center, Flatseal |
 | **Raptor Apps** | Raptor Cortex, Raptor GPU Profiler, Raptor Wallpaper, Raptor Update Manager — all grouped under their own **Raptor OS** category in the app menu |
