@@ -163,6 +163,10 @@ user_pref("media.hardware-video-decoding.force-enabled", true);
 user_pref("media.ffmpeg.vaapi.enabled", true);
 user_pref("layers.offmainthreadcomposition.enabled", true);
 user_pref("dom.webgpu.enabled", true);
+// Canvas2D GPU acceleration — Firefox's own GPU auto-detection occasionally
+// blacklists working GPUs unnecessarily; force it on explicitly rather than
+// relying on that detection. Matters for web games and canvas-heavy sites.
+user_pref("gfx.canvas.accelerated", true);
 
 // ── JavaScript GC tuning ──────────────────────────────────────────────────────
 // Shorter GC slices: reduces janky pauses while maintaining low heap
@@ -183,9 +187,16 @@ user_pref("network.http.max-connections-per-server", 32);
 user_pref("network.http.max-persistent-connections-per-server", 10);
 user_pref("network.http.http2.enabled", true);
 user_pref("network.http.http3.enable", true);
-user_pref("network.prefetch-next", true);
-user_pref("network.dns.disablePrefetch", false);
-user_pref("network.predictor.enabled", true);
+// Speculative prefetching disabled — Firefox pre-resolves DNS and preloads
+// links you might click, using background bandwidth and CPU. On a gaming
+// OS this competes with game traffic for the same network path; every other
+// network optimisation in Raptor OS (BBR, CAKE, socket busy-polling) is
+// aimed at minimising exactly this kind of background contention, so this
+// is the same philosophy applied inside the browser. Trade-off: slightly
+// less snappy link navigation in exchange for less background noise.
+user_pref("network.prefetch-next", false);
+user_pref("network.dns.disablePrefetch", true);
+user_pref("network.predictor.enabled", false);
 // DNS-over-HTTPS via Cloudflare (mode 2 = preferred, falls back to system)
 user_pref("network.trr.mode", 2);
 user_pref("network.trr.uri", "https://cloudflare-dns.com/dns-query");
