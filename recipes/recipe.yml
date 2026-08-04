@@ -24,10 +24,25 @@ modules:
         destination: /usr/bin/raptor-browser-choice.sh
       - source: ../files/system_files/raptor-chat-choice.sh
         destination: /usr/bin/raptor-chat-choice.sh
-      # Default file manager — GNOME Files (Nautilus). System-wide XDG
-      # default association; Dolphin remains installed from the base image.
+      # Default file manager (Nautilus) + image type associations (Gwenview).
+      # /etc/xdg/mimeapps.list, not /usr/share/applications/ — the latter is
+      # one of the LOWEST-priority locations in the XDG mimeapps.list
+      # resolution chain; Bazzite's base image already sets its own default
+      # there pointing at Dolphin, which silently won every time. /etc/xdg
+      # is part of XDG_CONFIG_DIRS, checked well before XDG_DATA_DIRS (where
+      # /usr/share/applications lives).
+      #
+      # Also mapped into /etc/skel/.config/mimeapps.list — the actual
+      # HIGHEST-priority location in the whole chain is each user's own
+      # ~/.config/mimeapps.list, which a system-wide default can never
+      # override once it exists. Seeding it via skel means every new user
+      # account starts with the correct association already in their own
+      # personal config from first login, rather than relying solely on the
+      # system-wide fallback.
       - source: ../files/system_files/raptor-mimeapps.list
-        destination: /usr/share/applications/mimeapps.list
+        destination: /etc/xdg/mimeapps.list
+      - source: ../files/system_files/raptor-mimeapps.list
+        destination: /etc/skel/.config/mimeapps.list
       # ── Audio: PipeWire low-latency gaming config ──────────────────────────
       - source: ../files/system_files/99-raptor-pipewire-lowlatency.conf
         destination: /etc/pipewire/pipewire.conf.d/99-raptor-lowlatency.conf
