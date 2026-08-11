@@ -8,7 +8,7 @@ set -e
 # • Working "Raptor OS" app-launcher category
 # • GPU profiler TUI (detect, profile switch, crash handler toggle)
 # • KDE crash handler (drkonqi) suppressed by default
-# • Papirus-Dark icon theme  •  Aurorae window decoration
+# •  Aurorae window decoration
 # • Applied at first login via systemd user unit
 # =============================================================================
 
