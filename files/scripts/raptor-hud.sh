@@ -25,10 +25,6 @@ mkdir -p /usr/lib/raptor/hud \
          /usr/share/aurorae/themes/RaptorOS \
          /usr/share/desktop-directories \
          /usr/share/applications \
-         /usr/share/plasma/desktoptheme/RaptorOS/widgets \
-         /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets \
-         /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui \
-         /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/config \
          /usr/share/konsole \
          /usr/share/themes/RaptorOS-GTK/gtk-3.0 \
          /usr/share/themes/RaptorOS-GTK/gtk-4.0 \
@@ -825,162 +821,7 @@ EOF
 command -v desktop-file-validate &>/dev/null && \
     desktop-file-validate /usr/share/applications/raptor-gpu-profile.desktop >/dev/null && echo "[OK] .desktop valid"
 
-# ══════════════════════════════════════════════════════════════════════════════
-# COCKPIT RADAR BOTTOM TASKBAR  (Plasma theme + plasmoid)
-# ══════════════════════════════════════════════════════════════════════════════
-cat << 'EOF' > /usr/share/plasma/desktoptheme/RaptorOS/metadata.desktop
-[Desktop Entry]
-Name=RaptorOS
-Comment=F-22 Raptor cockpit HUD Plasma theme
-Type=Service
-X-KDE-ServiceTypes=Plasma/Theme
-
-[Plasmatarget]
-BaseTheme=breezedark
-EOF
-
-cat << 'SVGEOF' > /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg
-<svg xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="topglow" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#1e90ff" stop-opacity="0.55"/>
-      <stop offset="18%"  stop-color="#1e90ff" stop-opacity="0.12"/>
-      <stop offset="100%" stop-color="#0d0f12" stop-opacity="0"/>
-    </linearGradient>
-    <radialGradient id="radar-sweep" cx="50%" cy="120%" r="80%">
-      <stop offset="0%"  stop-color="#00ff41" stop-opacity="0.07"/>
-      <stop offset="100%" stop-color="#00ff41" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <rect id="hint-stretch-borders" x="0" y="0" width="1" height="1" fill="none"/>
-  <rect id="hint-tile-center"     x="0" y="0" width="1" height="1" fill="none"/>
-  <g id="topleft">
-    <rect x="0" y="0" width="24" height="48" fill="#0d0f12"/>
-    <polygon points="0,0 24,0 0,24" fill="#1c2330"/>
-    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
-  </g>
-  <g id="topright">
-    <rect x="0" y="0" width="24" height="48" fill="#0d0f12"/>
-    <polygon points="0,0 24,0 24,24" fill="#1c2330"/>
-    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
-  </g>
-  <g id="bottomleft"><rect x="0" y="0" width="24" height="4" fill="#0d0f12"/></g>
-  <g id="bottomright"><rect x="0" y="0" width="24" height="4" fill="#0d0f12"/></g>
-  <g id="top">
-    <rect x="0" y="0" width="1" height="48" fill="#0d0f12"/>
-    <rect x="0" y="0" width="1" height="48" fill="url(#topglow)"/>
-    <line x1="0" y1="0" x2="1" y2="0" stroke="#1e90ff" stroke-width="1.5" opacity="0.85"/>
-    <line x1="0" y1="2" x2="1" y2="2" stroke="#1e90ff" stroke-width="0.5" opacity="0.25"/>
-  </g>
-  <g id="bottom"><rect x="0" y="0" width="1" height="4" fill="#080a0c"/></g>
-  <g id="left">
-    <rect x="0" y="0" width="24" height="1" fill="#0d0f12"/>
-    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
-  </g>
-  <g id="right">
-    <rect x="0" y="0" width="24" height="1" fill="#0d0f12"/>
-    <line x1="0" y1="0" x2="24" y2="0" stroke="#1e90ff" stroke-width="1" opacity="0.8"/>
-  </g>
-  <g id="center">
-    <rect x="0" y="0" width="1" height="48" fill="#0d0f12"/>
-    <rect x="0" y="0" width="1" height="48" fill="url(#radar-sweep)"/>
-    <line x1="0" y1="8"  x2="1" y2="8"  stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
-    <line x1="0" y1="16" x2="1" y2="16" stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
-    <line x1="0" y1="24" x2="1" y2="24" stroke="#1e90ff" stroke-width="0.3" opacity="0.04"/>
-    <line x1="0" y1="32" x2="1" y2="32" stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
-    <line x1="0" y1="40" x2="1" y2="40" stroke="#1e90ff" stroke-width="0.3" opacity="0.06"/>
-    <line x1="0" y1="14" x2="1" y2="14" stroke="#f5a623" stroke-width="0.5" opacity="0.18"/>
-  </g>
-</svg>
-SVGEOF
-
-cp /usr/share/plasma/desktoptheme/RaptorOS/widgets/panel-background.svg \
-   /usr/share/plasma/desktoptheme/RaptorOS/opaque/widgets/panel-background.svg
-
-cat << 'EOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/metadata.json
-{
-    "KPackageStructure": "Plasma/Applet",
-    "KPlugin": {
-        "Authors": [{"Email": "raptor@local", "Name": "RaptorOS"}],
-        "Category": "Utilities",
-        "Description": "Cockpit radar arc decoration for the Raptor HUD panel",
-        "Icon": "preferences-system-performance",
-        "Id": "org.raptoros.radararc",
-        "Name": "Raptor Radar Arc",
-        "Version": "1.0"
-    }
-}
-EOF
-
-cat << 'QMLEOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/ui/main.qml
-import QtQuick 2.15
-import org.kde.plasma.core 2.0 as PlasmaCore
-
-Item {
-    id: root
-    implicitWidth: 120
-    implicitHeight: PlasmaCore.Units.gridUnit * 2
-    property string side: plasmoid.configuration.side || "left"
-    property real sweepAngle: 0
-
-    SequentialAnimation on sweepAngle {
-        loops: Animation.Infinite
-        NumberAnimation { to: 360; duration: 4000; easing.type: Easing.Linear }
-    }
-
-    Canvas {
-        id: canvas
-        anchors.fill: parent
-        onPaint: {
-            var ctx = getContext("2d");
-            ctx.clearRect(0, 0, width, height);
-            var cx = side === "left" ? width - 10 : 10;
-            var cy = height;
-            var maxR = width * 1.1;
-            ctx.strokeStyle = "rgba(30,144,255,0.22)";
-            ctx.lineWidth = 0.5;
-            for (var r = 20; r <= maxR; r += 20) {
-                ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 2*Math.PI); ctx.stroke();
-            }
-            var sweepRad = sweepAngle * Math.PI / 180 + Math.PI;
-            ctx.save(); ctx.translate(cx, cy); ctx.rotate(sweepRad);
-            ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, maxR, -0.55, 0); ctx.closePath();
-            var sg = ctx.createLinearGradient(-maxR, 0, 0, 0);
-            sg.addColorStop(0, "rgba(0,255,65,0)"); sg.addColorStop(1, "rgba(0,255,65,0.18)");
-            ctx.fillStyle = sg; ctx.fill();
-            ctx.strokeStyle = "rgba(0,255,65,0.5)"; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(maxR,0); ctx.stroke();
-            ctx.restore();
-            var blips = [{a:210,r:35},{a:255,r:55},{a:290,r:28},{a:238,r:70},{a:222,r:48}];
-            blips.forEach(function(b) {
-                var br = b.a*Math.PI/180;
-                ctx.beginPath(); ctx.arc(cx+b.r*Math.cos(br), cy+b.r*Math.sin(br), 1.5, 0, 2*Math.PI);
-                ctx.fillStyle = "rgba(30,144,255,0.7)"; ctx.fill();
-            });
-        }
-    }
-    onSweepAngleChanged: canvas.requestPaint()
-
-    Column {
-        anchors { left: side==="left" ? parent.left : undefined; right: side==="right" ? parent.right : undefined; verticalCenter: parent.verticalCenter }
-        width: 48; spacing: 1
-        Text { text: "HDG"; color: "#5a6a7e"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1 }
-        Text { text: "270°"; color: "#1e90ff"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
-        Text { text: "ALT"; color: "#5a6a7e"; font.family: "Monospace"; font.pixelSize: 7; font.letterSpacing: 1 }
-        Text { text: "FL350"; color: "#f5a623"; font.family: "Monospace"; font.pixelSize: 10; font.bold: true }
-    }
-}
-QMLEOF
-
-cat << 'EOF' > /usr/share/plasma/plasmoids/org.raptoros.radararc/contents/config/main.xml
-<?xml version="1.0" encoding="UTF-8"?>
-<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0">
-  <kcfgfile name=""/>
-  <group name="General">
-    <entry name="side" type="String"><default>left</default></entry>
-  </group>
-</kcfg>
-EOF
+# ── No custom Plasma panel theme or radar plasmoid — KDE default taskbar ───────
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PLASMA PANEL APPLY SCRIPT  (runs as user on first login)
@@ -992,7 +833,7 @@ plasma-apply-colorscheme RaptorOS 2>/dev/null || \
     kwriteconfig5 --file kdeglobals --group General --key ColorScheme RaptorOS
 kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 --key library org.kde.kwin.aurorae
 kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 --key theme "__aurorae__svg__RaptorOS"
-kwriteconfig5 --file kdeglobals --group Icons --key Theme Papirus-Dark
+
 kwriteconfig5 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breezedark.desktop
 command -v kvantummanager &>/dev/null && kvantummanager --set RaptorOS 2>/dev/null || true
 
@@ -1000,62 +841,24 @@ mkdir -p "${HOME}/.config/gtk-3.0"
 cat << 'GTKEOF' > "${HOME}/.config/gtk-3.0/settings.ini"
 [Settings]
 gtk-theme-name=RaptorOS-GTK
-gtk-icon-theme-name=Papirus-Dark
+
 gtk-cursor-theme-name=Adwaita
 gtk-font-name=JetBrains Mono 10
 gtk-application-prefer-dark-theme=1
 GTKEOF
 
-# Panel: 48px bottom dock, full width
-PANEL_ID=128
-kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key location 1
-kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key thickness 48
-kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key maximumLength 100
-kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key minimumLength 100
-kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key alignment 0
-kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key panelOpacity 1
-
-# Applet layout: [Launcher][RadarL][Spacer][Tasks][Spacer][RadarR][Tray][Clock][ShowDesktop]
+# Panel: leave KDE default taskbar untouched — only swap launcher to Kicker
+# so the Raptor OS app category appears as a top-level item in the menu.
+# Kicker is KDE's built-in cascading launcher; no extra packages needed.
+# Users can find it in the default panel's launcher button after first login.
 APPLETS="plasma-org.kde.plasma.desktop-appletsrc"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID" --key plugin "org.kde.panel"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID" --key location 1
 
-for ID in 1 2 3 4 5 6 7 8 9; do
-    kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][$ID" --key immutability 1
-done
-
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1" --key plugin "org.kde.plasma.kicker"
-# Kicker config — show all apps sorted by category; Raptor OS category is top-level
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
-    --key useCustomButtonImage false
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
-    --key appNameFormat 0
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
-    --key limitDepth false
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
-    --key showRecentApps false
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
-    --key showRecentDocs false
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
-    --key showRecentContacts false
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][2" --key plugin "org.raptoros.radararc"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][2][Configuration][General" --key side "left"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][3" --key plugin "org.kde.plasma.panelspacer"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][4" --key plugin "org.kde.plasma.icontasks"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][4][Configuration][General" --key showLabels false
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][4][Configuration][General" --key maxStripes 1
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][5" --key plugin "org.kde.plasma.panelspacer"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][6" --key plugin "org.raptoros.radararc"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][6][Configuration][General" --key side "right"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][7" --key plugin "org.kde.plasma.systemtray"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8" --key plugin "org.kde.plasma.digitalclock"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key use24hFormat 2
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key showSeconds true
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key showDate false
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key fontFamily "JetBrains Mono"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key customFontSize 11
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][9" --key plugin "org.kde.plasma.showdesktop"
-kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID" --key applets "1,2,3,4,5,6,7,8,9"
+# Switch the default panel's launcher (containment 1, applet 1) from Kickoff → Kicker
+kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1" --key plugin "org.kde.plasma.kicker"
+kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1][Configuration][General" --key showRecentApps false
+kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1][Configuration][General" --key showRecentDocs false
+kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1][Configuration][General" --key showRecentContacts false
+kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1][Configuration][General" --key limitDepth false
 
 qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
 kbuildsycoca6 --noincremental 2>/dev/null || kbuildsycoca5 --noincremental 2>/dev/null || true
@@ -1114,7 +917,7 @@ Encoding=UTF-8
 [X11 Properties]
 GtkTheme=RaptorOS-GTK
 MetacityTheme=RaptorOS-GTK
-IconTheme=Papirus-Dark
+
 CursorTheme=Adwaita
 ButtonLayout=close,minimize,maximize:
 
@@ -1278,13 +1081,14 @@ cat << 'EOF'
   • KDE color scheme, Aurorae decoration, Kvantum + GTK themes
   • Konsole RaptorOS profile + color scheme
   • "Raptor OS" app launcher category (applications.menu + kde-)
-  • Cockpit radar bottom dock (48px, radar arc plasmoid, HUD clock)
+  • KDE default taskbar and icons kept — launcher swapped to Kicker
+    so "Raptor OS" appears as a top-level category in the menu
   • GPU profile detection service + TUI profiler (launcher .desktop)
   • drkonqi suppressed by default via /etc/xdg/kcrashrc +
     raptor-drkonqi.service — toggle in profiler TUI with [6]
 
   recipe.yml rpm-ostree installs needed:
-    - kvantum  - kvantum-qt5  - papirus-icon-theme
+    - kvantum  - kvantum-qt5
     - jetbrains-mono-fonts  - qt5-qtbase
 
   Reset HUD apply:
