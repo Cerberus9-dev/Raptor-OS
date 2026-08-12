@@ -275,21 +275,19 @@ Comment=Raptor OS tools and utilities
 Icon=computer
 EOF
 
-# Plasma 6 renamed applications.menu → plasma-applications.menu.
-# Write all three filenames so it works across Plasma versions.
-# Never use sed to inject into these — always write the full file fresh.
-for MENUFILE in \
-    /etc/xdg/menus/plasma-applications.menu \
-    /etc/xdg/menus/applications.menu \
-    /etc/xdg/menus/kde-applications.menu; do
-    cat << 'MENUEOF' > "$MENUFILE"
+# Drop a single merge file into applications-merged/ — this is the correct way
+# to ADD a category without touching or replacing the system menu file.
+# The system's plasma-applications.menu includes <DefaultMergeDirs/> which
+# reads every .menu file from applications-merged/ automatically.
+# Writing to plasma-applications.menu directly replaces the whole menu (which
+# is why every other category was disappearing).
+mkdir -p /etc/xdg/menus/applications-merged
+
+cat << 'MENUEOF' > /etc/xdg/menus/applications-merged/raptor-os.menu
 <!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
   "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
 <Menu>
   <Name>Applications</Name>
-  <DefaultAppDirs/>
-  <DefaultDirectoryDirs/>
-  <DefaultMergeDirs/>
   <Menu>
     <Name>Raptor OS</Name>
     <Directory>raptor-os.directory</Directory>
@@ -299,7 +297,6 @@ for MENUFILE in \
   </Menu>
 </Menu>
 MENUEOF
-done
 
 # ══════════════════════════════════════════════════════════════════════════════
 # GPU PROFILE DETECTION  (boot service)
@@ -813,8 +810,8 @@ TryExec=/usr/bin/raptor-gpu-profile-launcher
 Icon=preferences-system-performance
 Terminal=false
 NoDisplay=false
-Categories=X-RaptorOS;System;Monitor;
-Keywords=gpu;profile;performance;raptor;monitor;nvidia;amd;intel;
+Categories=X-RaptorOS;
+Keywords=gpu;profile;performance;raptor;
 StartupNotify=true
 EOF
 command -v desktop-file-validate &>/dev/null && \
