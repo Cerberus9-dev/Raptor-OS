@@ -8,7 +8,7 @@ set -e
 # • Working "Raptor OS" app-launcher category
 # • GPU profiler TUI (detect, profile switch, crash handler toggle)
 # • KDE crash handler (drkonqi) suppressed by default
-# •  Aurorae window decoration
+# • Papirus-Dark icon theme  •  Aurorae window decoration
 # • Applied at first login via systemd user unit
 # =============================================================================
 
@@ -296,6 +296,10 @@ for MENUFILE in /etc/xdg/menus/applications.menu \
     <Include>
       <Category>X-RaptorOS</Category>
     </Include>
+    <Layout>
+      <Merge type="menus"/>
+      <Merge type="files"/>
+    </Layout>
   </Menu>
 </Menu>
 MENUEOF
@@ -511,8 +515,7 @@ systemctl enable raptor-gpu-profile.service 2>/dev/null || true
 # System-wide default — KCrash reads this before any service starts
 printf '[drkonqi]\nAlwaysDirectly=true\n' > /etc/xdg/kcrashrc
 
-# Seed Cortex persistent config with the default.
-# The per-user service below masks drkonqi automatically at every login.
+# Seed Cortex persistent config with the default
 echo "drkonqi_disabled=true" > /etc/raptor/cortex-defaults.conf
 
 # Per-user apply script (no root needed — runs as the logged-in user)
@@ -984,15 +987,14 @@ EOF
 # ══════════════════════════════════════════════════════════════════════════════
 cat << 'EOF' > /usr/lib/raptor/hud/apply-plasma-panel.sh
 #!/bin/bash
-# Keep the Raptor OS color scheme, but restore KDE's native Breeze UI.
-kwriteconfig5 --file plasmarc --group Theme --key name breezedark
-plasma-apply-colorscheme BreezeDark 2>/dev/null || \
-    kwriteconfig5 --file kdeglobals --group General --key ColorScheme BreezeDark
-kwriteconfig5 --file kdeglobals --group Icons --key Theme breeze
-kwriteconfig5 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breeze.desktop
-# Restore KDE's normal KWin decoration instead of the Raptor Aurorae decoration.
+kwriteconfig5 --file plasmarc --group Theme --key name RaptorOS
+plasma-apply-colorscheme RaptorOS 2>/dev/null || \
+    kwriteconfig5 --file kdeglobals --group General --key ColorScheme RaptorOS
 kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 --key library org.kde.kwin.aurorae
 kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 --key theme "__aurorae__svg__RaptorOS"
+kwriteconfig5 --file kdeglobals --group Icons --key Theme Papirus-Dark
+kwriteconfig5 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breezedark.desktop
+command -v kvantummanager &>/dev/null && kvantummanager --set RaptorOS 2>/dev/null || true
 
 mkdir -p "${HOME}/.config/gtk-3.0"
 cat << 'GTKEOF' > "${HOME}/.config/gtk-3.0/settings.ini"
@@ -1004,24 +1006,56 @@ gtk-font-name=JetBrains Mono 10
 gtk-application-prefer-dark-theme=1
 GTKEOF
 
-# Restore the standard KDE Plasma bottom panel.
-# The default Plasma panel contains the Application Launcher, Task Manager,
-# System Tray and Digital Clock.  Raptor OS's launcher category remains
-# installed separately in the KDE application menu.
-if command -v plasma-apply-layout-template &>/dev/null; then
-    plasma-apply-layout-template org.kde.plasma.desktop.defaultPanel 2>/dev/null || true
-fi
+# Panel: 48px bottom dock, full width
+PANEL_ID=128
+kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key location 1
+kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key thickness 48
+kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key maximumLength 100
+kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key minimumLength 100
+kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key alignment 0
+kwriteconfig5 --file plasmashellrc --group "PlasmaViews" --group "Panel $PANEL_ID" --key panelOpacity 1
 
-# Ensure Breeze icons are used by GTK apps as well.
-mkdir -p "${HOME}/.config/gtk-3.0"
-cat << 'GTKEOF' > "${HOME}/.config/gtk-3.0/settings.ini"
-[Settings]
-gtk-theme-name=RaptorOS-GTK
-gtk-icon-theme-name=Adwaita
-gtk-cursor-theme-name=Adwaita
-gtk-font-name=JetBrains Mono 10
-gtk-application-prefer-dark-theme=1
-GTKEOF
+# Applet layout: [Launcher][RadarL][Spacer][Tasks][Spacer][RadarR][Tray][Clock][ShowDesktop]
+APPLETS="plasma-org.kde.plasma.desktop-appletsrc"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID" --key plugin "org.kde.panel"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID" --key location 1
+
+for ID in 1 2 3 4 5 6 7 8 9; do
+    kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][$ID" --key immutability 1
+done
+
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1" --key plugin "org.kde.plasma.kicker"
+# Kicker config — show all apps sorted by category; Raptor OS category is top-level
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
+    --key useCustomButtonImage false
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
+    --key appNameFormat 0
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
+    --key limitDepth false
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
+    --key showRecentApps false
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
+    --key showRecentDocs false
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][1][Configuration][General" \
+    --key showRecentContacts false
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][2" --key plugin "org.raptoros.radararc"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][2][Configuration][General" --key side "left"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][3" --key plugin "org.kde.plasma.panelspacer"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][4" --key plugin "org.kde.plasma.icontasks"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][4][Configuration][General" --key showLabels false
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][4][Configuration][General" --key maxStripes 1
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][5" --key plugin "org.kde.plasma.panelspacer"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][6" --key plugin "org.raptoros.radararc"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][6][Configuration][General" --key side "right"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][7" --key plugin "org.kde.plasma.systemtray"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8" --key plugin "org.kde.plasma.digitalclock"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key use24hFormat 2
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key showSeconds true
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key showDate false
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key fontFamily "JetBrains Mono"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][8][Configuration][Appearance" --key customFontSize 11
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID][Applets][9" --key plugin "org.kde.plasma.showdesktop"
+kwriteconfig5 --file "$APPLETS" --group "Containments][$PANEL_ID" --key applets "1,2,3,4,5,6,7,8,9"
 
 qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
 kbuildsycoca6 --noincremental 2>/dev/null || kbuildsycoca5 --noincremental 2>/dev/null || true
