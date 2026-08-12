@@ -272,34 +272,33 @@ cat << 'EOF' > /usr/share/desktop-directories/raptor-os.directory
 Type=Directory
 Name=Raptor OS
 Comment=Raptor OS tools and utilities
-Icon=preferences-system
+Icon=computer
 EOF
 
-for MENUFILE in /etc/xdg/menus/applications.menu \
-                /etc/xdg/menus/kde-applications.menu; do
-  if [ -f "$MENUFILE" ]; then
-    grep -q 'X-RaptorOS' "$MENUFILE" 2>/dev/null || \
-      sed -i 's|</Menu>$|  <Menu>\n    <Name>Raptor OS<\/Name>\n    <Directory>raptor-os.directory<\/Directory>\n    <Include><Category>X-RaptorOS<\/Category><\/Include>\n  <\/Menu>\n<\/Menu>|' "$MENUFILE"
-  else
+# Plasma 6 renamed applications.menu → plasma-applications.menu.
+# Write all three filenames so it works across Plasma versions.
+# Never use sed to inject into these — always write the full file fresh.
+for MENUFILE in \
+    /etc/xdg/menus/plasma-applications.menu \
+    /etc/xdg/menus/applications.menu \
+    /etc/xdg/menus/kde-applications.menu; do
     cat << 'MENUEOF' > "$MENUFILE"
 <!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
   "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
 <Menu>
   <Name>Applications</Name>
+  <DefaultAppDirs/>
+  <DefaultDirectoryDirs/>
+  <DefaultMergeDirs/>
   <Menu>
     <Name>Raptor OS</Name>
     <Directory>raptor-os.directory</Directory>
     <Include>
       <Category>X-RaptorOS</Category>
     </Include>
-    <Layout>
-      <Merge type="menus"/>
-      <Merge type="files"/>
-    </Layout>
   </Menu>
 </Menu>
 MENUEOF
-  fi
 done
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -847,21 +846,79 @@ gtk-font-name=JetBrains Mono 10
 gtk-application-prefer-dark-theme=1
 GTKEOF
 
-# Panel: leave KDE default taskbar untouched — only swap launcher to Kicker
-# so the Raptor OS app category appears as a top-level item in the menu.
-# Kicker is KDE's built-in cascading launcher; no extra packages needed.
-# Users can find it in the default panel's launcher button after first login.
-APPLETS="plasma-org.kde.plasma.desktop-appletsrc"
+# ── Rebuild sycoca so the Raptor OS category is visible immediately ────────────
+# Must run as the user at login time (not at build time) so the cache is
+# written to the correct user/session paths and Plasma picks it up.
+# Delete the stale cache first — kbuildsycoca6 --noincremental alone is not
+# enough on Bazzite because the ostree image cache may shadow it.
+rm -f "${HOME}/.cache/ksycoca6" \
+      "${HOME}/.cache/kbuildsycoca6" \
+      /var/tmp/kdecache-"${USER}"/ksycoca6 2>/dev/null || true
 
-# Switch the default panel's launcher (containment 1, applet 1) from Kickoff → Kicker
-kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1" --key plugin "org.kde.plasma.kicker"
-kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1][Configuration][General" --key showRecentApps false
-kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1][Configuration][General" --key showRecentDocs false
-kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1][Configuration][General" --key showRecentContacts false
-kwriteconfig5 --file "$APPLETS" --group "Containments][1][Applets][1][Configuration][General" --key limitDepth false
+kbuildsycoca6 --noincremental 2>/dev/null || \
+kbuildsycoca5 --noincremental 2>/dev/null || true
+
+# ── Switch launcher from Kickoff → Kicker ────────────────────────────────────
+# Kicker renders XDG categories as top-level cascading items; Kickoff buries
+# them as subfolders. Find the actual panel containment ID dynamically
+# instead of assuming ID=1 (Bazzite's panel IDs vary).
+APPLETS="${HOME}/.config/plasma-org.kde.plasma.desktop-appletsrc"
+
+if [ -f "$APPLETS" ]; then
+    # Find containment IDs whose plugin is "org.kde.panel" (the taskbar)
+    PANEL_IDS=$(grep -E "^\[Containments\]\[([0-9]+)\]$" "$APPLETS" | \
+        grep -oE "[0-9]+" || true)
+
+    for CID in $PANEL_IDS; do
+        PLUGIN=$(kreadconfig5 --file "$APPLETS" \
+            --group "Containments" --group "$CID" --key plugin 2>/dev/null || true)
+        [ "$PLUGIN" = "org.kde.panel" ] || continue
+
+        # Find the kickoff applet inside this panel
+        APPLET_IDS=$(grep -E "^\[Containments\]\[$CID\]\[Applets\]\[([0-9]+)\]$" "$APPLETS" | \
+            grep -oE "[0-9]+" | tail -n +2 || true)
+
+        for AID in $APPLET_IDS; do
+            APLUGIN=$(kreadconfig5 --file "$APPLETS" \
+                --group "Containments" --group "$CID" \
+                --group "Applets" --group "$AID" \
+                --key plugin 2>/dev/null || true)
+            if [ "$APLUGIN" = "org.kde.plasma.kickoff" ] || \
+               [ "$APLUGIN" = "org.kde.plasma.kicker" ]; then
+                kwriteconfig5 --file "$APPLETS" \
+                    --group "Containments" --group "$CID" \
+                    --group "Applets" --group "$AID" \
+                    --key plugin "org.kde.plasma.kicker"
+                kwriteconfig5 --file "$APPLETS" \
+                    --group "Containments" --group "$CID" \
+                    --group "Applets" --group "$AID" \
+                    --group "Configuration" --group "General" \
+                    --key showRecentApps false
+                kwriteconfig5 --file "$APPLETS" \
+                    --group "Containments" --group "$CID" \
+                    --group "Applets" --group "$AID" \
+                    --group "Configuration" --group "General" \
+                    --key showRecentDocs false
+                kwriteconfig5 --file "$APPLETS" \
+                    --group "Containments" --group "$CID" \
+                    --group "Applets" --group "$AID" \
+                    --group "Configuration" --group "General" \
+                    --key showRecentContacts false
+                kwriteconfig5 --file "$APPLETS" \
+                    --group "Containments" --group "$CID" \
+                    --group "Applets" --group "$AID" \
+                    --group "Configuration" --group "General" \
+                    --key limitDepth false
+                echo "Switched applet $AID in panel $CID to Kicker"
+                break
+            fi
+        done
+    done
+fi
 
 qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || true
-kbuildsycoca6 --noincremental 2>/dev/null || kbuildsycoca5 --noincremental 2>/dev/null || true
+# Restart plasmashell so the launcher swap + new menu category both take effect
+kquitapp6 plasmashell 2>/dev/null; sleep 1; plasmashell --replace &>/dev/null &
 echo "RAPTOR_HUD_APPLIED"
 EOF
 chmod +x /usr/lib/raptor/hud/apply-plasma-panel.sh
@@ -1050,17 +1107,20 @@ EOF
 cat << 'EOF' > /usr/lib/systemd/user/raptor-hud-apply.service
 [Unit]
 Description=Raptor HUD — Apply KDE theme on first login
+# Run after plasmashell is up so kwriteconfig5 and plasmashell --replace work
 After=plasma-plasmashell.service
-ConditionPathExists=!/var/lib/raptor-hud-applied
+# Guard file lives in the user's home so it works on immutable/ostree systems.
+# Delete ~/.config/raptor-hud-applied to re-run (e.g. after a rebase).
+ConditionPathExists=!%h/.config/raptor-hud-applied
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/raptor/hud/apply-plasma-panel.sh
-ExecStartPost=/bin/touch /var/lib/raptor-hud-applied
+ExecStartPost=/usr/bin/touch %h/.config/raptor-hud-applied
 RemainAfterExit=yes
 
 [Install]
-WantedBy=default.target
+WantedBy=plasma-plasmashell.service
 EOF
 
 systemctl --global enable raptor-hud-apply.service  2>/dev/null || true
@@ -1091,8 +1151,8 @@ cat << 'EOF'
     - kvantum  - kvantum-qt5
     - jetbrains-mono-fonts  - qt5-qtbase
 
-  Reset HUD apply:
-    rm /var/lib/raptor-hud-applied
+  Reset HUD apply (re-runs on next login):
+    rm ~/.config/raptor-hud-applied
     systemctl --user start raptor-hud-apply.service
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
