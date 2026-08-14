@@ -12,11 +12,11 @@ A custom Bazzite-based Linux distribution built for gaming — automatic GPU opt
 
 | | Minimum | Recommended |
 |---|---|---|
-| **CPU** | 64-bit x86_64, quad-core (e.g. Intel 6th gen / Ryzen 1000 series or newer) | 6-core+ modern CPU (Ryzen 5000+ / Intel 10th gen+) for smooth gaming |
-| **RAM** | 8 GB | 16 GB |
-| **Storage** | 40 GB SSD | 60 GB NVMe |
-| **GPU** | AMD, NVIDIA, or Intel with Vulkan support | AMD RDNA2+ or NVIDIA RTX |
-| **Boot** | UEFI required | — |
+| **CPU** | 64-bit x86_64, 2 GHz+ quad-core | Recent AMD or Intel processor suited for Linux gaming |
+| **RAM** | 8 GB | 16 GB or more for larger games and multitasking |
+| **Storage** | ~20 GB (bare-basics default image — no optional apps chosen), SSD required | 50 GB+ if you add creative/dev tools from the optional picker; more for a real Steam library |
+| **GPU** | Any GPU supporting Vulkan 1.3+ | AMD or Intel Arc (best-supported); NVIDIA works, with some documented caveats |
+| **Boot** | UEFI required, disk must be GPT | — |
 
 ---
 
