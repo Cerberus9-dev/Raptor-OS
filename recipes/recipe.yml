@@ -80,6 +80,13 @@ modules:
 
       # KDE extras
       - plasma-systemmonitor
+      # GNOME Files (Nautilus) — native RPM, not Flatpak.
+      # A sandboxed Flatpak Nautilus can't exec other native apps
+      # (e.g. Gwenview for images) without going through the XDG
+      # Desktop Portal, which doesn't reliably respect mimeapps.list.
+      # A native RPM can exec any installed native app directly.
+      # Dolphin stays from the base Plasma image for KDE integrations.
+      - nautilus
       - gwenview
       - kcalc
 
@@ -166,11 +173,6 @@ modules:
         # Core gaming stack — always present
         - com.heroicgameslauncher.hgl    # Epic/GOG/Amazon game launcher
         - net.davidotek.pupgui2          # ProtonUp-Qt
-        # File manager — GNOME Files (Nautilus) is the default; Dolphin stays
-        # installed from the base Plasma image for KDE-specific integrations
-        # (e.g. the Raptor Wallpaper right-click service menu, which relies
-        # on KDE's KIO servicemenu mechanism that Nautilus doesn't support).
-        - org.gnome.Nautilus
         # Firefox added as a Flatpak to avoid RPM openh264 depsolve issues
         - org.mozilla.firefox
         # Vesktop moved to raptor-chat-choice.sh (firstboot Discord/Vesktop
