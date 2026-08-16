@@ -1155,3 +1155,102 @@ cat << 'EOF'
 EOF
 
 echo "RAPTOR_HUD_READY"
+
+# ── One-time migration: fix stale mimeapps defaults ─────────────────────────
+# Users who had an existing ~/.config/mimeapps.list before Nautilus became
+# the default file manager may still have "inode/directory=
+# org.kde.dolphin.desktop" in their OWN personal config, which always
+# outranks any system-wide /etc/xdg/mimeapps.list default.
+# This script runs once at login, corrects only the targeted keys, and
+# leaves every other user preference in the file untouched.
+mkdir -p /usr/lib/raptor /etc/xdg/autostart
+
+cat << 'MIGRATIONEOF' > /usr/lib/raptor/cleanup-legacy-mimeapps.sh
+#!/bin/bash
+set -euo pipefail
+STAMP_DIR="$HOME/.local/share/raptor"
+STAMP="$STAMP_DIR/legacy-mimeapps-cleaned"
+[ -f "$STAMP" ] && exit 0
+
+python3 - << 'INNERPYEOF'
+import os
+path = os.path.expanduser("~/.config/mimeapps.list")
+desired = {
+    "inode/directory":          "org.gnome.Nautilus.desktop",
+    "image/png":                 "org.kde.gwenview.desktop",
+    "image/jpeg":                "org.kde.gwenview.desktop",
+    "image/gif":                 "org.kde.gwenview.desktop",
+    "image/webp":                "org.kde.gwenview.desktop",
+    "image/bmp":                 "org.kde.gwenview.desktop",
+    "image/svg+xml":             "org.kde.gwenview.desktop",
+    "image/tiff":                "org.kde.gwenview.desktop",
+    "image/x-portable-pixmap":   "org.kde.gwenview.desktop",
+}
+if not os.path.exists(path):
+    print("no-personal-mimeapps-file")
+    raise SystemExit(0)
+with open(path) as f:
+    lines = f.read().splitlines()
+changed = False
+in_default_apps = False
+seen_keys = set()
+new_lines = []
+default_apps_end_idx = None
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith("["):
+        if in_default_apps and default_apps_end_idx is None:
+            default_apps_end_idx = len(new_lines)
+        in_default_apps = (stripped == "[Default Applications]")
+        new_lines.append(line)
+        continue
+    if in_default_apps and "=" in stripped:
+        key = stripped.split("=", 1)[0].strip()
+        if key in desired:
+            seen_keys.add(key)
+            correct_line = key + "=" + desired[key]
+            if stripped != correct_line:
+                new_lines.append(correct_line)
+                changed = True
+                continue
+    new_lines.append(line)
+if in_default_apps and default_apps_end_idx is None:
+    default_apps_end_idx = len(new_lines)
+missing = [k for k in desired if k not in seen_keys]
+if missing:
+    if default_apps_end_idx is None:
+        if new_lines and new_lines[-1].strip() != "":
+            new_lines.append("")
+        new_lines.append("[Default Applications]")
+        for k in missing:
+            new_lines.append(k + "=" + desired[k])
+    else:
+        insertion = [k + "=" + desired[k] for k in missing]
+        new_lines = new_lines[:default_apps_end_idx] + insertion + new_lines[default_apps_end_idx:]
+    changed = True
+if changed:
+    with open(path, "w") as f:
+        for out_line in new_lines:
+            f.write(out_line)
+            f.write(chr(10))
+    print("updated")
+else:
+    print("already-correct")
+INNERPYEOF
+
+mkdir -p "$STAMP_DIR"
+touch "$STAMP"
+MIGRATIONEOF
+chmod +x /usr/lib/raptor/cleanup-legacy-mimeapps.sh
+
+cat << 'DESKTOPEOF' > /etc/xdg/autostart/raptor-cleanup-legacy-mimeapps.desktop
+[Desktop Entry]
+Type=Application
+Name=Raptor OS File Manager Defaults Fix
+Comment=One-time correction of stale file manager and image viewer defaults
+Exec=/usr/lib/raptor/cleanup-legacy-mimeapps.sh
+Terminal=false
+Hidden=false
+X-KDE-autostart-phase=1
+NoDisplay=true
+DESKTOPEOF
