@@ -1,86 +1,122 @@
-name: Build Raptor OS ISO
-
-# ISO builds are MANUAL ONLY.
-# Existing users update via Raptor Update Manager — new ISOs are only
-# needed for fresh install image releases.
-#
-# How to trigger:
-#   GitHub → Actions → "Build Raptor OS ISO" → Run workflow
+name: Build Raptor Home Edition ISO
 
 on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*.*.*" ]
+  pull_request:
+    branches: [ "main", "master" ]
   workflow_dispatch:
     inputs:
-      version_tag:
-        description: "Image tag to build ISO from"
+      release_type:
+        description: 'Build Release Type'
+        required: true
+        default: 'nightly'
+        type: choice
+        options:
+          - nightly
+          - stable
+      debug_build:
+        description: 'Enable verbose build output'
         required: false
-        default: "latest"
-
-concurrency:
-  group: iso-build
-  cancel-in-progress: false
+        default: false
+        type: boolean
 
 jobs:
-  build-iso:
-    name: Build ISO
+  build-home-iso:
+    name: Validate & Build Raptor Home ISO
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: read
+      contents: write
+      actions: read
 
     steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /opt/ghc \
-            /usr/local/share/boost \
-            "$AGENT_TOOLSDIRECTORY"
-          sudo apt-get clean
-          docker system prune -af 2>/dev/null || true
-          df -h
-
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Build ISO
-        uses: jasonn3/build-container-installer@v1.5.0
-        id: build
-        with:
-          arch: x86_64
-          image_name: raptor-os
-          image_repo: ghcr.io/cerberus9-dev
-          image_tag: ${{ github.event.inputs.version_tag }}
-          version: 42
-          variant: Kinoite
-          iso_name: raptor-os-${{ github.event.inputs.version_tag }}.iso
-
-      - name: Verify ISO
+      - name: Set Build Environment Variables
         run: |
-          # iso_path is the DIRECTORY the ISO was placed in, not the file
-          # itself — the previous version treated it as the full path, which
-          # evaluated to "." and failed every run. Combine with iso_name for
-          # the actual file, matching the action's own documented usage.
-          ISO_DIR="${{ steps.build.outputs.iso_path }}"
-          ISO_NAME="${{ steps.build.outputs.iso_name }}"
-          ISO_FILE="${ISO_DIR}/${ISO_NAME}"
+          BUILD_DATE=$(date -u +'%Y%m%d_%H%M')
+          VERSION_TAG="${GITHUB_REF_NAME:-home-nightly}"
+          # Clean version string for filename safety
+          SAFE_VERSION=$(echo "$VERSION_TAG" | sed 's/[^a-zA-Z0-9._-]/_/g')
+          
+          echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
+          echo "ISO_FILENAME=raptor-home-${SAFE_VERSION}-${BUILD_DATE}-amd64.iso" >> $GITHUB_ENV
 
-          if [ ! -f "$ISO_FILE" ]; then
-            echo "ERROR: ISO not found at $ISO_FILE"
-            echo "Directory contents of $ISO_DIR:"
-            ls -la "$ISO_DIR" 2>&1 || echo "(directory does not exist)"
+      - name: Install System Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            live-build \
+            debootstrap \
+            squashfs-tools \
+            xorriso \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            mtools \
+            dosfstools \
+            python3 \
+            coreutils \
+            file \
+            gnupg
+
+      - name: Cache APT Package Archives
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-raptor-home-apt-${{ hashFiles('build/config/package-lists/*') }}
+          restore-keys: |
+            ${{ runner.os }}-raptor-home-apt-
+
+      - name: Run Repository Pre-Build Validation
+        run: |
+          chmod +x build/scripts/validate.sh
+          ./build/scripts/validate.sh
+
+      - name: Execute Live-Build ISO Pipeline
+        run: |
+          cd build
+          sudo lb clean --purge
+          
+          if [ "${{ inputs.debug_build }}" = "true" ]; then
+            sudo lb config --verbose
+            sudo lb build 2>&1 | sudo tee build.log
+          else
+            sudo lb build 2>&1 | sudo tee build.log
+          fi
+
+      - name: Verify Artifacts & Calculate Hashes
+        if: success()
+        run: |
+          cd build
+          GENERATED_ISO=$(find . -maxdepth 1 -name "*.iso" | head -n 1)
+          
+          if [ -z "$GENERATED_ISO" ]; then
+            echo "[ERROR] ISO generation failed: No .iso file created."
             exit 1
           fi
 
-          echo "ISO: $ISO_FILE ($(du -sh "$ISO_FILE" | cut -f1))"
-          sha256sum "$ISO_FILE" | tee "${ISO_FILE}.sha256"
+          mv "$GENERATED_ISO" "${{ env.ISO_FILENAME }}"
+          sha256sum "${{ env.ISO_FILENAME }}" > "${{ env.ISO_FILENAME }}.sha256"
+          
+          echo "Successfully generated: ${{ env.ISO_FILENAME }}"
+          cat "${{ env.ISO_FILENAME }}.sha256"
 
-      - name: Upload ISO artifact
+      - name: Upload ISO & SHA-256 Checksum Artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: raptor-os-${{ github.event.inputs.version_tag }}-${{ github.run_number }}
-          retention-days: 14
-          if-no-files-found: error
+          name: raptor-home-iso-${{ env.BUILD_DATE }}
           path: |
-            ${{ steps.build.outputs.iso_path }}/${{ steps.build.outputs.iso_name }}
-            ${{ steps.build.outputs.iso_path }}/${{ steps.build.outputs.iso_name }}.sha256
+            build/${{ env.ISO_FILENAME }}
+            build/${{ env.ISO_FILENAME }}.sha256
+          retention-days: 14
+
+      - name: Upload Failure Logs on Error
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raptor-home-build-failure-log
+          path: build/build.log
+          retention-days: 7
